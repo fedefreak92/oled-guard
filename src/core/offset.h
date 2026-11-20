@@ -37,4 +37,29 @@ class OffsetGenerator {
   Offset current_{};
 };
 
+// Transizione da `from` a `to` a passi di 1 px (diagonali ammessi), distribuiti nel
+// tempo con una curva smoothstep. Mai offset frazionari: il testo resta nitido.
+class OffsetAnimator {
+ public:
+  OffsetAnimator(Offset from, Offset to, double duration_ms);
+
+  // t_ms relativo all'inizio della transizione.
+  Offset At(double t_ms) const;
+  // Istante (relativo, ms interi) del prossimo cambio di posizione dopo t_ms;
+  // nullopt se la transizione e' finita.
+  std::optional<double> NextStepAt(double t_ms) const;
+  int StepCount() const { return steps_; }
+  double Duration() const { return duration_ms_; }
+  Offset To() const { return to_; }
+
+ private:
+  int IndexAt(double t_ms) const;
+  Offset PointAt(int index) const;
+
+  Offset from_;
+  Offset to_;
+  double duration_ms_;
+  int steps_;
+};
+
 }  // namespace oled

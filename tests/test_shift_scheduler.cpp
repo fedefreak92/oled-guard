@@ -1,0 +1,110 @@
+#include <cstdlib>
+
+#include "shift_scheduler.h"
+#include "test_framework.h"
+
+using oled::Offset;
+using oled::SharedShift;
+using oled::ShiftScheduler;
+using oled::ShiftTiming;
+
+namespace {
+const ShiftTiming kT{20000, 60000, 2000, 5000};
+}
+
+TEST(scheduler_holds_origin_during_first_dwell) {
+  ShiftScheduler s(1, 2, kT, 0);
+  for (double t = 0; t < 20000; t += 100) CHECK_EQ(s.OffsetAt(t), (Offset{0, 0}));
+}
+
+TEST(scheduler_moves_within_dwell_plus_transition) {
+  // Interrogato ogni 500 ms come fa il render (una sola chiamata a 65 s sarebbe
+  // trattata come un buco e la fase ripartirebbe da "adesso").
+  ShiftScheduler s(1, 2, kT, 0);
+  for (double t = 0; t < 65000; t += 500) s.OffsetAt(t);
+  CHECK(!(s.OffsetAt(65000) == (Offset{0, 0})));
+}
+
+TEST(scheduler_phase_durations_within_limits) {
+  // Simula 2 ore a passi di 50 ms. Gli intervalli fra un cambio e l'altro sono
+  // passi di una transizione (< 5 s) oppure soste (20-60 s, piu' le code delle
+  // transizioni adiacenti).
+  ShiftScheduler s(21, 2, kT, 0);
+  Offset prev = s.OffsetAt(0);
+  double last_change = 0;
+  int dwells = 0;
+  for (double t = 50; t <= 7.2e6; t += 50) {
+    const Offset o = s.OffsetAt(t);
+    CHECK(std::abs(o.x) <= 2 && std::abs(o.y) <= 2);
+    if (!(o == prev)) {
+      CHECK(std::abs(o.x - prev.x) <= 1 && std::abs(o.y - prev.y) <= 1);
+      const double gap = t - last_change;
+      if (gap >= 5050) {
+        CHECK(gap >= 20000 - 50 && gap <= 60000 + 5000 + 50);
+        ++dwells;
+      }
+      last_change = t;
+      prev = o;
+    }
+  }
+  // Fra 2 ore / (60 + 5) s e 2 ore / 20 s.
+  CHECK(dwells >= 100 && dwells <= 360);
+}
+
+TEST(scheduler_next_change_is_when_offset_changes) {
+  ShiftScheduler s(4, 2, kT, 0);
+  double t = 0;
+  int changes = 0;
+  for (int i = 0; i < 200; ++i) {
+    const double n = s.NextChangeAt(t);
+    CHECK(n > t);
+    const Offset o = s.OffsetAt(t);
+    CHECK_EQ(s.OffsetAt(n - 1), o);
+    if (!(s.OffsetAt(n) == o)) ++changes;
+    t = n;
+  }
+  CHECK(changes > 20);
+}
+
+TEST(scheduler_resume_keeps_offset) {
+  ShiftScheduler s(8, 2, kT, 0);
+  const Offset before = s.OffsetAt(200000);
+  const double resumed = 200000 + 7.2e6;
+  s.Resume(resumed);
+  CHECK_EQ(s.OffsetAt(resumed), before);
+  CHECK_EQ(s.OffsetAt(resumed + 19999), before);
+}
+
+TEST(scheduler_tolerates_time_going_backwards) {
+  ShiftScheduler s(9, 2, kT, 0);
+  const Offset a = s.OffsetAt(100000);
+  CHECK_EQ(s.OffsetAt(50000), a);
+  CHECK(s.NextChangeAt(50000) >= 100000);
+}
+
+TEST(scheduler_long_gap_does_not_burst) {
+  // Senza Resume, un buco di 10 minuti non deve far scorrere decine di transizioni:
+  // la fase successiva parte da "adesso".
+  ShiftScheduler s(12, 2, kT, 0);
+  const Offset a = s.OffsetAt(1000);
+  const Offset b = s.OffsetAt(600000);
+  CHECK(std::abs(a.x - b.x) <= 1 && std::abs(a.y - b.y) <= 1);
+}
+
+TEST(scheduler_reconfigure_shrinks_amplitude) {
+  ShiftScheduler s(10, 3, kT, 0);
+  double t = 0;
+  while (std::abs(s.OffsetAt(t).x) < 2 && std::abs(s.OffsetAt(t).y) < 2) t += 1000;
+  s.Reconfigure(1, kT, t);
+  const Offset o = s.OffsetAt(t + 6000);
+  CHECK(std::abs(o.x) <= 1 && std::abs(o.y) <= 1);
+}
+
+TEST(shared_shift_matches_scheduler) {
+  ShiftScheduler s(33, 2, kT, 0);
+  SharedShift sh(33, 2, kT, 0);
+  for (double t = 0; t < 600000; t += 250) {
+    CHECK_EQ(sh.OffsetAt(t), s.OffsetAt(t));
+    CHECK_EQ(sh.NextChangeAt(t), s.NextChangeAt(t));
+  }
+}

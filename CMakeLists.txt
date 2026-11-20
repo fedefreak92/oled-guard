@@ -16,6 +16,8 @@ enable_testing()
 add_library(oled_core STATIC
   src/core/rng.cpp
   src/core/offset_generator.cpp
+  src/core/offset_animator.cpp
+  src/core/shift_scheduler.cpp
 )
 target_include_directories(oled_core PUBLIC src/core)
 
@@ -24,6 +26,8 @@ add_executable(oled-guard-tests
   tests/test_main.cpp
   tests/test_rng.cpp
   tests/test_offset_generator.cpp
+  tests/test_offset_animator.cpp
+  tests/test_shift_scheduler.cpp
 )
 target_include_directories(oled-guard-tests PRIVATE tests)
 target_link_libraries(oled-guard-tests PRIVATE oled_core)
