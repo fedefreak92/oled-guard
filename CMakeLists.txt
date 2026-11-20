@@ -50,6 +50,10 @@ add_executable(oled-guard WIN32
   src/app/logger.cpp
   src/app/paths.cpp
   src/app/emergency.cpp
+  src/app/monitors.cpp
+  src/app/capture.cpp
+  src/app/d3d_device.cpp
+  src/app/diagnostics.cpp
   src/app/oled-guard.manifest
 )
 target_include_directories(oled-guard PRIVATE src/app)

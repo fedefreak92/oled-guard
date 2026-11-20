@@ -1,5 +1,10 @@
 #include "app.h"
 
+#include <shellapi.h>
+
+#include <algorithm>
+
+#include "diagnostics.h"
 #include "logger.h"
 #include "paths.h"
 
@@ -26,6 +31,16 @@ int App::Run(HINSTANCE instance) {
   LogInit(LogDir(), LogLevel::Info);
   LogInfo("OLED Guard avviato");
 
+  int argc = 0;
+  LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+  for (int i = 1; argv && i < argc; ++i) args_.emplace_back(argv[i]);
+  LocalFree(argv);
+  if (HasArg(L"--list-monitors")) {
+    const int code = RunListMonitors(config_.monitor);
+    LogShutdown();
+    return code;
+  }
+
   if (const auto exit_key = ParseHotkey(config_.hotkey_emergency_exit)) guard_.Start(*exit_key);
 
   if (!CreateMainWindow()) {
@@ -45,6 +60,10 @@ int App::Run(HINSTANCE instance) {
   LogInfo("OLED Guard chiuso");
   LogShutdown();
   return 0;
+}
+
+bool App::HasArg(std::wstring_view arg) const {
+  return std::find(args_.begin(), args_.end(), arg) != args_.end();
 }
 
 bool App::CreateMainWindow() {
