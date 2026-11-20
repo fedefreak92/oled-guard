@@ -42,3 +42,16 @@ add_executable(oled-guard-tests
 target_include_directories(oled-guard-tests PRIVATE tests)
 target_link_libraries(oled-guard-tests PRIVATE oled_core)
 add_test(NAME oled-guard-tests COMMAND oled-guard-tests)
+
+# Applicazione Win32 / D3D11 / DXGI / DirectComposition.
+add_executable(oled-guard WIN32
+  src/app/main.cpp
+  src/app/app.cpp
+  src/app/logger.cpp
+  src/app/paths.cpp
+  src/app/emergency.cpp
+  src/app/oled-guard.manifest
+)
+target_include_directories(oled-guard PRIVATE src/app)
+target_link_libraries(oled-guard PRIVATE oled_core
+  d3d11 dxgi dcomp dwmapi wtsapi32 shell32 user32 advapi32 shlwapi ole32)
