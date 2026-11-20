@@ -2,15 +2,10 @@
 
 #include <algorithm>
 
+#include "ascii.h"
+
 namespace oled {
 namespace {
-
-char AsciiLower(char c) { return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c; }
-
-bool EqualsIgnoreCase(std::string_view a, std::string_view b) {
-  return a.size() == b.size() &&
-         std::equal(a.begin(), a.end(), b.begin(), [](char x, char y) { return AsciiLower(x) == AsciiLower(y); });
-}
 
 bool InList(const std::vector<std::string>& list, std::string_view process) {
   if (process.empty()) return false;

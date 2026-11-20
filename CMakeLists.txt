@@ -20,6 +20,9 @@ add_library(oled_core STATIC
   src/core/shift_scheduler.cpp
   src/core/pause_rules.cpp
   src/core/json.cpp
+  src/core/config.cpp
+  src/core/hotkey_parse.cpp
+  src/core/monitor_select.cpp
 )
 target_include_directories(oled_core PUBLIC src/core)
 
@@ -32,6 +35,9 @@ add_executable(oled-guard-tests
   tests/test_shift_scheduler.cpp
   tests/test_pause_rules.cpp
   tests/test_json.cpp
+  tests/test_config.cpp
+  tests/test_hotkey.cpp
+  tests/test_monitor_select.cpp
 )
 target_include_directories(oled-guard-tests PRIVATE tests)
 target_link_libraries(oled-guard-tests PRIVATE oled_core)
