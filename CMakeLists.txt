@@ -18,6 +18,7 @@ add_library(oled_core STATIC
   src/core/offset_generator.cpp
   src/core/offset_animator.cpp
   src/core/shift_scheduler.cpp
+  src/core/pause_rules.cpp
 )
 target_include_directories(oled_core PUBLIC src/core)
 
@@ -28,6 +29,7 @@ add_executable(oled-guard-tests
   tests/test_offset_generator.cpp
   tests/test_offset_animator.cpp
   tests/test_shift_scheduler.cpp
+  tests/test_pause_rules.cpp
 )
 target_include_directories(oled-guard-tests PRIVATE tests)
 target_link_libraries(oled-guard-tests PRIVATE oled_core)
