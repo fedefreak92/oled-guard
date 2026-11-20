@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(foreach \\($root in \"C:\\\\Program Files \\(x86\\)\\\\Microsoft Visual Studio\\\\2022\\\\BuildTools\",\"C:\\\\Program Files \\(x86\\)\\\\Microsoft Visual Studio\\\\18\\\\BuildTools\"\\) { \"=== $root\"; Get-ChildItem \"$root\\\\VC\\\\Tools\\\\MSVC\" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name; $c = \"$root\\\\Common7\\\\IDE\\\\CommonExtensions\\\\Microsoft\\\\CMake\"; if \\(Test-Path $c\\) { Get-ChildItem $c -Recurse -Include cmake.exe,ninja.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName } } else { \"no bundled CMake\" }; Test-Path \"$root\\\\Common7\\\\Tools\\\\Launch-VsDevShell.ps1\" }; \"--- fxc\"; Test-Path \"${env:ProgramFiles\\(x86\\)}\\\\Windows Kits\\\\10\\\\bin\\\\10.0.26100.0\\\\x64\\\\fxc.exe\"; Test-Path \"${env:ProgramFiles\\(x86\\)}\\\\Windows Kits\\\\10\\\\Lib\\\\10.0.26100.0\\\\um\\\\x64\\\\d3d11.lib\"; Test-Path \"${env:ProgramFiles\\(x86\\)}\\\\Windows Kits\\\\10\\\\Lib\\\\10.0.26100.0\\\\um\\\\x64\\\\dcomp.lib\")",
+      "PowerShell(& \"C:\\\\Program Files \\(x86\\)\\\\Microsoft Visual Studio\\\\18\\\\BuildTools\\\\Common7\\\\IDE\\\\CommonExtensions\\\\Microsoft\\\\CMake\\\\CMake\\\\bin\\\\cmake.exe\" --version | Select-Object -First 1; \"--- GPU\"; Get-CimInstance Win32_VideoController | Select-Object Name, CurrentHorizontalResolution, CurrentVerticalResolution, CurrentRefreshRate | Format-Table -AutoSize | Out-String; \"--- Monitor\"; Get-CimInstance -Namespace root\\\\wmi WmiMonitorID -ErrorAction SilentlyContinue | ForEach-Object { \\([char[]]\\($_.UserFriendlyName | Where-Object {$_ -ne 0}\\)\\) -join '' })",
+      "PowerShell(git init -b main)",
+      "PowerShell(git config core.autocrlf false)",
+      "PowerShell(git add docs)",
+      "PowerShell(git commit -q -m \"docs: design di OLED Guard\" -m \"Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\")",
+      "PowerShell(git commit -q -m \"docs: piano di implementazione di OLED Guard\" -m \"Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\")",
+      "PowerShell(.\\\\build\\\\oled-guard-tests.exe)",
+      "PowerShell(git add -A)",
+      "PowerShell(git commit -q -m \"build: scaffolding CMake, build.ps1, framework di test, PRNG\" -m \"Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\")"
+    ]
+  }
+}
