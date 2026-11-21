@@ -16,7 +16,11 @@ const store = {
   nextMoveAt: 0, highlightUntil: 0,
 };
 const listeners = {};
-function on(type, fn) { (listeners[type] = listeners[type] || []).push(fn); }
+// Restituisce la funzione che toglie l'ascoltatore (da chiamare quando si lascia la pagina).
+function on(type, fn) {
+  (listeners[type] = listeners[type] || []).push(fn);
+  return () => { listeners[type] = listeners[type].filter((f) => f !== fn); };
+}
 function emit(type, msg) { (listeners[type] || []).forEach((fn) => fn(msg)); }
 
 function send(cmd) {

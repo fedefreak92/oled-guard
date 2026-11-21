@@ -519,17 +519,455 @@ PAGES.monitor = {
   },
 };
 
-// ------------------------------------------------------------------ pagine del compito successivo
+// ------------------------------------------------------------------ statistiche
 
-for (const [, items] of NAV) {
-  for (const [id, label] of items) {
-    if (PAGES[id]) continue;
-    PAGES[id] = {
-      build(root) {
-        const p = panel(label);
-        p.body.append(h('div.empty', { text: 'Pagina in arrivo.' }));
-        root.append(h('div.page', null, p.el));
+PAGES.statistiche = {
+  build(root) {
+    const stat = (label) => { const b = h('b', { text: '-' }), sp = h('span'); return [h('div.stat', null, h('small', { text: label }), b, sp), b, sp]; };
+    const [sTot, vTot, nTot] = stat('Protetto in totale');
+    const [sToday, vToday, nToday] = stat('Protetto oggi');
+    const [sUni, vUni, nUni] = stat('Uniformità');
+    const [sPau, vPau, nPau] = stat('Pause oggi');
+    vTot.className = 'accent';
+    const heatPanel = panel('Posizioni dello spostamento', 'tempo su ogni posizione · totale');
+    heatPanel.body.classList.add('pad');
+    const heat = h('div.heat');
+    const cells = [];
+    for (let i = 0; i < 49; i++) { const b = h('b'); const c = h('i', null, b); cells.push([c, b]); heat.append(c); }
+    heatPanel.body.append(heat, h('div.legend', null, h('span', { text: 'meno' }), h('i'), h('span', { text: 'più tempo' })),
+      h('p.hint', { text: 'Le posizioni dentro l\'ampiezza scelta dovrebbero avere colori simili: vuol dire che l\'usura è distribuita in modo uniforme.' }));
+    const pausePanel = panel('Pause di oggi', 'per motivo');
+    const bars = h('div.bars');
+    pausePanel.body.append(bars);
+    root.append(h('div.page', null, h('div.stats4', null, sTot, sToday, sUni, sPau),
+      h('div.cols', null, heatPanel.el, pausePanel.el),
+      h('p.hint', { text: 'La mappa di usura del pannello, il grafico nel tempo e le app più usate arriveranno con il prossimo aggiornamento.' })));
+
+    let lastStats = null;
+    return {
+      update() {
+        const st = store.stats, s = store.state, c = cfg();
+        if (!st) return;
+        const a = (c && c.amplitude_px) || 2;
+        if (st !== lastStats) {
+          lastStats = st;
+          setText(vTot, fmtHours(st.total_ms));
+          setText(nTot, 'con l\'overlay a schermo');
+          setText(vToday, fmtClock(st.today_ms));
+          setText(nToday, 'da mezzanotte');
+          setText(vUni, st.uniformity === null ? 'n/d' : fmtPct(st.uniformity, 1));
+          setText(nUni, st.uniformity === null ? 'servono 10 minuti di dati' : '100% = usura identica ovunque');
+          setText(vPau, String(st.pauses_today));
+          setText(nPau, 'giochi, video, blocchi schermo');
+          let max = 0;
+          for (let y = -a; y <= a; y++) for (let x = -a; x <= a; x++) max = Math.max(max, st.cells[(y + 3) * 7 + x + 3]);
+          cells.forEach(([cell, fill], i) => {
+            const x = i % 7 - 3, y = Math.floor(i / 7) - 3;
+            const inside = Math.abs(x) <= a && Math.abs(y) <= a;
+            cell.classList.toggle('out', !inside);
+            fill.style.opacity = inside && max > 0 ? (0.1 + 0.9 * st.cells[i] / max).toFixed(2) : '0';
+            cell.title = inside ? fmtClock(st.cells[i]) : 'fuori dall\'ampiezza attuale';
+          });
+          bars.innerHTML = '';
+          const entries = Object.entries(st.pauses_by_reason || {}).sort((x, y) => y[1] - x[1]);
+          if (!entries.length) bars.append(h('div.empty', { text: 'Nessuna pausa oggi.' }));
+          const top = entries.length ? entries[0][1] : 1;
+          for (const [reason, n] of entries) {
+            const fill = h('i');
+            fill.style.width = `${(n / top) * 100}%`;
+            bars.append(h('div.bar-row', null, h('span', { text: reason }), h('b', { text: String(n) }), h('div.bar', null, fill)));
+          }
+        }
+        const now = s && !s.paused ? (s.offset[1] + 3) * 7 + s.offset[0] + 3 : -1;
+        cells.forEach(([cell], i) => cell.classList.toggle('now', i === now));
       },
     };
-  }
+  },
+};
+
+// ------------------------------------------------------------------ profili app
+
+const RULE_INFO = {
+  always: ['Metti in pausa', 'La protezione si ferma quando l\'app è in primo piano', 'Sempre pausa', 'warn'],
+  auto: ['Automatico', 'Pausa solo se è a schermo intero o un gioco', 'Automatico', 'accent'],
+  never: ['Non mettere mai in pausa', 'Protezione attiva anche a schermo intero', 'Mai pausa', 'info'],
+};
+const RULE_EXPLAIN = {
+  always: 'Quando quest\'app è in primo piano la protezione si mette in pausa, anche se è in finestra.',
+  auto: 'La protezione si mette in pausa solo se quest\'app va a schermo intero o è un gioco DirectX esclusivo.',
+  never: 'La protezione resta attiva anche quando quest\'app è a schermo intero (utile per video e browser).',
+};
+
+PAGES.profili = {
+  build(root) {
+    let selected = null, pendingSelect = null, filter = '';
+    // Elenco
+    const search = h('input', { placeholder: 'Cerca un\'app...', spellcheck: 'false' });
+    search.addEventListener('input', () => { filter = search.value.trim().toLowerCase(); renderList(); });
+    const listPanel = panel('Profili app');
+    listPanel.el.querySelector('.panel-head').append(h('label.field', null, icon('search'), search));
+    const count = h('span.sub');
+    listPanel.el.querySelector('.panel-head').insertBefore(count, listPanel.el.querySelector('.panel-head .grow'));
+    const list = h('div.applist');
+    listPanel.body.style.padding = '0';
+    listPanel.body.append(list);
+
+    // Aggiungi
+    const addInput = h('input', { placeholder: 'nome dell\'app, es. gioco.exe', maxlength: '260', spellcheck: 'false' });
+    const procBox = h('div.proc', { hidden: true });
+    const addTyped = () => {
+      let exe = addInput.value.trim().toLowerCase();
+      if (!exe) return;
+      if (!/\.exe$/.test(exe)) exe += '.exe';
+      pendingSelect = exe;
+      send({ cmd: 'addApp', exe });
+      addInput.value = '';
+      procBox.hidden = true;
+    };
+    addInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addTyped(); });
+    const addPanel = panel('Aggiungi un\'app');
+    addPanel.body.classList.add('pad');
+    addPanel.body.append(h('div.add-row', null, h('label.field', null, icon('plus'), addInput),
+      h('button.btn', { type: 'button', on: { click: () => { if (!procBox.hidden) { procBox.hidden = true; return; } send({ cmd: 'listProcesses' }); } } }, icon('list'), 'App aperte'),
+      h('button.btn', { type: 'button', on: { click: () => send({ cmd: 'browseExe' }) } }, icon('folder'), 'Sfoglia...'),
+      h('button.btn.solid', { type: 'button', on: { click: addTyped } }, icon('plus'), 'Aggiungi')), procBox);
+
+    // Pause automatiche globali
+    const autoNotif = toggle((v) => setConfig({ pause_on_notification_state: v }));
+    const autoFull = toggle((v) => setConfig({ pause_on_fullscreen_window: v }));
+    const autoPanel = panel('Pausa automatica', 'per tutte le app');
+    autoPanel.body.append(
+      settingRow('Giochi e presentazioni', 'Giochi DirectX a schermo intero, presentazioni, schermo assente.', autoNotif.el),
+      settingRow('Qualsiasi finestra a tutto schermo', 'Borderless, video, browser a tutto schermo.', autoFull.el));
+
+    // Modifica
+    const editPanel = panel('Modifica');
+    const delBtn = h('button.btn.small.danger', { type: 'button', on: { click: () => { if (selected) { send({ cmd: 'removeApp', exe: selected }); selected = null; } } } }, icon('trash'), 'Elimina');
+    editPanel.el.querySelector('.panel-head').append(delBtn);
+    editPanel.body.classList.add('pad');
+    const editName = h('div.edit-name');
+    const editInfo = h('p.hint');
+    const rules = choiceCards(Object.entries(RULE_INFO).map(([k, v]) => [k, v[0], v[1]]), (rule) => selected && send({ cmd: 'setAppRule', exe: selected, rule }));
+    const explain = h('p.hint.box');
+    const dimEx = toggle((v) => selected && send({ cmd: 'setDimExclude', exe: selected, on: v }));
+    const editBody = h('div', null,
+      h('div.edit-title', { text: 'App' }), editName, editInfo,
+      h('div.edit-title', { text: 'Quando quest\'app è in primo piano' }), rules.el, explain,
+      h('div.edit-title', { text: 'Oscuramento' }),
+      settingRow('Non oscurare mentre è in primo piano', 'Sospende l\'oscuramento delle zone ferme (utile per app di grafica).', dimEx.el));
+    const editEmpty = h('div.empty', { text: 'Scegli un\'app dall\'elenco per modificarla.' });
+    editPanel.body.append(editEmpty, editBody);
+
+    root.append(h('div.page', null, h('div.cols', null,
+      h('div.stack', null, listPanel.el, addPanel.el, autoPanel.el),
+      h('div.stack', null, editPanel.el))));
+
+    const apps = () => store.apps || [];
+    function renderList() {
+      list.innerHTML = '';
+      const shown = apps().filter((a) => !filter || a.exe.includes(filter));
+      setText(count, `${apps().length}`);
+      if (!shown.length) list.append(h('div.empty', { text: filter ? 'Nessuna app corrisponde alla ricerca.' : 'Nessuna app ancora: aggiungine una qui sotto.' }));
+      for (const a of shown) {
+        const info = RULE_INFO[a.rule] || RULE_INFO.auto;
+        const trash = h('button.trash', { type: 'button', title: 'Elimina', on: { click: (e) => { e.stopPropagation(); if (selected === a.exe) selected = null; send({ cmd: 'removeApp', exe: a.exe }); } } }, icon('trash'));
+        const row = h('button.app', { type: 'button', cls: a.exe === selected ? 'on' : null, on: { click: () => { selected = a.exe; renderList(); renderEdit(); } } },
+          avatar(a.exe),
+          h('span.name', null, h('b', { text: a.exe }), h('small', { text: a.last_seen_s ? `ultima pausa · ${fmtWhen(a.last_seen_s * 1000)} · ${a.count} ${a.count === 1 ? 'volta' : 'volte'}` : 'aggiunta a mano' })),
+          h('span.tags', null, pill(info[2], info[3]), a.dim_exclude ? pill('Non oscurare') : null),
+          trash);
+        list.append(row);
+      }
+    }
+    function renderEdit() {
+      const a = apps().find((x) => x.exe === selected);
+      editEmpty.hidden = !!a;
+      editBody.hidden = !a;
+      delBtn.hidden = !a;
+      if (!a) return;
+      editName.innerHTML = '';
+      editName.append(avatar(a.exe), h('span', { text: a.exe }));
+      setText(editInfo, a.reason ? `Ultima pausa: ${a.reason.toLowerCase()} · ${fmtWhen(a.last_seen_s * 1000)}` : 'Aggiunta a mano: non ha ancora messo in pausa la protezione.');
+      rules.set(a.rule);
+      setText(explain, RULE_EXPLAIN[a.rule] || '');
+      dimEx.set(a.dim_exclude);
+    }
+
+    const offProcesses = on('processes', (msg) => {
+      procBox.innerHTML = '';
+      for (const p of msg.processes) procBox.append(h('button', { type: 'button', text: p, on: { click: () => { addInput.value = p; procBox.hidden = true; addInput.focus(); } } }));
+      procBox.hidden = msg.processes.length === 0;
+    });
+    const offBrowsed = on('browsed', (msg) => { addInput.value = msg.exe; addInput.focus(); });
+
+    let lastApps = null;
+    return {
+      leave() { offProcesses(); offBrowsed(); },
+      update() {
+        const c = cfg();
+        if (c) { autoNotif.set(c.pause_on_notification_state); autoFull.set(c.pause_on_fullscreen_window); }
+        if (store.apps !== lastApps) {
+          lastApps = store.apps;
+          if (pendingSelect && apps().some((a) => a.exe === pendingSelect)) { selected = pendingSelect; pendingSelect = null; }
+          if (selected && !apps().some((a) => a.exe === selected)) selected = null;
+          renderList();
+          renderEdit();
+        }
+      },
+    };
+  },
+};
+
+// ------------------------------------------------------------------ tasti rapidi
+
+const KEY_NAMES = { ' ': 'Space', Pause: 'Pause', Insert: 'Insert', Delete: 'Delete', Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown' };
+function keyName(e) {
+  if (/^F([1-9]|1[0-9]|2[0-4])$/.test(e.key)) return e.key;
+  if (KEY_NAMES[e.key]) return KEY_NAMES[e.key];
+  if (/^Key[A-Z]$/.test(e.code)) return e.code.slice(3);
+  if (/^Digit[0-9]$/.test(e.code)) return e.code.slice(5);
+  return null;
 }
+
+PAGES.tasti = {
+  build(root) {
+    const HINT = 'Clicca una combinazione e premi i tasti nuovi (Esc per annullare).';
+    const hint = h('p.hint.box', { text: HINT });
+    let capturing = null;
+    const keys = {};
+    const p = panel('Tasti rapidi', 'validi in tutto Windows');
+    const defs = [
+      ['hotkey_toggle', 'Pausa / riprendi', 'Ferma o riavvia la protezione.'],
+      ['hotkey_display_off', 'Spegni schermo ora', 'La TV va in standby; si riaccende muovendo il mouse.'],
+      ['hotkey_emergency_exit', 'Uscita di emergenza', 'Chiude subito OLED Guard. Funziona anche se l\'interfaccia è bloccata.'],
+    ];
+    const show = (key) => setText(keys[key], cfg() ? cfg()[key].replace(/\+/g, ' + ') : '-');
+    function stop(restore) {
+      if (!capturing) return;
+      keys[capturing].classList.remove('rec');
+      if (restore) show(capturing);
+      capturing = null;
+      send({ cmd: 'hotkeyCapture', on: false });
+    }
+    for (const [key, title, desc] of defs) {
+      keys[key] = h('button.key', { type: 'button', on: { click: () => {
+        stop(true);
+        capturing = key;
+        keys[key].classList.add('rec');
+        setText(keys[key], 'premi la combinazione...');
+        send({ cmd: 'hotkeyCapture', on: true });
+      } } });
+      p.body.append(settingRow(title, desc, keys[key]));
+    }
+    root.append(h('div.page', null, p.el, hint));
+    const onKey = (e) => {
+      if (!capturing) return;
+      e.preventDefault();
+      if (e.key === 'Escape') { stop(true); return; }
+      const name = keyName(e);
+      if (!name) return;  // solo modificatori finora
+      const mods = [];
+      if (e.ctrlKey) mods.push('Ctrl');
+      if (e.altKey) mods.push('Alt');
+      if (e.shiftKey) mods.push('Shift');
+      if (e.metaKey) mods.push('Win');
+      if (!mods.length) { setText(hint, 'Serve almeno un tasto fra Ctrl, Alt, Shift e Win.'); return; }
+      const combo = [...mods, name].join('+');
+      const key = capturing;
+      setText(keys[key], combo.replace(/\+/g, ' + '));
+      stop(false);
+      setText(hint, HINT);
+      setConfig({ [key]: combo });
+    };
+    // Se la finestra perde il focus o si cambia pagina, le hotkey globali non devono restare sospese.
+    const onBlur = () => stop(true);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('blur', onBlur);
+    return {
+      update() { for (const [key] of defs) if (key !== capturing) show(key); },
+      leave() { stop(true); window.removeEventListener('keydown', onKey); window.removeEventListener('blur', onBlur); },
+    };
+  },
+};
+
+// ------------------------------------------------------------------ impostazioni
+
+PAGES.impostazioni = {
+  build(root) {
+    const autostart = toggle((v) => setConfig({ autostart: v }));
+    const start = panel('Avvio', 'con Windows');
+    start.el.classList.add('accented');
+    start.body.append(settingRow('Avvia con Windows', 'OLED Guard parte da solo all\'accesso e resta nella barra delle applicazioni.', autostart.el));
+
+    const awayToggle = toggle((v) => setConfig({ away_enabled: v }));
+    const awayAfter = slider({ min: 1, max: 60, step: 1, format: (v) => `${v} min`, onInput: throttledConfig('away_after_min') });
+    const awayLevel = slider({ min: 10, max: 80, step: 1, format: (v) => `${v}%`, onInput: throttledConfig('away_brightness_pct') });
+    const awayRows = [
+      settingRow('Dopo quanto tempo', 'Minuti senza mouse e tastiera, con lo schermo fermo.', awayAfter.el, { wide: true }),
+      settingRow('Scurisci fino a', 'Luminosità finale; la discesa dura 10 secondi.', awayLevel.el, { wide: true }),
+    ];
+    const away = panel('Modalità assente', 'quando non sei al PC');
+    away.el.classList.add('accented');
+    away.body.append(settingRow('Scurisci quando non ci sei', 'Torna normale subito, al primo movimento. Un video in riproduzione non la fa scattare.', awayToggle.el), ...awayRows);
+
+    const swatches = h('div.swatches');
+    const swatchEls = {};
+    for (const [name, color] of Object.entries(ACCENTS)) {
+      const i = h('i');
+      i.style.background = color;
+      swatchEls[name] = h('button.swatch', { type: 'button', title: name, on: { click: () => setConfig({ ui_accent: name }) } }, i,
+        h('small', { text: `${contrastRatio(color, PANEL_COLOR).toFixed(1).replace('.', ',')}:1` }));
+      swatches.append(swatchEls[name]);
+    }
+    const size = segmented([['small', 'Piccolo'], ['normal', 'Normale'], ['large', 'Grande'], ['xl', 'XL']], (v) => setConfig({ ui_text_size: v }));
+    const look = panel('Aspetto', 'colore d\'accento · dimensione del testo');
+    look.el.classList.add('accented');
+    look.body.append(
+      settingRow('Colore d\'accento', 'Interruttori, selezioni e stato. Il numero è il contrasto sul fondo dei pannelli.', swatches, { wide: true }),
+      settingRow('Dimensione del testo', 'Ingrandisce testi, spazi e icone insieme.', size.el, { wide: true }));
+
+    const level = segmented([['error', 'Errori'], ['warn', 'Avvisi'], ['info', 'Normale'], ['debug', 'Dettagliato']], (v) => setConfig({ log_level: v }));
+    const cfgPath = h('div.path'), logPath = h('div.path');
+    const diag = panel('Diagnostica', 'log e file');
+    diag.el.classList.add('accented');
+    diag.body.append(
+      settingRow('Dettaglio del log', 'Il livello Dettagliato serve solo per cercare un problema.', level.el, { wide: true }),
+      settingRow('Cartella dei log', logPath, h('button.btn', { type: 'button', on: { click: () => send({ cmd: 'openLogFolder' }) } }, icon('folder'), 'Apri')),
+      settingRow('File di configurazione', cfgPath, h('span')));
+
+    root.append(h('div.page', null, h('div.cols.even', null, h('div.stack', null, start.el, away.el), h('div.stack', null, look.el, diag.el))));
+    return {
+      update() {
+        const c = cfg();
+        if (c) {
+          autostart.set(c.autostart);
+          awayToggle.set(c.away_enabled);
+          awayAfter.set(c.away_after_min);
+          awayLevel.set(c.away_brightness_pct);
+          awayRows.forEach((r) => r.classList.toggle('off', !c.away_enabled));
+          Object.entries(swatchEls).forEach(([name, el]) => el.classList.toggle('on', name === c.ui_accent));
+          size.set(c.ui_text_size);
+          level.set(c.log_level);
+        }
+        if (store.about) { setText(cfgPath, store.about.config_path); setText(logPath, store.about.log_dir); }
+      },
+    };
+  },
+};
+
+// ------------------------------------------------------------------ windows per oled
+
+PAGES.windows = {
+  build(root) {
+    const score = h('b', { text: '-' });
+    const applyAll = h('button.btn.solid', { type: 'button', on: { click: () => send({ cmd: 'windowsApplyAll' }) } }, icon('check'), 'Applica tutti i consigli');
+    const restore = h('button.btn', { type: 'button', on: { click: () => send({ cmd: 'windowsRestoreAll' }) } }, icon('reset'), 'Ripristina come prima');
+    const head = h('section.panel', null, h('div.score', null, score, h('span', { text: 'Impostazioni consigliate attive' }), h('span.grow'), applyAll, restore));
+    const list = panel('Impostazioni di Windows per un OLED');
+    const off = h('button.btn', { type: 'button', on: { click: () => send({ cmd: 'displayOff' }) } }, icon('power'), 'Spegni schermo');
+    const offPanel = panel('Schermo');
+    offPanel.body.append(settingRow('Spegni lo schermo adesso', 'La TV va in standby; si riaccende muovendo il mouse.', off));
+    root.append(h('div.page', null, head, list.el, offPanel.el,
+      h('p.hint', { text: 'Ogni modifica parte solo da un tuo clic. Il valore originale viene salvato e "Ripristina come prima" lo rimette.' })));
+    let last = null;
+    return {
+      update() {
+        const w = store.windows;
+        if (!w || w === last) return;
+        last = w;
+        setText(score, `${w.score}/${w.total}`);
+        restore.disabled = !w.items.some((i) => i.restorable);
+        applyAll.disabled = w.items.every((i) => i.ok || i.managed);
+        list.body.innerHTML = '';
+        for (const it of w.items) {
+          let action;
+          if (it.managed) action = pill('Gestito dal sistema');
+          else if (it.ok) action = pill('Fatto', 'accent');
+          else action = h('button.btn.small', { type: 'button', title: 'Applica il valore consigliato', on: { click: () => send({ cmd: 'windowsApply', id: it.id }) } }, it.recommended);
+          list.body.append(h('div.row', null,
+            h('span.check', { cls: it.ok ? 'ok' : null }, it.ok ? icon('check') : null),
+            h('div.label', null, h('b', { text: it.label }), h('p', { text: `Ora: ${it.current}` })),
+            h('div.control', null, action)));
+        }
+      },
+    };
+  },
+};
+
+// ------------------------------------------------------------------ avanzate
+
+const ADVANCED = [
+  ['dim_bright_threshold_pct', 'Soglia di luminosità', 'Da quale luminosità un elemento fermo viene scurito (% del bianco).', 5, 100, 1, (v) => `${v}%`, 25],
+  ['dim_motion_fraction_pct', 'Quota di movimento', 'Quanto deve muoversi il contenuto intorno a un logo perché conti come "video".', 10, 90, 1, (v) => `${v}%`, 25],
+  ['dim_recover_ms', 'Ritorno normale', 'Quanto ci mette una zona a tornare normale quando cambia.', 100, 5000, 100, (v) => `${String(v / 1000).replace('.', ',')} s`, 500],
+  ['pause_enter_delay_ms', 'Ritardo della pausa', 'Attesa prima di mettere in pausa (evita pause per un attimo).', 0, 10000, 100, (v) => `${String(v / 1000).replace('.', ',')} s`, 300],
+  ['resume_delay_ms', 'Ritardo della ripresa', 'Attesa prima di riprendere dopo un gioco o un video.', 0, 10000, 250, (v) => `${String(v / 1000).replace('.', ',')} s`, 2500],
+];
+
+PAGES.avanzate = {
+  build(root) {
+    const reset = h('button.btn.small', { type: 'button', on: { click: () => {
+      const patch = { allow_tearing: false };
+      for (const [key, , , , , , , def] of ADVANCED) patch[key] = def;
+      setConfig(patch);
+    } } }, icon('reset'), 'Ripristina i valori predefiniti');
+    const p = panel('Parametri del motore', 'valori fini, di solito non servono', reset);
+    const sliders = ADVANCED.map(([key, title, desc, min, max, step, fmt]) => {
+      const s = slider({ min, max, step, format: fmt, onInput: throttledConfig(key) });
+      p.body.append(settingRow(title, desc, s.el, { wide: true, code: key }));
+      return [key, s];
+    });
+    const tearing = toggle((v) => setConfig({ allow_tearing: v }));
+    p.body.append(settingRow('Tearing', 'Solo con VRR (G-Sync/FreeSync) attivo: riduce la latenza dell\'overlay.', tearing.el, { code: 'allow_tearing' }));
+    root.append(h('div.page', null, h('p.hint.box', { text: 'Le impostazioni dell\'app, l\'aspetto e la diagnostica sono in Impostazioni.' }), p.el));
+    return {
+      update() {
+        const c = cfg();
+        if (!c) return;
+        for (const [key, s] of sliders) s.set(c[key]);
+        tearing.set(c.allow_tearing);
+      },
+    };
+  },
+};
+
+// ------------------------------------------------------------------ informazioni
+
+const CHANGES = [
+  ['1.0.0', [
+    'Nuova interfaccia con barra laterale, barra di stato e riepilogo in basso',
+    'Luminosità via software dello schermo protetto',
+    'Bordi scuriti regolabili lato per lato',
+    'Modalità assente: lo schermo si scurisce quando non ci sei',
+    'Pagina Monitor con la scelta dello schermo da proteggere',
+    'Attività recente nella Panoramica',
+    'Colore d\'accento e dimensione del testo',
+  ]],
+];
+
+PAGES.informazioni = {
+  build(root) {
+    const version = h('span.mono.accent');
+    const intro = h('section.panel', null, h('div.panel-body.pad', null, h('div.about', null, logo(),
+      h('div', null, h('h2', null, 'OLED Guard ', version),
+        h('p', { text: 'Protegge lo schermo OLED dal burn-in: sposta l\'immagine di pochi pixel, scurisce piano le zone ferme e luminose e si mette in pausa da solo con giochi e video a schermo intero.' })))));
+    const news = panel('Novità');
+    news.body.classList.add('pad');
+    news.body.append(h('ul.changes', null, CHANGES.map(([v, items]) => h('li', null, h('h5', { text: `v${v}` }), h('ul', null, items.map((t) => h('li', { text: t })))))));
+    const files = panel('File e licenze');
+    const cfgPath = h('div.path'), logPath = h('div.path');
+    files.body.append(
+      settingRow('Configurazione', cfgPath, h('span')),
+      settingRow('Log', logPath, h('button.btn.small', { type: 'button', on: { click: () => send({ cmd: 'openLogFolder' }) } }, icon('folder'), 'Apri')),
+      settingRow('Microsoft Edge WebView2', 'Usato per disegnare questa finestra. Licenza di tipo BSD di Microsoft (testo in third_party/webview2).', h('span')));
+    root.append(h('div.page', null, intro, h('div.cols.even', null, news.el, files.el)));
+    return {
+      update() {
+        if (!store.about) return;
+        setText(version, `v${store.about.version}`);
+        setText(cfgPath, store.about.config_path);
+        setText(logPath, store.about.log_dir);
+      },
+    };
+  },
+};

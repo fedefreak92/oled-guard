@@ -272,7 +272,7 @@ input[type=range]:disabled::-webkit-slider-thumb { border-color: #56666b; }
 .stat small { font-size: 0.75rem; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase; }
 .stat b { display: block; margin: 0.35rem 0 0.2rem; font-family: var(--mono); font-size: 2rem; font-weight: 600; }
 .stat span { font-size: 0.85rem; color: var(--muted); }
-.heat { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; max-width: 26rem; margin: 0.6rem auto; }
+.heat { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; max-width: 17rem; margin: 0.6rem auto; }
 .heat i { aspect-ratio: 1; border-radius: 4px; background: #ffffff06; position: relative; }
 .heat i b { position: absolute; inset: 0; border-radius: 4px; background: var(--accent); opacity: 0; }
 .heat i.out { background: transparent; border: 1px dashed var(--line); }
