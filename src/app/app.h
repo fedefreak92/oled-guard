@@ -10,12 +10,15 @@
 #include <vector>
 
 #include "config.h"
+#include "config_file.h"
 #include "emergency.h"
 #include "monitors.h"
 #include "overlay_window.h"
+#include "paths.h"
 #include "pause_monitor.h"
 #include "pause_rules.h"
 #include "render_thread.h"
+#include "single_instance.h"
 #include "tray.h"
 
 namespace oled {
@@ -31,16 +34,32 @@ class App {
   bool CreateMainWindow();
   bool HasArg(std::wstring_view arg) const;
 
+  // Configurazione.
+  void LoadInitialConfig();
+  void ReloadConfig();
+  void ApplyConfig(const Config& next);
+  void SaveConfig();
+  void ReportConfigWarnings(const ConfigLoadResult& result);
+  ShiftTiming EffectiveTiming() const;
+  void RegisterToggleHotkey();
+  void StartEmergencyGuard();
+
   // Valuta i segnali di pausa e crea/distrugge l'overlay di conseguenza.
   void Tick();
   bool StartOverlay();
   void StopOverlay();
   void RefreshMonitor();
   void OnRenderEvent(RenderEvent event);
+
+  // Tray.
   void OnTrayEvent(UINT event);
   void ShowTrayMenu();
   void UpdateTrayTooltip();
   void SetManualPause(bool paused);
+  void SelectMonitorSetting(const std::string& setting);
+  void OpenConfig();
+  void OpenLogFolder();
+  void ToggleAutostart();
   void Quit();
 
   std::vector<std::wstring> args_;
@@ -49,7 +68,12 @@ class App {
   UINT taskbar_created_msg_ = 0;
   HICON icon_ = nullptr;
   HWINEVENTHOOK foreground_hook_ = nullptr;
+  SingleInstance single_instance_;
+  ConfigFile config_file_{ConfigPath()};
   Config config_;
+  bool fast_shift_ = false;
+  bool debug_ = false;
+  bool toggle_hotkey_registered_ = false;
   EmergencyGuard guard_;
   Tray tray_;
   OverlayWindow overlay_;
@@ -71,6 +95,7 @@ class App {
   std::optional<MonitorInfo> monitor_;
   bool monitor_valid_ = false;
   bool overlay_running_ = false;
+  bool overlay_shown_ = false;
 };
 
 }  // namespace oled

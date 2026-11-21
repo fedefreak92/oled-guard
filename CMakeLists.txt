@@ -59,6 +59,9 @@ add_executable(oled-guard WIN32
   src/app/render_thread.cpp
   src/app/tray.cpp
   src/app/pause_monitor.cpp
+  src/app/config_file.cpp
+  src/app/autostart.cpp
+  src/app/single_instance.cpp
   src/app/oled-guard.manifest
 )
 

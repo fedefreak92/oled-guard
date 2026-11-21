@@ -25,7 +25,8 @@ std::filesystem::path FileAt(int index) {
 }
 
 void OpenFile() {
-  g_file = _wfsopen(FileAt(0).c_str(), L"ab", _SH_DENYWR);
+  // Condiviso: una seconda istanza (che esce subito) e gli editor possono leggerlo.
+  g_file = _wfsopen(FileAt(0).c_str(), L"ab", _SH_DENYNO);
   std::error_code ec;
   g_size = std::filesystem::exists(FileAt(0), ec) ? std::filesystem::file_size(FileAt(0), ec) : 0;
 }
