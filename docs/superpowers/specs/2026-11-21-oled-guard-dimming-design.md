@@ -450,3 +450,20 @@ pausa con contenuto uguale e diverso. Verifica dal vivo con `--dim-diagnostics`.
 - Verifica dal vivo (desktop mostrato, ritardi 30 s/30 s): 6.386 celle luminose del desktop
   scurite al 40% (rapporto 0,80 in sRGB fra uscita e cattura), icona sotto il mouse tornata
   normale e poi riscurita, eta' conservata attraverso Visualizzazione attivita' e pausa.
+
+### 9.6 Finestre come il desktop, con riattivazione (richiesta dell'utente)
+- Nuova scelta `dim_window_mode`: **"desktop"** (default) — nelle finestre si scurisce
+  tutto cio' che e' fermo e luminoso come sul desktop; **"video"** — il comportamento della
+  §9.2 (solo elementi fermi con movimento intorno, piu' l'opzione "finestre ferme").
+- **Riattivazione** `dim_activate`: la finestra "attiva" torna normale in 0,5 s e finche'
+  resta attiva non si scurisce; quando smette di esserlo il conteggio riparte da zero
+  (scelta A dell'utente). Valori: **"hover"** (finestra sotto il mouse da almeno 0,3 s),
+  **"click"** (finestra in primo piano, anche via Alt+Tab), **"both"** (default), **"never"**.
+  Desktop e barra non si riattivano mai.
+- **Tempi piu' corti** (l'utente: "conteggi troppo lunghi rendono l'app inutile"):
+  default `dim_delay_s` 60 (era 180) e `dim_ramp_s` 120 (era 300).
+- Realizzazione: il thread UI ricava il numero di zona della finestra sotto il mouse e di
+  quella in primo piano dalla stessa enumerazione della mappa delle zone; sulla GPU un
+  passaggio "CSActivate" a ogni aggiornamento rimette "cambiate adesso" le celle di quelle
+  zone (eta', riferimento e deviazione), quindi il ritorno rapido e il conteggio che
+  riparte vengono dalle regole esistenti.
