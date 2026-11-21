@@ -1,6 +1,7 @@
 #include "dimmer.h"
 
 #include <algorithm>
+#include <cstring>
 
 #include "dim_density_h.h"
 #include "dim_density_v.h"
@@ -125,6 +126,8 @@ void Dimmer::Shutdown() {
   previous_srv_source_.Reset();
   staging_.Reset();
   readback_pending_ = false;
+  for (auto& s : debug_staging_) s.Reset();
+  debug_pending_ = false;
   context_.Reset();
   device_.Reset();
   cols_ = rows_ = width_ = height_ = 0;
@@ -252,6 +255,57 @@ bool Dimmer::TryReadback(std::vector<float>& levels) {
     std::copy(row, row + cols_, levels.begin() + static_cast<size_t>(y) * cols_);
   }
   context_->Unmap(staging_.Get(), 0);
+  return true;
+}
+
+void Dimmer::RequestDebugReadback(double now_ms) {
+  if (!Ready() || debug_pending_) return;
+  ID3D11Texture2D* sources[4] = {levels_, last_change_.texture.Get(), flags_.texture.Get(), class_.texture.Get()};
+  for (int i = 0; i < 4; ++i) {
+    if (!debug_staging_[i]) {
+      D3D11_TEXTURE2D_DESC desc{};
+      sources[i]->GetDesc(&desc);
+      desc.Usage = D3D11_USAGE_STAGING;
+      desc.BindFlags = 0;
+      desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+      desc.MiscFlags = 0;
+      if (FAILED(device_->CreateTexture2D(&desc, nullptr, &debug_staging_[i]))) return;
+    }
+    context_->CopyResource(debug_staging_[i].Get(), sources[i]);
+  }
+  context_->Flush();
+  debug_now_s_ = Seconds(now_ms);
+  debug_pending_ = true;
+}
+
+bool Dimmer::TryDebugReadback(DimDebugGrids& out) {
+  if (!debug_pending_) return false;
+  D3D11_MAPPED_SUBRESOURCE maps[4] = {};
+  int mapped = 0;
+  for (; mapped < 4; ++mapped) {
+    const HRESULT hr =
+        context_->Map(debug_staging_[mapped].Get(), 0, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &maps[mapped]);
+    if (FAILED(hr)) break;
+  }
+  if (mapped < 4) {
+    for (int i = 0; i < mapped; ++i) context_->Unmap(debug_staging_[i].Get(), 0);
+    return false;  // non ancora pronte: si riprova al giro dopo
+  }
+  const size_t n = static_cast<size_t>(cols_) * rows_;
+  out.levels.resize(n);
+  out.last_change.resize(n);
+  out.flags.resize(n);
+  out.classes.resize(n);
+  void* dst[4] = {out.levels.data(), out.last_change.data(), out.flags.data(), out.classes.data()};
+  for (int i = 0; i < 4; ++i) {
+    for (UINT y = 0; y < rows_; ++y) {
+      std::memcpy(static_cast<uint8_t*>(dst[i]) + static_cast<size_t>(y) * cols_ * 4,
+                  static_cast<const uint8_t*>(maps[i].pData) + static_cast<size_t>(y) * maps[i].RowPitch, cols_ * 4);
+    }
+    context_->Unmap(debug_staging_[i].Get(), 0);
+  }
+  out.now_s = debug_now_s_;
+  debug_pending_ = false;
   return true;
 }
 

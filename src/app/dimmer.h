@@ -12,6 +12,15 @@
 
 namespace oled {
 
+// Copia delle griglie per la diagnostica (--dim-diagnostics), niente pixel del desktop.
+struct DimDebugGrids {
+  std::vector<float> levels;
+  std::vector<float> last_change;  // secondi dall'inizio della sessione
+  std::vector<uint32_t> flags;
+  std::vector<uint32_t> classes;
+  double now_s = 0;  // istante della richiesta, stessa scala di last_change
+};
+
 class Dimmer {
  public:
   ~Dimmer() { Shutdown(); }
@@ -37,6 +46,10 @@ class Dimmer {
   // Vero se la copia richiesta e' pronta: riempie `levels` (Cols()*Rows(), riga per riga).
   bool TryReadback(std::vector<float>& levels);
   bool ReadbackPending() const { return readback_pending_; }
+
+  // Diagnostica: copia asincrona di livelli, flag, classi e ultimo cambiamento.
+  void RequestDebugReadback(double now_ms);
+  bool TryDebugReadback(DimDebugGrids& out);
 
  private:
   template <class T>
@@ -65,6 +78,9 @@ class Dimmer {
   ComPtr<ID3D11Texture2D> previous_srv_source_;
   ComPtr<ID3D11ShaderResourceView> previous_srv_;
   ComPtr<ID3D11Texture2D> staging_;
+  ComPtr<ID3D11Texture2D> debug_staging_[4];  // levels, last_change, flags, classes
+  bool debug_pending_ = false;
+  double debug_now_s_ = 0;
   bool readback_pending_ = false;
   UINT width_ = 0, height_ = 0, cols_ = 0, rows_ = 0;
   bool sdr_ = false;

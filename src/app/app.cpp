@@ -610,6 +610,8 @@ bool App::StartOverlay() {
   params.shift = shift_.get();
   params.dim = &dim_;
   params.frame_period_ms = latency_ms_ > 0 ? latency_ms_ : 7.0;
+  params.dim_diagnostics = HasArg(L"--dim-diagnostics");
+  params.diagnostics_dir = LogDir();
   RefreshSdrWhite(NowMs());
   PushDimInputs();
   params.guard = &guard_;

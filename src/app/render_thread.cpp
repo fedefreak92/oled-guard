@@ -2,10 +2,13 @@
 
 #include <algorithm>
 #include <climits>
+#include <fstream>
 
 #include "capture.h"
 #include "clock.h"
 #include "d3d_device.h"
+#include "dim_diagnostics.h"
+#include "dim_stats.h"
 #include "dim_schedule.h"
 #include "dimmer.h"
 #include "logger.h"
@@ -115,6 +118,14 @@ RenderThread::SessionEnd RenderThread::RunSession() {
   bool highlight_on = false;
   double readback_requested_ms = -1e9;
   std::vector<float> readback_levels;
+  // Diagnostica (--dim-diagnostics).
+  double diag_stats_at = NowMs() + 5000;
+  double diag_snap_at = NowMs() + 20000;
+  int diag_snaps = 0;
+  bool diag_want_snap = false;
+  FrameSnapshot snap_in, snap_out;
+  std::filesystem::path snap_in_file, snap_out_file;
+  DimDebugGrids diag_grids;
   ComPtr<ID3D11Texture2D> cache;
   DWORD backoff_ms = 100;
   double unavailable_since = -1;  // inizio degli errori "transitori" consecutivi
@@ -233,6 +244,45 @@ RenderThread::SessionEnd RenderThread::RunSession() {
         }
         next = std::min(next, dimmer.ReadbackPending() ? now + 16 : readback_requested_ms + 1000);
       }
+      if (params_.dim_diagnostics) {
+        if (now >= diag_stats_at) {
+          dimmer.RequestDebugReadback(now);
+          diag_stats_at = now + 10000;
+        }
+        if (dimmer.TryDebugReadback(diag_grids)) {
+          const DimGridStats st = SummarizeDimGrids(diag_grids.levels, diag_grids.flags, diag_grids.classes,
+                                                    diag_grids.last_change, diag_grids.now_s, dim_in.params.delay_s);
+          LogInfo("Oscuramento diag: {} (bianco {:.2f}, attivo {}, sospeso {})", FormatDimGridStats(st), white,
+                  dim_in.params.enabled, dim_in.suspended);
+          // Mappa delle celle: ' ' niente, '.' contenuto, 'b' luminosa, 'S' elemento piccolo,
+          // 'L' grande area, '1'-'9' livello di oscuramento (decimi), '*' cambiata da 2 s.
+          std::ofstream grid(params_.diagnostics_dir / "dim-grid.txt");
+          const UINT gc = dimmer.Cols(), gr = dimmer.Rows();
+          for (UINT y = 0; y < gr; ++y) {
+            std::string line(gc, ' ');
+            for (UINT x = 0; x < gc; ++x) {
+              const size_t i = static_cast<size_t>(y) * gc + x;
+              const uint32_t cls = diag_grids.classes[i] & 3u;
+              const float lv = diag_grids.levels[i];
+              char ch = (diag_grids.flags[i] & 2u) ? '.' : ' ';
+              if (diag_grids.flags[i] & 1u) ch = 'b';
+              if (cls == 2) ch = 'L';
+              if (cls == 1) ch = 'S';
+              if (lv > 0.05f) ch = static_cast<char>('0' + std::clamp(static_cast<int>(lv * 10 + 0.5f), 1, 9));
+              if (diag_grids.now_s - diag_grids.last_change[i] < 2.0) ch = '*';
+              line[x] = ch;
+            }
+            grid << line << '\n';
+          }
+        }
+        if (now >= diag_snap_at && diag_snaps < 8) {
+          diag_want_snap = true;
+          diag_snap_at = now + 60000;
+        }
+        if (snap_in.TryWrite(snap_in_file, white) | snap_out.TryWrite(snap_out_file, white)) {}
+        if (snap_in.Pending() || snap_out.Pending()) next = std::min(next, now + 16);
+        next = std::min(next, std::min(diag_stats_at, diag_snap_at));
+      }
     }
     const UINT timeout = static_cast<UINT>(std::clamp(next - now, 0.0, static_cast<double>(kMaxAcquireTimeoutMs)));
 
@@ -275,7 +325,7 @@ RenderThread::SessionEnd RenderThread::RunSession() {
     const Offset offset = params_.shift ? params_.shift->OffsetAt(now) : Offset{};
     const bool dim_due = dim_ok && now >= dim_schedule.NextRedrawAt(now, dim_in.params, params_.frame_period_ms);
     // Si presenta solo se c'e' qualcosa di nuovo da mostrare.
-    if (new_frame || !(offset == last_drawn) || dim_due) {
+    if (new_frame || !(offset == last_drawn) || dim_due || diag_want_snap) {
       WaitForSingleObjectEx(presenter.FrameWaitable(), 100, TRUE);
       DimDrawInputs dim_draw;
       if (dim_ok) {
@@ -284,7 +334,16 @@ RenderThread::SessionEnd RenderThread::RunSession() {
         dim_schedule.OnRedraw(now);
         dim_draw = DimDrawInputs{dimmer.LevelsSrv(), dimmer.Cols(), dimmer.Rows(), white, highlight};
       }
-      hr = presenter.Draw(cache.Get(), offset, dim_draw);
+      std::function<void(ID3D11Texture2D*)> grab;
+      if (diag_want_snap) {
+        ++diag_snaps;
+        snap_in_file = params_.diagnostics_dir / ("dim-" + std::to_string(diag_snaps) + "-in.bmp");
+        snap_out_file = params_.diagnostics_dir / ("dim-" + std::to_string(diag_snaps) + "-out.bmp");
+        snap_in.Request(device.Get(), cache.Get());
+        grab = [&](ID3D11Texture2D* back_buffer) { snap_out.Request(device.Get(), back_buffer); };
+        diag_want_snap = false;
+      }
+      hr = presenter.Draw(cache.Get(), offset, dim_draw, grab);
       if (FAILED(hr)) {
         LogWarn("Render: Present fallito: {}", Hr(hr));
         hide();

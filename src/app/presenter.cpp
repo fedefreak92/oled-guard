@@ -142,7 +142,8 @@ void Presenter::Shutdown() {
   visible_ = false;
 }
 
-HRESULT Presenter::Draw(ID3D11Texture2D* source, Offset offset, const DimDrawInputs& dim) {
+HRESULT Presenter::Draw(ID3D11Texture2D* source, Offset offset, const DimDrawInputs& dim,
+                        const std::function<void(ID3D11Texture2D*)>& before_present) {
   if (!swap_chain_) return E_UNEXPECTED;
   if (source != srv_source_) {
     srv_.Reset();
@@ -176,6 +177,12 @@ HRESULT Presenter::Draw(ID3D11Texture2D* source, Offset offset, const DimDrawInp
   context_->PSSetSamplers(0, 1, &sampler);
   context_->PSSetConstantBuffers(0, 1, &cbuf);
   context_->Draw(3, 0);
+  if (before_present) {
+    ComPtr<ID3D11Resource> resource;
+    rtv_->GetResource(&resource);
+    ComPtr<ID3D11Texture2D> back_buffer;
+    if (SUCCEEDED(resource.As(&back_buffer))) before_present(back_buffer.Get());
+  }
 
   const HRESULT hr = tearing_ ? swap_chain_->Present(0, DXGI_PRESENT_ALLOW_TEARING) : swap_chain_->Present(1, 0);
   return hr == DXGI_STATUS_OCCLUDED ? S_OK : hr;

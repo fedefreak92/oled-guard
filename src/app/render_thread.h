@@ -5,6 +5,7 @@
 #include <windows.h>
 
 #include <atomic>
+#include <filesystem>
 #include <thread>
 
 #include "emergency.h"
@@ -31,6 +32,8 @@ struct RenderParams {
   SharedShift* shift = nullptr;  // nullptr: offset sempre (0,0)
   SharedDim* dim = nullptr;      // nullptr: nessun oscuramento
   double frame_period_ms = 7;    // periodo di refresh del monitor
+  bool dim_diagnostics = false;  // --dim-diagnostics: statistiche nel log e istantanee
+  std::filesystem::path diagnostics_dir;
   EmergencyGuard* guard = nullptr;
   unsigned generation = 0;  // inviata negli eventi (lParam) per scartare quelli vecchi
 };

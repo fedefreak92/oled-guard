@@ -30,6 +30,7 @@ add_library(oled_core STATIC
   src/core/dim_params.cpp
   src/core/dim_model.cpp
   src/core/dim_schedule.cpp
+  src/core/dim_stats.cpp
 )
 target_include_directories(oled_core PUBLIC src/core)
 
@@ -51,6 +52,7 @@ add_executable(oled-guard-tests
   tests/test_ui_protocol.cpp
   tests/test_dim_model.cpp
   tests/test_dim_schedule.cpp
+  tests/test_dim_stats.cpp
 )
 target_include_directories(oled-guard-tests PRIVATE tests)
 target_link_libraries(oled-guard-tests PRIVATE oled_core)
@@ -119,6 +121,7 @@ add_executable(oled-guard WIN32
   src/app/ui_window.cpp
   src/app/windows_settings.cpp
   src/app/stats_file.cpp
+  src/app/dim_diagnostics.cpp
   src/app/oled-guard.manifest
 )
 
