@@ -190,6 +190,14 @@ DimSavedState DimModel::Save(double now_s) const {
 void DimModel::Update(double now_s, double dt_s, const DimParams& p, bool suspended) {
   bright_threshold_ = p.bright_threshold;
   const size_t n = levels_.size();
+  // Finestre attive: "cambiate adesso" (ritorno rapido, conteggio che riparte).
+  for (size_t i = 0; i < n; ++i) {
+    const uint8_t z = zones_[i];
+    if (z == kDimZoneShell || std::find(active_.begin(), active_.end(), z) == active_.end()) continue;
+    last_change_[i] = now_s;
+    anchor_time_[i] = now_s;
+    excursion_[i] = -1;
+  }
   // Movimento intorno: quota di celle cambiate da poco nella finestra 33x33.
   std::vector<double> motion(n);
   for (size_t i = 0; i < n; ++i) motion[i] = now_s - last_change_[i] < kDimMotionWindowS ? 1.0 : 0.0;
@@ -200,7 +208,8 @@ void DimModel::Update(double now_s, double dt_s, const DimParams& p, bool suspen
     const double age = now_s - last_change_[i];
     const bool m = bright_[i] && age >= p.delay_s;
     // Desktop e barra: ogni elemento fermo e luminoso. Dentro un'app: solo con movimento intorno.
-    const bool large = zones_[i] != kDimZoneShell && motion_density[i] < p.motion_fraction;
+    const bool large =
+        zones_[i] != kDimZoneShell && !p.windows_like_desktop && motion_density[i] < p.motion_fraction;
     large_[i] = large ? 1 : 0;
 
     double cap = 0;

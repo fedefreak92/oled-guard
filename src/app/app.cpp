@@ -440,7 +440,10 @@ void App::Tick() {
   last_foreground_ = in.foreground_process;
   if (monitor_ && now - sdr_white_checked_ms_ >= 5000) RefreshSdrWhite(now);
   PushDimInputs();
-  if (overlay_running_) RefreshDimZones(now);
+  if (overlay_running_) {
+    RefreshDimZones(now);
+    PushDimInputs();  // le finestre attive cambiano con il mouse e il primo piano
+  }
   const bool entered_pause = !first_tick_ && paused && !last_paused_;
   if (first_tick_ || paused != last_paused_ || (paused && reason != last_reason_)) {
     if (paused) {
@@ -567,8 +570,32 @@ void App::RefreshDimZones(double now) {
   const int cols = (w + kDimCellPx - 1) / kDimCellPx;
   const int rows = (h + kDimCellPx - 1) / kDimCellPx;
   std::vector<std::string> described;
+  std::vector<HWND> windows;
   const bool log_windows = dim_diagnostics_ && now - dim_windows_logged_ms_ >= 60000;
-  auto zones = CollectDimZones(*monitor_, cols, rows, log_windows ? &described : nullptr);
+  auto zones = CollectDimZones(*monitor_, cols, rows, &windows, log_windows ? &described : nullptr);
+
+  // Finestre "attive" che tornano normali: sotto il mouse (da almeno 0,3 s) e/o in primo piano.
+  POINT cursor{};
+  const HWND under = GetCursorPos(&cursor) ? GetAncestor(WindowFromPoint(cursor), GA_ROOT) : nullptr;
+  if (under != hover_window_) {
+    hover_window_ = under;
+    hover_since_ms_ = now;
+  }
+  const std::string& mode = config_.dim_activate;
+  std::vector<uint8_t> active;
+  const auto add = [&](uint8_t zone) {
+    if (zone != kDimZoneShell && std::find(active.begin(), active.end(), zone) == active.end()) active.push_back(zone);
+  };
+  if ((mode == "hover" || mode == "both") && now - hover_since_ms_ >= 300) add(ZoneOfWindow(hover_window_, windows));
+  if (mode == "click" || mode == "both") add(ZoneOfWindow(GetForegroundWindow(), windows));
+  if (active != dim_active_zones_) {
+    wchar_t cls[128] = {};
+    if (hover_window_) GetClassNameW(hover_window_, cls, ARRAYSIZE(cls));
+    std::string ids;
+    for (uint8_t z : active) ids += (ids.empty() ? "" : ",") + std::to_string(z);
+    LogDebug("Oscuramento: finestre attive [{}] (sotto il mouse: {})", ids, Narrow(cls));
+  }
+  dim_active_zones_ = std::move(active);
   if (log_windows) {
     dim_windows_logged_ms_ = now;
     const auto app_cells = std::count(zones.begin(), zones.end(), kDimZoneApp);
@@ -615,6 +642,7 @@ void App::PushDimInputs() {
   in.sdr_white_scrgb = sdr_white_;
   in.highlight_until_ms = dim_highlight_until_ms_;
   in.watch = dim_watch_;
+  in.active_zones = dim_active_zones_;
   dim_.Set(in);
 }
 

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstring>
 
+#include "dim_activate.h"
 #include "dim_detect.h"
 #include "dim_level.h"
 #include "dim_motion_h.h"
@@ -29,8 +30,11 @@ struct DimConstants {
   unsigned rows;
   unsigned width;
   unsigned height;
+  unsigned active0;
+  unsigned active1;
+  unsigned pad[2];
 };
-static_assert(sizeof(DimConstants) == 64);
+static_assert(sizeof(DimConstants) == 80);
 
 constexpr unsigned kFlagSdr = 1;
 constexpr unsigned kFlagSuspended = 2;
@@ -38,6 +42,7 @@ constexpr unsigned kFlagEnabled = 4;
 constexpr unsigned kFlagLargeEnabled = 8;
 constexpr unsigned kFlagFirstFrame = 16;
 constexpr unsigned kFlagRestore = 32;
+constexpr unsigned kFlagWindowsLikeDesktop = 64;
 
 }  // namespace
 
@@ -78,6 +83,7 @@ HRESULT Dimmer::Init(ID3D11Device* device, UINT width, UINT height, DXGI_FORMAT 
     if (SUCCEEDED(hr)) hr = device_->CreateComputeShader(code, size, nullptr, &out);
   };
   shader(g_dim_detect, sizeof(g_dim_detect), detect_);
+  shader(g_dim_activate, sizeof(g_dim_activate), activate_);
   shader(g_dim_motion_h, sizeof(g_dim_motion_h), motion_h_);
   shader(g_dim_motion_v, sizeof(g_dim_motion_v), motion_v_);
   shader(g_dim_level, sizeof(g_dim_level), level_);
@@ -128,6 +134,8 @@ void Dimmer::Shutdown() {
     *g = Grid{};
   }
   detect_.Reset();
+  activate_.Reset();
+  active_[0] = active_[1] = 0;
   motion_h_.Reset();
   motion_v_.Reset();
   level_.Reset();
@@ -152,6 +160,14 @@ void Dimmer::SetZones(const std::vector<uint8_t>& zones) {
   context_->UpdateSubresource(zones_.texture.Get(), 0, nullptr, wide.data(), cols_ * 4, 0);
 }
 
+void Dimmer::SetActiveZones(const std::vector<uint8_t>& active) {
+  active_[0] = active_[1] = 0;
+  int n = 0;
+  for (uint8_t z : active) {
+    if (z != kDimZoneShell && n < 2) active_[n++] = z;
+  }
+}
+
 void Dimmer::SetConstants(double now_s, double dt_s, const DimParams& p, float sdr_white, bool suspended,
                           bool first) {
   DimConstants c{};
@@ -168,7 +184,9 @@ void Dimmer::SetConstants(double now_s, double dt_s, const DimParams& p, float s
   c.sdr_white = sdr_white > 0 ? sdr_white : 1.0f;
   c.flags = (sdr_ ? kFlagSdr : 0) | (suspended ? kFlagSuspended : 0) | (p.enabled ? kFlagEnabled : 0) |
             (p.large_enabled ? kFlagLargeEnabled : 0) | (first ? kFlagFirstFrame : 0) |
-            (first && restore_ ? kFlagRestore : 0);
+            (first && restore_ ? kFlagRestore : 0) | (p.windows_like_desktop ? kFlagWindowsLikeDesktop : 0);
+  c.active0 = active_[0];
+  c.active1 = active_[1];
   c.cols = cols_;
   c.rows = rows_;
   c.width = width_;
@@ -248,6 +266,10 @@ void Dimmer::Update(double now_ms, const DimParams& p, bool suspended) {
   last_update_s_ = now_s;
   SetConstants(now_s, dt, p, last_white_, suspended, false);
   const UINT gx = (cols_ + 7) / 8, gy = (rows_ + 7) / 8;
+  if (active_[0] || active_[1]) {
+    Run(activate_.Get(), {nullptr, nullptr, nullptr, zones_.srv.Get()},
+        {last_change_.uav.Get(), anchor_time_.uav.Get(), excursion_.uav.Get()}, gx, gy);
+  }
   Run(motion_h_.Get(), {nullptr, last_change_.srv.Get(), nullptr, zones_.srv.Get()}, {sums_.uav.Get()}, gx, gy);
   Run(motion_v_.Get(), {sums_.srv.Get(), nullptr, nullptr, zones_.srv.Get()}, {motion_.uav.Get()}, gx, gy);
   Run(level_.Get(), {flags_.srv.Get(), last_change_.srv.Get(), motion_.srv.Get(), zones_.srv.Get()},

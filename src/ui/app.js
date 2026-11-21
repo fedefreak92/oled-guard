@@ -462,7 +462,17 @@ function renderDimConfig() {
     list.appendChild(row);
   }
   $('dimExEmpty').hidden = c.dim_exclude.length > 0;
+  document.querySelectorAll('#dimWinMode button').forEach((b) => b.classList.toggle('on', b.dataset.mode === c.dim_window_mode));
+  document.querySelectorAll('#dimActivate button').forEach((b) => b.classList.toggle('on', b.dataset.act === c.dim_activate));
+  // Le regole delle finestre ferme valgono solo con "Solo loghi su video".
+  const video = c.dim_window_mode === 'video';
+  document.querySelectorAll('.dim-large').forEach((el) => el.classList.toggle('off', !video));
+  $('dimActivateHint').textContent = c.dim_activate === 'never'
+    ? 'Nessuna finestra torna normale da sola: tutte si scuriscono allo stesso modo.'
+    : 'La finestra che usi resta normale; quando la lasci, il conteggio riparte da zero.';
 }
+document.querySelectorAll('#dimWinMode button').forEach((b) => b.addEventListener('click', () => setConfig({ dim_window_mode: b.dataset.mode })));
+document.querySelectorAll('#dimActivate button').forEach((b) => b.addEventListener('click', () => setConfig({ dim_activate: b.dataset.act })));
 
 // Slider: etichetta subito, config dopo 400 ms. Le grandi aree non possono iniziare
 // prima degli elementi piccoli: se serve si sposta anche l'altro valore.
@@ -545,7 +555,8 @@ const Mock = {
     pause_on_notification_state: true, pause_on_fullscreen_window: true, pause_enter_delay_ms: 300, resume_delay_ms: 2500,
     denylist: ['netflix.exe'], allowlist: ['vlc.exe'], hotkey_toggle: 'Ctrl+Alt+Shift+P', hotkey_emergency_exit: 'Ctrl+Alt+Shift+F12',
     hotkey_display_off: 'Ctrl+Alt+Shift+O', allow_tearing: false, autostart: true, log_level: 'info',
-    dim_enabled: true, dim_strength_pct: 40, dim_delay_s: 180, dim_ramp_s: 300, dim_recover_ms: 500,
+    dim_enabled: true, dim_strength_pct: 40, dim_delay_s: 60, dim_ramp_s: 120, dim_recover_ms: 500,
+    dim_window_mode: 'desktop', dim_activate: 'both',
     dim_large_enabled: false, dim_large_delay_s: 1200, dim_large_strength_pct: 20, dim_bright_threshold_pct: 25,
     dim_motion_fraction_pct: 25, dim_exclude: ['photoshop.exe'],
   },

@@ -39,6 +39,9 @@ class DimModel {
   // Zone per cella (Cols()*Rows()); di dimensione sbagliata vengono ignorate.
   // Senza zone tutto conta come finestra di un'app.
   void SetZones(const std::vector<uint8_t>& zones);
+  // Zone delle finestre "attive" (sotto il mouse, in primo piano): tornano normali e il
+  // loro conteggio riparte da zero finche' restano attive. Lo 0 (desktop) e' ignorato.
+  void SetActiveZones(const std::vector<uint8_t>& active) { active_ = active; }
   // Frame nuovo: le celle con almeno un pixel diverso dal frame precedente
   // risultano cambiate adesso. Il primo frame cambia tutte le celle (salvo ripresa).
   void OnFrame(const LumaImage& frame, double now_s);
@@ -72,6 +75,7 @@ class DimModel {
   std::vector<double> anchor_time_;
   std::vector<double> excursion_;
   std::vector<uint8_t> zones_;
+  std::vector<uint8_t> active_;
   std::vector<uint8_t> bright_;
   std::vector<uint8_t> large_;
   // Bit 0-1: ultima classe (0 nessuna, 1 elemento, 2 da non toccare);

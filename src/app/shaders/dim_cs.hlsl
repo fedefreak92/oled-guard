@@ -18,6 +18,9 @@ cbuffer DimConstants : register(b0) {
   uint rows;
   uint width;
   uint height;
+  uint active0;  // zone delle finestre attive (0 = nessuna)
+  uint active1;
+  uint2 pad;
 };
 
 static const uint kFlagSdr = 1;
@@ -26,6 +29,7 @@ static const uint kFlagEnabled = 4;
 static const uint kFlagLargeEnabled = 8;
 static const uint kFlagFirstFrame = 16;
 static const uint kFlagRestore = 32;
+static const uint kFlagWindowsLikeDesktop = 64;
 
 static const int kCellPx = 16;
 static const int kRadius = 16;
@@ -134,6 +138,25 @@ void CSDetect(uint3 cell : SV_GroupID, uint3 tid : SV_GroupThreadID, uint index 
   }
 }
 
+// ------------------------------------------------------------------ finestre attive
+
+RWTexture2D<float> active_last_change : register(u0);
+RWTexture2D<float> active_anchor_time : register(u1);
+RWTexture2D<float> active_excursion : register(u2);
+Texture2D<uint> active_zones_in : register(t3);
+
+// La finestra attiva (sotto il mouse o in primo piano) e' "cambiata adesso": torna
+// normale con il ritorno rapido e il suo conteggio riparte quando smette di esserlo.
+[numthreads(8, 8, 1)]
+void CSActivate(uint3 id : SV_DispatchThreadID) {
+  if (id.x >= cols || id.y >= rows) return;
+  const uint zone = active_zones_in[id.xy];
+  if (zone == 0 || (zone != active0 && zone != active1)) return;
+  active_last_change[id.xy] = now_s;
+  active_anchor_time[id.xy] = now_s;
+  active_excursion[id.xy] = -1.0;
+}
+
 // ------------------------------------------------------------------ movimento intorno
 
 Texture2D<uint> flags_in : register(t0);
@@ -189,7 +212,8 @@ void CSLevel(uint3 id : SV_DispatchThreadID) {
   const bool bright = (flags_in[c] & 1u) != 0;
   const bool m = bright && age >= delay_s;
   // Desktop e barra: ogni elemento fermo e luminoso. Dentro un'app: solo con movimento intorno.
-  const bool large = zones_in[c] != kZoneShell && motion_in[c] < motion_fraction;
+  const bool large =
+      zones_in[c] != kZoneShell && (flags & kFlagWindowsLikeDesktop) == 0 && motion_in[c] < motion_fraction;
   const bool enabled = (flags & kFlagEnabled) != 0;
   const bool suspended = (flags & kFlagSuspended) != 0;
 

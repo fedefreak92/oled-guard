@@ -17,6 +17,9 @@ struct DimParams {
   double large_strength = 0.20;
   double bright_threshold = 0.25;  // frazione del bianco SDR (luce lineare)
   double motion_fraction = 0.25;  // dentro un'app: quota di celle in movimento intorno
+  // Finestre trattate come il desktop (tutto cio' che e' fermo e luminoso); altrimenti
+  // dentro le app solo gli elementi fermi con movimento intorno.
+  bool windows_like_desktop = false;
 
   bool operator==(const DimParams&) const = default;
 };

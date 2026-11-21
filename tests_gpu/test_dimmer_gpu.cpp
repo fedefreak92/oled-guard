@@ -39,6 +39,10 @@ class Sim {
     dimmer_.SetZones(zones);
   }
   bool Ok() const { return ok_; }
+  void Active(const std::vector<uint8_t>& ids) {
+    model_.SetActiveZones(ids);
+    dimmer_.SetActiveZones(ids);
+  }
   Dimmer& dimmer() { return dimmer_; }
   DimModel& model() { return model_; }
 
@@ -380,4 +384,30 @@ TEST(gpu_save_during_brief_change_keeps_anchor) {
   after.Run(img, 1000.5, 1150);
   CHECK_NEAR(after.GpuLevel(2, 2), 0.20, 0.01);
   CHECK(after.MaxDiff() <= 0.002);
+}
+
+// Finestre come il desktop, con la finestra attiva che resta normale e poi riparte da zero.
+TEST(gpu_windows_like_desktop_and_activation) {
+  std::vector<uint8_t> zones(static_cast<size_t>(kCols) * kRows, 3);
+  for (int y = 0; y < kRows; ++y)
+    for (int x = 0; x < 32; ++x) zones[static_cast<size_t>(y) * kCols + x] = 2;
+  Sim sim(kW, kH, kSdr, 1.0f, zones);
+  CHECK(sim.Ok());
+  if (!sim.Ok()) return;
+  DimParams p;
+  p.windows_like_desktop = true;
+  LumaImage img = Black();
+  Fill(img, 0, 0, kW, kH, 1.0f);
+  sim.Active({2});
+  sim.Frame(img, 0, p);
+  sim.Run(img, 0.5, 480, {}, p);
+  CHECK_NEAR(sim.GpuLevel(10, 10), 0.0, 1e-6);
+  CHECK_NEAR(sim.GpuLevel(50, 10), 0.40, 0.002);
+  CHECK(sim.MaxDiff() <= 0.002);
+  sim.Active({3});  // si passa all'altra finestra
+  sim.Update(480.5, 0.5, p);
+  CHECK_NEAR(sim.GpuLevel(50, 10), 0.0, 1e-6);  // torna normale in mezzo secondo
+  sim.Run(img, 481, 810, {}, p);
+  CHECK_NEAR(sim.GpuLevel(10, 10), 0.20, 0.01);  // la prima ha ripreso il conteggio da 480
+  CHECK(sim.MaxDiff() <= 0.002);
 }

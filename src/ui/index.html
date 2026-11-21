@@ -151,13 +151,20 @@
         </div>
       </div>
       <div>
-        <div class="sec">Finestre ferme</div>
-        <div class="row"><span class="k">Oscura anche le finestre ferme (documenti, pagine)</span><button class="toggle" data-toggle="dim_large_enabled">OFF</button></div>
-        <div class="row col">
+        <div class="sec">Finestre delle app</div>
+        <div class="row"><span class="k">Cosa si scurisce</span>
+          <span class="seg wide" id="dimWinMode"><button data-mode="desktop">Come il desktop</button><button data-mode="video">Solo loghi su video</button></span></div>
+        <div class="row"><span class="k">Torna normale la finestra</span>
+          <span class="seg wide" id="dimActivate"><button data-act="hover">Sotto il mouse</button><button data-act="click">Cliccata</button><button data-act="both">Entrambe</button><button data-act="never">Mai</button></span></div>
+        <div class="hint" id="dimActivateHint">La finestra che usi resta normale; quando la lasci, il conteggio riparte da zero.</div>
+
+        <div class="sec gap" id="dimLargeSec">Finestre ferme (solo con "Solo loghi su video")</div>
+        <div class="row dim-large"><span class="k">Oscura anche le finestre ferme (documenti, pagine)</span><button class="toggle" data-toggle="dim_large_enabled">OFF</button></div>
+        <div class="row col dim-large">
           <div class="row-head"><span class="k">Inizia quando e' ferma da</span><span class="v" id="vDimLargeDelay">-</span></div>
           <input type="range" class="single" id="rangeDimLargeDelay" min="5" max="240" step="5">
         </div>
-        <div class="row col">
+        <div class="row col dim-large">
           <div class="row-head"><span class="k">Intensita' massima</span><span class="v" id="vDimLargeStrength">-</span></div>
           <input type="range" class="single" id="rangeDimLargeStrength" min="5" max="80" step="1">
         </div>
@@ -173,7 +180,7 @@
         <div class="proc" id="dimProcList" hidden></div>
       </div>
     </div>
-    <div class="hint">Sul desktop e sulla barra si scurisce tutto cio' che e' fermo e luminoso (icone, etichette, sfondo chiaro). Dentro le finestre delle app solo gli elementi fermi sopra contenuti in movimento, come il logo su un video: documenti e pagine ferme restano intatti. Una zona torna normale appena il suo contenuto cambia; la mappa sopravvive alle pause.</div>
+    <div class="hint">Sul desktop e sulla barra si scurisce tutto cio' che e' fermo e luminoso (icone, etichette, sfondo chiaro). Nelle finestre, a scelta, lo stesso oppure solo gli elementi fermi sopra contenuti in movimento (il logo su un video). Una zona torna normale appena il suo contenuto cambia; la mappa sopravvive alle pause.</div>
   </section>
 
   <!-- WINDOWS PER OLED -->

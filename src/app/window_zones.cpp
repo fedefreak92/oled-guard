@@ -12,6 +12,7 @@ struct Collected {
   std::vector<ZoneRect> apps;
   std::vector<ZoneRect> taskbars;
   std::vector<std::string>* described = nullptr;
+  std::vector<HWND> windows;
 };
 
 void Describe(Collected& c, const char* kind, const std::string& cls, const RECT& r) {
@@ -55,6 +56,7 @@ BOOL CALLBACK CollectWindow(HWND hwnd, LPARAM lp) {
   }
   if (r.right > r.left && r.bottom > r.top) {
     out.apps.push_back({r.left, r.top, r.right, r.bottom});
+    out.windows.push_back(hwnd);
     Describe(out, "app", cls, r);
   }
   return TRUE;
@@ -62,13 +64,23 @@ BOOL CALLBACK CollectWindow(HWND hwnd, LPARAM lp) {
 
 }  // namespace
 
-std::vector<uint8_t> CollectDimZones(const MonitorInfo& monitor, int cols, int rows,
+std::vector<uint8_t> CollectDimZones(const MonitorInfo& monitor, int cols, int rows, std::vector<HWND>* windows,
                                      std::vector<std::string>* described) {
   Collected c;
   c.described = described;
   EnumWindows(CollectWindow, reinterpret_cast<LPARAM>(&c));
   const RECT& m = monitor.rect;
+  if (windows) *windows = c.windows;
   return ComputeDimZones(cols, rows, {m.left, m.top, m.right, m.bottom}, c.apps, c.taskbars);
+}
+
+uint8_t ZoneOfWindow(HWND hwnd, const std::vector<HWND>& windows) {
+  if (!hwnd) return kDimZoneShell;
+  const HWND root = GetAncestor(hwnd, GA_ROOT);
+  for (size_t i = 0; i < windows.size(); ++i) {
+    if (windows[i] == root || windows[i] == hwnd) return static_cast<uint8_t>(1 + i % 255);
+  }
+  return kDimZoneShell;
 }
 
 }  // namespace oled

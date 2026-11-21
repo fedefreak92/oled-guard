@@ -14,6 +14,7 @@ DimParams ToDimParams(const Config& c) {
   p.large_strength = c.dim_large_strength_pct / 100.0;
   p.bright_threshold = c.dim_bright_threshold_pct / 100.0;
   p.motion_fraction = c.dim_motion_fraction_pct / 100.0;
+  p.windows_like_desktop = c.dim_window_mode == "desktop";
   return p;
 }
 

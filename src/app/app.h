@@ -158,6 +158,9 @@ class App {
   DimMap last_dim_map_;
   bool dim_diagnostics_ = false;
   double dim_windows_logged_ms_ = -1e9;
+  std::vector<uint8_t> dim_active_zones_;  // finestre attive (zone), dall'ultimo RefreshDimZones
+  HWND hover_window_ = nullptr;             // finestra sotto il mouse e da quando
+  double hover_since_ms_ = 0;
 
   PauseMonitor pause_monitor_;
   PauseHysteresis hysteresis_{300, 2500};

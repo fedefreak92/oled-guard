@@ -244,6 +244,7 @@ RenderThread::SessionEnd RenderThread::RunSession() {
       }
       zones_applied = zones.version;
     }
+    if (dim_ok) dimmer.SetActiveZones(dim_in.active_zones);
     const bool hdr = capture.Format() == DXGI_FORMAT_R16G16B16A16_FLOAT;
     const float white = hdr ? dim_in.sdr_white_scrgb : 1.0f;
     const bool highlight = dim_in.highlight_until_ms > now;

@@ -60,6 +60,23 @@ class Reader {
     field = std::string(TrimAscii(v.AsString()));
   }
 
+  // Testo fra valori ammessi (maiuscole ignorate).
+  void Choice(const std::string& key, const JsonValue& v, std::initializer_list<const char*> allowed,
+              std::string& field) {
+    std::string value = field;
+    String(key, v, value);
+    value = ToLowerAscii(value);
+    for (const char* a : allowed) {
+      if (value == a) {
+        field = value;
+        return;
+      }
+    }
+    std::string list;
+    for (const char* a : allowed) list += (list.empty() ? "" : ", ") + std::string(a);
+    Warn(key + ": valore \"" + value + "\" non valido (" + list + "), uso " + field);
+  }
+
   void List(const std::string& key, const JsonValue& v, std::vector<std::string>& field) {
     if (v.type() != JsonValue::Type::Array) {
       Warn(key + ": serve un elenco di nomi .exe, ignorato");
@@ -175,6 +192,8 @@ ConfigLoadResult ConfigFromJson(std::string_view raw) {
     else if (key == "dim_bright_threshold_pct") r.Int(key, v, 5, 100, c.dim_bright_threshold_pct);
     else if (key == "dim_motion_fraction_pct") r.Int(key, v, 10, 90, c.dim_motion_fraction_pct);
     else if (key == "dim_exclude") r.List(key, v, c.dim_exclude);
+    else if (key == "dim_window_mode") r.Choice(key, v, {"desktop", "video"}, c.dim_window_mode);
+    else if (key == "dim_activate") r.Choice(key, v, {"hover", "click", "both", "never"}, c.dim_activate);
     else if (key == "log_level") {
       std::string level = c.log_level;
       r.String(key, v, level);
@@ -238,6 +257,8 @@ std::string ConfigToJson(const Config& c) {
   o.Set("dim_bright_threshold_pct", JsonValue(c.dim_bright_threshold_pct));
   o.Set("dim_motion_fraction_pct", JsonValue(c.dim_motion_fraction_pct));
   o.Set("dim_exclude", list(c.dim_exclude));
+  o.Set("dim_window_mode", JsonValue(c.dim_window_mode));
+  o.Set("dim_activate", JsonValue(c.dim_activate));
   return SerializeJson(o) + "\n";
 }
 

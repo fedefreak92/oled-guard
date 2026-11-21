@@ -37,6 +37,8 @@ class Dimmer {
   UINT Rows() const { return rows_; }
   // Zone per cella (0 desktop/barra, 1 app); di dimensione sbagliata vengono ignorate.
   void SetZones(const std::vector<uint8_t>& zones);
+  // Fino a due zone di finestre attive (sotto il mouse, in primo piano); lo 0 e' ignorato.
+  void SetActiveZones(const std::vector<uint8_t>& active);
   // Eta' e firma di ogni cella, lette subito (bloccante: solo prima di distruggere).
   bool SaveState(double now_ms, DimSavedState& out);
 
@@ -78,7 +80,8 @@ class Dimmer {
   ComPtr<ID3D11Device> device_;
   ComPtr<ID3D11DeviceContext> context_;
   ComPtr<ID3D11Buffer> constants_;
-  ComPtr<ID3D11ComputeShader> detect_, motion_h_, motion_v_, level_;
+  ComPtr<ID3D11ComputeShader> detect_, activate_, motion_h_, motion_v_, level_;
+  unsigned active_[2] = {0, 0};
   Grid last_change_, flags_, hash_, sums_, motion_, levels_grid_, class_, zones_, saved_hash_, saved_age_;
   Grid anchor_hash_, anchor_time_, excursion_;
   bool restore_ = false;

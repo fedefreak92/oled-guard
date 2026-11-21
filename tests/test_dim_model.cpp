@@ -61,15 +61,18 @@ TEST(dim_to_params_converts) {
   const DimParams p = oled::ToDimParams(oled::Config{});
   CHECK(p.enabled);
   CHECK_NEAR(p.strength, 0.40, 1e-9);
-  CHECK_NEAR(p.delay_s, 180, 1e-9);
-  CHECK_NEAR(p.ramp_s, 300, 1e-9);
+  CHECK_NEAR(p.delay_s, 60, 1e-9);
+  CHECK_NEAR(p.ramp_s, 120, 1e-9);
+  CHECK(p.windows_like_desktop);
   CHECK_NEAR(p.recover_s, 0.5, 1e-9);
   CHECK(!p.large_enabled);
   CHECK_NEAR(p.large_delay_s, 1200, 1e-9);
   CHECK_NEAR(p.large_strength, 0.20, 1e-9);
   CHECK_NEAR(p.bright_threshold, 0.25, 1e-9);
   CHECK_NEAR(p.motion_fraction, 0.25, 1e-9);
-  CHECK(p == DimParams{});
+  oled::Config video;
+  video.dim_window_mode = "video";
+  CHECK(!oled::ToDimParams(video).windows_like_desktop);
 }
 
 TEST(dim_grid_size_rounds_up) {
@@ -419,4 +422,85 @@ TEST(dim_save_during_brief_change_keeps_anchor) {
   after.OnFrame(original, 1000);
   after.Update(1000, 0, DimParams{}, false);
   CHECK_NEAR(after.Target(2, 2), 0.40, 1e-6);
+}
+
+// ---------------------------------------------------------------- finestre come il desktop
+
+namespace {
+
+DimParams WindowsLikeDesktop() {
+  DimParams p;
+  p.windows_like_desktop = true;
+  return p;
+}
+
+// Due finestre bianche ferme affiancate: zona 2 a sinistra, zona 3 a destra.
+std::vector<uint8_t> TwoWindows() {
+  std::vector<uint8_t> z(static_cast<size_t>(kCols) * kRows, 3);
+  for (int y = 0; y < kRows; ++y)
+    for (int x = 0; x < 32; ++x) z[static_cast<size_t>(y) * kCols + x] = 2;
+  return z;
+}
+
+}  // namespace
+
+TEST(dim_windows_like_desktop_dims_static_window) {
+  LumaImage img = DarkAppText();
+  DimModel m(kW, kH, 0);
+  m.SetZones(Zones(kApp));
+  m.OnFrame(img, 0);
+  Run(m, img, 0.5, 480, WindowsLikeDesktop());
+  CHECK(!m.Large(10, 2));
+  CHECK_NEAR(m.Level(10, 2), 0.40, 1e-4);
+}
+
+TEST(dim_active_window_stays_normal) {
+  LumaImage img = Black();
+  Fill(img, 0, 0, kW, kH, 1.0f);
+  DimModel m(kW, kH, 0);
+  m.SetZones(TwoWindows());
+  m.SetActiveZones({2});
+  m.OnFrame(img, 0);
+  Run(m, img, 0.5, 480, WindowsLikeDesktop());
+  CHECK_NEAR(m.Level(10, 10), 0.0, 1e-6);   // finestra attiva
+  CHECK_NEAR(m.Level(50, 10), 0.40, 1e-4);  // l'altra si scurisce
+}
+
+TEST(dim_deactivated_window_restarts_count) {
+  LumaImage img = Black();
+  Fill(img, 0, 0, kW, kH, 1.0f);
+  DimModel m(kW, kH, 0);
+  m.SetZones(TwoWindows());
+  m.SetActiveZones({2});
+  m.OnFrame(img, 0);
+  Run(m, img, 0.5, 480, WindowsLikeDesktop());
+  m.SetActiveZones({});  // il mouse va altrove: il conteggio riparte da adesso
+  Run(m, img, 480.5, 660, WindowsLikeDesktop());
+  CHECK_NEAR(m.Target(10, 10), 0.0, 1e-9);
+  Run(m, img, 660.5, 810, WindowsLikeDesktop());
+  CHECK_NEAR(m.Level(10, 10), 0.20, 0.01);
+}
+
+TEST(dim_activated_window_recovers_fast) {
+  LumaImage img = Black();
+  Fill(img, 0, 0, kW, kH, 1.0f);
+  DimModel m(kW, kH, 0);
+  m.SetZones(TwoWindows());
+  m.OnFrame(img, 0);
+  Run(m, img, 0.5, 480, WindowsLikeDesktop());
+  CHECK_NEAR(m.Level(10, 10), 0.40, 1e-4);
+  m.SetActiveZones({2});
+  m.Update(480.5, 0.5, WindowsLikeDesktop(), false);
+  CHECK_NEAR(m.Level(10, 10), 0.0, 1e-6);
+  CHECK_NEAR(m.Level(50, 10), 0.40, 1e-4);
+}
+
+TEST(dim_desktop_never_activated) {
+  LumaImage img = DesktopIcons();
+  DimModel m(kW, kH, 0);
+  m.SetZones(Zones(kShell));
+  m.SetActiveZones({kShell});
+  m.OnFrame(img, 0);
+  Run(m, img, 0.5, 480, WindowsLikeDesktop());
+  CHECK_NEAR(m.Level(2, 2), 0.40, 1e-4);
 }

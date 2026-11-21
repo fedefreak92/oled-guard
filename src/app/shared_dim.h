@@ -18,6 +18,7 @@ struct DimInputs {
   float sdr_white_scrgb = 2.5f;  // bianco SDR in scRGB (1 = 80 nit); usato solo in HDR
   double highlight_until_ms = 0;
   bool watch = false;    // la scheda vuole la mappa
+  std::vector<uint8_t> active_zones;  // finestre attive (sotto il mouse, in primo piano)
   uint64_t version = 0;  // cambia a ogni modifica (esclusa la mappa)
 };
 

@@ -33,8 +33,8 @@ struct Config {
   // Oscuramento delle aree statiche (elementi piccoli fermi e luminosi).
   bool dim_enabled = true;
   int dim_strength_pct = 40;          // 10-80
-  int dim_delay_s = 180;              // 30-3600
-  int dim_ramp_s = 300;               // 30-3600
+  int dim_delay_s = 60;               // 30-3600
+  int dim_ramp_s = 120;               // 30-3600
   int dim_recover_ms = 500;           // 100-5000
   bool dim_large_enabled = false;
   int dim_large_delay_s = 1200;       // 300-14400
@@ -42,6 +42,8 @@ struct Config {
   int dim_bright_threshold_pct = 25;  // 5-100, % del bianco SDR in luce lineare
   int dim_motion_fraction_pct = 25;   // 10-90, movimento intorno a un logo dentro un'app
   std::vector<std::string> dim_exclude;
+  std::string dim_window_mode = "desktop";  // "desktop" (come il desktop) | "video" (solo loghi su video)
+  std::string dim_activate = "both";        // finestra che torna normale: "hover" | "click" | "both" | "never"
 
   bool operator==(const Config&) const = default;
 };
