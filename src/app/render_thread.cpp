@@ -113,6 +113,8 @@ RenderThread::SessionEnd RenderThread::RunSession() {
   bool dim_ok = false;
   uint64_t dim_version = 0;
   bool highlight_on = false;
+  double readback_requested_ms = -1e9;
+  std::vector<float> readback_levels;
   ComPtr<ID3D11Texture2D> cache;
   DWORD backoff_ms = 100;
   double unavailable_since = -1;  // inizio degli errori "transitori" consecutivi
@@ -212,6 +214,18 @@ RenderThread::SessionEnd RenderThread::RunSession() {
     if (dim_ok) {
       next = std::min(next, dim_schedule.NextRedrawAt(now, dim_in.params, params_.frame_period_ms));
       if (highlight) next = std::min(next, dim_in.highlight_until_ms);
+      // Mappa per la scheda: una copia al secondo, letta senza mai attendere la GPU.
+      if (dim_in.watch) {
+        if (dimmer.TryReadback(readback_levels)) {
+          params_.dim->PublishMap(DimMap{readback_levels, static_cast<int>(dimmer.Cols()),
+                                         static_cast<int>(dimmer.Rows()), now});
+        }
+        if (now - readback_requested_ms >= 1000) {
+          dimmer.RequestReadback();
+          readback_requested_ms = now;
+        }
+        next = std::min(next, dimmer.ReadbackPending() ? now + 16 : readback_requested_ms + 1000);
+      }
     }
     const UINT timeout = static_cast<UINT>(std::clamp(next - now, 0.0, static_cast<double>(kMaxAcquireTimeoutMs)));
 

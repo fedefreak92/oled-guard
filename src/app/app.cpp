@@ -521,6 +521,7 @@ void App::PushUiUpdates(double now) {
     ui_.Post(StatsMessage(wear_, config_.amplitude_px));
     last_stats_push_ms_ = now;
   }
+  if (dim_watch_ && now - last_dim_push_ms_ >= 1000) PushDimToUi(now);
 }
 
 void App::PushAllToUi() {
@@ -550,12 +551,46 @@ void App::RefreshSdrWhite(double now) {
   }
 }
 
+bool App::DimSuspended() const {
+  return !last_foreground_.empty() &&
+         std::find(config_.dim_exclude.begin(), config_.dim_exclude.end(), last_foreground_) !=
+             config_.dim_exclude.end();
+}
+
+void App::SetDimWatch(bool on) {
+  if (dim_watch_ == on) return;
+  dim_watch_ = on;
+  LogDebug("Mappa dell'oscuramento per la scheda: {}", on ? "attiva" : "spenta");
+  PushDimInputs();
+  if (on) PushDimToUi(NowMs());
+}
+
+void App::PushDimToUi(double now) {
+  if (!ui_.IsReady()) return;
+  last_dim_push_ms_ = now;
+  DimUiState s;
+  const bool suspended = DimSuspended();
+  if (last_paused_ || !overlay_shown_) s.status = "paused";
+  else if (!config_.dim_enabled) s.status = "off";
+  else if (suspended) s.status = "suspended";
+  else if (now - overlay_shown_since_ms_ < config_.dim_delay_s * 1000.0) s.status = "waiting";
+  else s.status = "active";
+  if (suspended) s.suspended_by = last_foreground_;
+  if (auto map = dim_.TakeMap()) last_dim_map_ = std::move(*map);
+  // Mappa vecchia (overlay ricreato o fermo): meglio nessuna che una sbagliata.
+  if (overlay_shown_ && last_dim_map_.time_ms >= overlay_shown_since_ms_) {
+    s.map = SummarizeDimLevels(last_dim_map_.levels, last_dim_map_.cols, last_dim_map_.rows, 120);
+  }
+  s.sdr_white_nits = sdr_white_ * 80.0;
+  s.hdr = monitor_ && monitor_->hdr;
+  s.highlight_left_ms = std::max(0.0, dim_highlight_until_ms_ - now);
+  ui_.Post(DimMessage(s));
+}
+
 void App::PushDimInputs() {
   DimInputs in;
   in.params = ToDimParams(config_);
-  in.suspended = !last_foreground_.empty() &&
-                 std::find(config_.dim_exclude.begin(), config_.dim_exclude.end(), last_foreground_) !=
-                     config_.dim_exclude.end();
+  in.suspended = DimSuspended();
   in.sdr_white_scrgb = sdr_white_;
   in.highlight_until_ms = dim_highlight_until_ms_;
   in.watch = dim_watch_;
@@ -663,6 +698,7 @@ void App::OpenUi() {
         ui_rect_ = last;
         LogInfo("Interfaccia chiusa ({} aggiornamenti di stato inviati)", ui_updates_sent_);
         ui_updates_sent_ = 0;
+        SetDimWatch(false);
         // Finestra chiusa (o pagina caduta) a meta' registrazione: le hotkey tornano attive.
         if (hotkey_capture_active_) {
           hotkey_capture_active_ = false;
@@ -770,6 +806,21 @@ void App::OnUiMessage(const std::string& json) {
         RegisterDisplayOffHotkey();
       }
       break;
+    case UiCommandType::DimWatch:
+      SetDimWatch(command->on);
+      break;
+    case UiCommandType::DimHighlight: {
+      const bool suspended = DimSuspended();
+      if (!config_.dim_enabled || suspended || !overlay_shown_) {
+        ui_.Post(NoticeMessage("Oscuramento spento o sospeso: niente da evidenziare"));
+        break;
+      }
+      dim_highlight_until_ms_ = NowMs() + 15000;
+      LogInfo("Evidenziazione delle zone oscurate per 15 s");
+      PushDimInputs();
+      PushDimToUi(NowMs());
+      break;
+    }
     case UiCommandType::Window:
       // Mai chiudere WebView2 dentro un suo evento: si rimanda al ciclo dei messaggi.
       if (command->action == "close") PostMessageW(main_, WM_APP_UI_CLOSE, 0, 0);

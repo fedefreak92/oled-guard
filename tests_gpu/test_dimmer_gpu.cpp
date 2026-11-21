@@ -219,3 +219,24 @@ TEST(gpu_sdr_threshold_in_linear_light) {
   CHECK_NEAR(sim.GpuLevel(13, 13), 0.0, 1e-6);
   CHECK(sim.MaxDiff() <= 0.002);
 }
+
+TEST(gpu_readback_matches_srv) {
+  Sim sim(1024, 576, kHdr, 2.5f);
+  CHECK(sim.Ok());
+  if (!sim.Ok()) return;
+  LumaImage img = BarScene();
+  sim.Frame(img, 0);
+  sim.Run(img, 0.5, 400);
+  std::vector<float> levels;
+  CHECK(!sim.dimmer().TryReadback(levels));  // nessuna copia richiesta
+  sim.dimmer().RequestReadback();
+  bool ready = false;
+  // Come nel render: si riprova ai giri successivi, senza mai attendere la GPU.
+  for (int i = 0; i < 200 && !ready; ++i) {
+    ready = sim.dimmer().TryReadback(levels);
+    if (!ready) Sleep(10);
+  }
+  CHECK(ready);
+  CHECK(levels == sim.GpuLevels());
+  CHECK(!sim.dimmer().TryReadback(levels));  // gia' consegnata
+}

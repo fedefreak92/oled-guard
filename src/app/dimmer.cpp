@@ -219,4 +219,37 @@ void Dimmer::Update(double now_ms, const DimParams& p, bool suspended) {
       gx, gy);
 }
 
+void Dimmer::RequestReadback() {
+  if (!Ready()) return;
+  if (!staging_) {
+    D3D11_TEXTURE2D_DESC desc{};
+    levels_->GetDesc(&desc);
+    desc.Usage = D3D11_USAGE_STAGING;
+    desc.BindFlags = 0;
+    desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    desc.MiscFlags = 0;
+    if (FAILED(device_->CreateTexture2D(&desc, nullptr, &staging_))) return;
+  }
+  context_->CopyResource(staging_.Get(), levels_);
+  context_->Flush();  // senza, la copia potrebbe non partire finche' non serve
+  readback_pending_ = true;
+}
+
+bool Dimmer::TryReadback(std::vector<float>& levels) {
+  if (!readback_pending_ || !staging_) return false;
+  D3D11_MAPPED_SUBRESOURCE map{};
+  // Mai attendere la GPU: se la copia non e' pronta si riprova al giro dopo.
+  const HRESULT hr = context_->Map(staging_.Get(), 0, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &map);
+  if (hr == DXGI_ERROR_WAS_STILL_DRAWING) return false;
+  readback_pending_ = false;
+  if (FAILED(hr)) return false;
+  levels.resize(static_cast<size_t>(cols_) * rows_);
+  for (UINT y = 0; y < rows_; ++y) {
+    const auto* row = reinterpret_cast<const float*>(static_cast<const uint8_t*>(map.pData) + y * map.RowPitch);
+    std::copy(row, row + cols_, levels.begin() + static_cast<size_t>(y) * cols_);
+  }
+  context_->Unmap(staging_.Get(), 0);
+  return true;
+}
+
 }  // namespace oled

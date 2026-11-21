@@ -36,6 +36,7 @@ class Dimmer {
   void RequestReadback();
   // Vero se la copia richiesta e' pronta: riempie `levels` (Cols()*Rows(), riga per riga).
   bool TryReadback(std::vector<float>& levels);
+  bool ReadbackPending() const { return readback_pending_; }
 
  private:
   template <class T>

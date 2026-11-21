@@ -76,6 +76,9 @@ class App {
   // Oscuramento: config, app in primo piano, bianco SDR -> thread di render.
   void PushDimInputs();
   void RefreshSdrWhite(double now);
+  void PushDimToUi(double now);
+  void SetDimWatch(bool on);
+  bool DimSuspended() const;  // app in primo piano fra le esclusioni
   void OnRenderEvent(RenderEvent event);
 
   // Interfaccia.
@@ -150,6 +153,7 @@ class App {
   double dim_highlight_until_ms_ = 0;
   double overlay_shown_since_ms_ = 0;
   double last_dim_push_ms_ = 0;
+  DimMap last_dim_map_;
 
   PauseMonitor pause_monitor_;
   PauseHysteresis hysteresis_{300, 2500};
