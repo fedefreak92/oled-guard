@@ -932,7 +932,7 @@ void App::OnUiMessage(const std::string& json) {
         LogInfo("Regola per {}: {}", exe, command->rule == AppRule::AlwaysPause ? "sempre in pausa"
                                          : command->rule == AppRule::NeverPause ? "mai in pausa"
                                                                                 : "automatica");
-        next = WithRule(next, exe, command->rule);
+        next = WithAppRule(next, exe, command->rule);
       } else if (command->type == UiCommandType::AddApp) {
         LogInfo("App aggiunta all'elenco: {}", exe);
         next = WithListedApp(next, exe);
@@ -997,7 +997,7 @@ void App::OnUiMessage(const std::string& json) {
     case UiCommandType::SetDimExclude: {
       const std::string exe = LowerUnicode(command->exe);
       LogInfo("Oscuramento {} con {}", command->on ? "sospeso" : "attivo", exe);
-      ApplyConfig(NormalizedConfig(WithDimExclude(config_, exe, command->on)));
+      ApplyConfig(NormalizedConfig(WithAppDimExclude(config_, exe, command->on)));
       SaveConfig();
       ui_.Post(AppsMessage(app_history_, config_));
       break;

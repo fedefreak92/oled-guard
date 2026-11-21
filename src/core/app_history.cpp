@@ -108,4 +108,12 @@ Config WithDimExclude(Config config, std::string_view exe, bool on) {
   return config;
 }
 
+Config WithAppRule(Config config, std::string_view exe, AppRule rule) {
+  return WithListedApp(WithRule(std::move(config), exe, rule), exe);
+}
+
+Config WithAppDimExclude(Config config, std::string_view exe, bool on) {
+  return WithListedApp(WithDimExclude(std::move(config), exe, on), exe);
+}
+
 }  // namespace oled

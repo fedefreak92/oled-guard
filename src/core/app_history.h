@@ -47,5 +47,9 @@ Config WithListedApp(Config config, std::string_view exe);
 Config WithoutApp(Config config, std::string_view exe);
 // Aggiunge o toglie l'exe (minuscolo) da dim_exclude.
 Config WithDimExclude(Config config, std::string_view exe, bool on);
+// Modifiche dalla pagina Profili: come sopra, e l'app resta in app_list (non sparisce
+// dall'elenco finche' l'utente non la elimina).
+Config WithAppRule(Config config, std::string_view exe, AppRule rule);
+Config WithAppDimExclude(Config config, std::string_view exe, bool on);
 
 }  // namespace oled

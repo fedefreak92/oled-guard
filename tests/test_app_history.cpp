@@ -104,3 +104,21 @@ TEST(app_rules_listed_and_removed) {
   CHECK(oled::WithDimExclude(on, "foo.exe", true) == on);
   CHECK(oled::WithDimExclude(on, "foo.exe", false) == start);
 }
+
+// Dalla pagina Profili: cambiare regola o "Non oscurare" non deve far sparire l'app
+// dall'elenco (resta finche' l'utente non preme Elimina).
+TEST(app_page_changes_keep_app_listed) {
+  oled::Config c;
+  c.denylist = {"old.exe"};  // regola di prima, app mai vista
+  const oled::Config auto_rule = oled::WithAppRule(c, "Old.exe", oled::AppRule::Auto);
+  CHECK(auto_rule.denylist.empty());
+  CHECK_EQ(auto_rule.app_list.size(), size_t{1});
+  CHECK_EQ(auto_rule.app_list[0], std::string("old.exe"));
+
+  oled::Config d;
+  d.dim_exclude = {"paint.exe"};
+  const oled::Config off = oled::WithAppDimExclude(d, "paint.exe", false);
+  CHECK(off.dim_exclude.empty());
+  CHECK_EQ(off.app_list.size(), size_t{1});
+  CHECK_EQ(oled::WithAppDimExclude(off, "paint.exe", true).app_list.size(), size_t{1});
+}
