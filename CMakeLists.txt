@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(oled_guard LANGUAGES CXX)
+project(oled_guard VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -138,6 +138,8 @@ add_executable(oled-guard WIN32
 # (niente warning) e loader statico, nessuna DLL da distribuire.
 target_include_directories(oled-guard SYSTEM PRIVATE third_party/webview2/include)
 target_link_libraries(oled-guard PRIVATE ${CMAKE_SOURCE_DIR}/third_party/webview2/x64/WebView2LoaderStatic.lib shcore)
+# Versione mostrata nell'interfaccia (Informazioni, barra laterale).
+target_compile_definitions(oled-guard PRIVATE OLED_GUARD_VERSION="${PROJECT_VERSION}")
 
 # Interfaccia HTML/CSS/JS copiata accanto all'eseguibile.
 add_custom_command(TARGET oled-guard POST_BUILD

@@ -60,6 +60,8 @@ std::string StateMessage(const UiState& s) {
   o.Set("height", JsonValue(s.height));
   o.Set("hdr", JsonValue(s.hdr));
   o.Set("latency_ms", JsonValue(s.latency_ms));
+  o.Set("away", JsonValue(s.away));
+  o.Set("session_ms", JsonValue(s.session_ms));
   return Compact(o);
 }
 
@@ -76,6 +78,13 @@ std::string StatsMessage(const WearStats& stats, int amplitude) {
   o.Set("today_ms", JsonValue(stats.TodayProtectedMs()));
   o.Set("total_ms", JsonValue(stats.TotalProtectedMs()));
   o.Set("pauses_today", JsonValue(stats.TodayPauses()));
+  JsonValue by_reason = JsonValue::MakeObject();
+  for (int r = 0; r < WearStats::kReasons; ++r) {
+    const auto reason = static_cast<PauseReason>(r);
+    const int n = stats.TodayPauses(reason);
+    if (n > 0) by_reason.Set(std::string(PauseReasonText(reason)), JsonValue(n));
+  }
+  o.Set("pauses_by_reason", by_reason);
   return Compact(o);
 }
 
@@ -88,6 +97,9 @@ std::string ConfigMessage(const Config& config) {
 }
 
 std::string AppsMessage(const AppHistory& history, const Config& config) {
+  const auto excluded = [&](const std::string& exe) {
+    return std::find(config.dim_exclude.begin(), config.dim_exclude.end(), exe) != config.dim_exclude.end();
+  };
   JsonValue apps = JsonValue::MakeArray();
   std::vector<std::string> listed;
   for (const AppEntry& e : history.Entries()) {
@@ -97,11 +109,12 @@ std::string AppsMessage(const AppHistory& history, const Config& config) {
     a.Set("last_seen_s", JsonValue(static_cast<double>(e.last_seen_s)));
     a.Set("count", JsonValue(e.count));
     a.Set("rule", JsonValue(RuleName(RuleFor(config, e.exe))));
+    a.Set("dim_exclude", JsonValue(excluded(e.exe)));
     apps.Push(std::move(a));
     listed.push_back(e.exe);
   }
-  // Le regole manuali per app mai viste compaiono comunque, in fondo.
-  for (const auto* list : {&config.denylist, &config.allowlist}) {
+  // Le app con regole o aggiunte a mano ma mai viste compaiono comunque, in fondo.
+  for (const auto* list : {&config.denylist, &config.allowlist, &config.app_list, &config.dim_exclude}) {
     for (const std::string& exe : *list) {
       if (std::find(listed.begin(), listed.end(), exe) != listed.end()) continue;
       JsonValue a = JsonValue::MakeObject();
@@ -110,6 +123,7 @@ std::string AppsMessage(const AppHistory& history, const Config& config) {
       a.Set("last_seen_s", JsonValue(0));
       a.Set("count", JsonValue(0));
       a.Set("rule", JsonValue(RuleName(RuleFor(config, exe))));
+      a.Set("dim_exclude", JsonValue(excluded(exe)));
       apps.Push(std::move(a));
       listed.push_back(exe);
     }
@@ -200,6 +214,71 @@ std::string DimMessage(const DimUiState& s) {
   return Compact(o);
 }
 
+std::string MonitorsMessage(const std::vector<MonitorItem>& items, const std::string& setting) {
+  JsonValue list = JsonValue::MakeArray();
+  for (const MonitorItem& m : items) {
+    JsonValue i = JsonValue::MakeObject();
+    i.Set("device", JsonValue(m.device));
+    i.Set("name", JsonValue(m.name));
+    i.Set("width", JsonValue(m.width));
+    i.Set("height", JsonValue(m.height));
+    i.Set("refresh_hz", JsonValue(m.refresh_hz));
+    i.Set("hdr", JsonValue(m.hdr));
+    i.Set("primary", JsonValue(m.primary));
+    i.Set("protected", JsonValue(m.is_protected));
+    i.Set("connection", JsonValue(m.connection));
+    list.Push(std::move(i));
+  }
+  JsonValue o = JsonValue::MakeObject();
+  o.Set("type", JsonValue("monitors"));
+  o.Set("setting", JsonValue(setting));
+  o.Set("monitors", list);
+  return Compact(o);
+}
+
+namespace {
+JsonValue EventJson(const ActivityEvent& e) {
+  JsonValue o = JsonValue::MakeObject();
+  o.Set("t", JsonValue(static_cast<double>(e.t_ms)));
+  o.Set("kind", JsonValue(e.kind));
+  o.Set("text", JsonValue(e.text));
+  o.Set("count", JsonValue(e.count));
+  return o;
+}
+}  // namespace
+
+std::string ActivityMessage(const ActivityLog& log) {
+  JsonValue events = JsonValue::MakeArray();
+  for (const ActivityEvent& e : log.Events()) events.Push(EventJson(e));
+  JsonValue o = JsonValue::MakeObject();
+  o.Set("type", JsonValue("activity"));
+  o.Set("events", events);
+  return Compact(o);
+}
+
+std::string ActivityAddMessage(const ActivityEvent& e) {
+  JsonValue o = JsonValue::MakeObject();
+  o.Set("type", JsonValue("activity"));
+  o.Set("add", EventJson(e));
+  return Compact(o);
+}
+
+std::string AboutMessage(std::string_view version, std::string_view config_path, std::string_view log_dir) {
+  JsonValue o = JsonValue::MakeObject();
+  o.Set("type", JsonValue("about"));
+  o.Set("version", JsonValue(std::string(version)));
+  o.Set("config_path", JsonValue(std::string(config_path)));
+  o.Set("log_dir", JsonValue(std::string(log_dir)));
+  return Compact(o);
+}
+
+std::string BrowsedMessage(std::string_view exe) {
+  JsonValue o = JsonValue::MakeObject();
+  o.Set("type", JsonValue("browsed"));
+  o.Set("exe", JsonValue(std::string(exe)));
+  return Compact(o);
+}
+
 std::optional<UiCommand> ParseUiCommand(std::string_view json) {
   const auto parsed = ParseJson(json);
   if (!parsed.value || parsed.value->type() != JsonValue::Type::Object) return std::nullopt;
@@ -267,6 +346,20 @@ std::optional<UiCommand> ParseUiCommand(std::string_view json) {
     c.type = UiCommandType::DimWatch;
   } else if (name == "dimHighlight") {
     c.type = UiCommandType::DimHighlight;
+  } else if (name == "openLogFolder") {
+    c.type = UiCommandType::OpenLogFolder;
+  } else if (name == "browseExe") {
+    c.type = UiCommandType::BrowseExe;
+  } else if (name == "clearActivity") {
+    c.type = UiCommandType::ClearActivity;
+  } else if (name == "setMonitor") {
+    const JsonValue* device = Field(o, "device", JsonValue::Type::String);
+    if (!device || device->AsString().empty() || device->AsString().size() > kMaxExeLength) return std::nullopt;
+    c.type = UiCommandType::SetMonitor;
+    c.id = device->AsString();
+  } else if (name == "setDimExclude") {
+    if (!need_exe() || !need_on()) return std::nullopt;
+    c.type = UiCommandType::SetDimExclude;
   } else if (name == "window") {
     const JsonValue* action = Field(o, "action", JsonValue::Type::String);
     if (!action) return std::nullopt;

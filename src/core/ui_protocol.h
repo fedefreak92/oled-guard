@@ -8,6 +8,7 @@
 #include <string_view>
 #include <vector>
 
+#include "activity_log.h"
 #include "app_history.h"
 #include "config.h"
 #include "json.h"
@@ -32,6 +33,20 @@ struct UiState {
   int height = 0;
   bool hdr = false;
   double latency_ms = 0;
+  bool away = false;
+  double session_ms = 0;  // da quando l'app e' partita
+};
+
+struct MonitorItem {
+  std::string device;  // \\.\DISPLAY1
+  std::string name;
+  int width = 0;
+  int height = 0;
+  int refresh_hz = 0;
+  bool hdr = false;
+  bool primary = false;
+  bool is_protected = false;
+  std::string connection;  // "HDMI" | "DP" | "DVI" | "Interno" | ""
 };
 
 struct WindowsItem {
@@ -50,6 +65,12 @@ std::string ConfigMessage(const Config& config);
 std::string AppsMessage(const AppHistory& history, const Config& config);
 std::string WindowsMessage(const std::vector<WindowsItem>& items);
 std::string ProcessesMessage(const std::vector<std::string>& processes);
+// setting: valore di config.monitor ("auto", nome o device).
+std::string MonitorsMessage(const std::vector<MonitorItem>& items, const std::string& setting);
+std::string ActivityMessage(const ActivityLog& log);
+std::string ActivityAddMessage(const ActivityEvent& e);
+std::string AboutMessage(std::string_view version, std::string_view config_path, std::string_view log_dir);
+std::string BrowsedMessage(std::string_view exe);
 // Avviso breve mostrato dalla pagina (testo italiano, UTF-8).
 std::string NoticeMessage(std::string_view text);
 
@@ -92,6 +113,11 @@ enum class UiCommandType {
   Window,
   DimWatch,
   DimHighlight,
+  OpenLogFolder,
+  BrowseExe,
+  SetMonitor,     // id = device o "auto"
+  ClearActivity,
+  SetDimExclude,  // exe, on
 };
 
 struct UiCommand {

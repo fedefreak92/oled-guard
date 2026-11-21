@@ -1,5 +1,8 @@
 #include <string>
 
+#include <cmath>
+
+#include "activity_log.h"
 #include "app_history.h"
 #include "json.h"
 #include "test_framework.h"
@@ -198,4 +201,152 @@ TEST(ui_parse_dim_commands) {
   CHECK(!oled::ParseUiCommand(R"({"cmd":"dimWatch"})").has_value());
   const auto hl = oled::ParseUiCommand(R"({"cmd":"dimHighlight"})");
   CHECK(hl.has_value() && hl->type == UiCommandType::DimHighlight);
+}
+
+TEST(ui_state_has_away_and_session) {
+  oled::UiState s;
+  s.away = true;
+  s.session_ms = 123456;
+  const JsonValue v = Parse(oled::StateMessage(s));
+  CHECK(v.Find("away") && v.Find("away")->AsBool());
+  CHECK(v.Find("session_ms") && std::abs(v.Find("session_ms")->AsNumber() - 123456) < 1e-9);
+}
+
+TEST(ui_stats_pauses_by_reason) {
+  oled::WearStats w;
+  w.RollDay(20261121);
+  w.CountPause(oled::PauseReason::FullscreenWindow);
+  w.CountPause(oled::PauseReason::FullscreenWindow);
+  w.CountPause(oled::PauseReason::NotificationState);
+  const JsonValue v = Parse(oled::StatsMessage(w, 2));
+  const JsonValue* by = v.Find("pauses_by_reason");
+  CHECK(by && by->type() == JsonValue::Type::Object);
+  if (!by || by->type() != JsonValue::Type::Object) return;
+  CHECK_EQ(by->AsObject().size(), size_t{2});
+  const std::string full(oled::PauseReasonText(oled::PauseReason::FullscreenWindow));
+  const std::string notif(oled::PauseReasonText(oled::PauseReason::NotificationState));
+  CHECK(by->Find(full) && std::abs(by->Find(full)->AsNumber() - 2) < 1e-9);
+  CHECK(by->Find(notif) && std::abs(by->Find(notif)->AsNumber() - 1) < 1e-9);
+}
+
+TEST(ui_apps_includes_listed_and_excluded) {
+  oled::AppHistory h;
+  oled::Config c;
+  c.app_list = {"a.exe"};
+  c.dim_exclude = {"b.exe"};
+  const JsonValue v = Parse(oled::AppsMessage(h, c));
+  const auto& apps = v.Find("apps")->AsArray();
+  CHECK_EQ(apps.size(), size_t{2});
+  bool saw_a = false, saw_b = false;
+  for (const auto& a : apps) {
+    const std::string exe = a.Find("exe")->AsString();
+    CHECK(a.Find("dim_exclude") != nullptr);
+    if (exe == "a.exe") {
+      saw_a = true;
+      CHECK_EQ(a.Find("rule")->AsString(), std::string("auto"));
+      CHECK(!a.Find("dim_exclude")->AsBool());
+    }
+    if (exe == "b.exe") {
+      saw_b = true;
+      CHECK(a.Find("dim_exclude")->AsBool());
+    }
+  }
+  CHECK(saw_a && saw_b);
+}
+
+TEST(ui_monitors_message_fields) {
+  std::vector<oled::MonitorItem> items(2);
+  items[0].device = "DISPLAY1";
+  items[0].name = "Dell";
+  items[0].primary = true;
+  items[1].device = "DISPLAY2";
+  items[1].name = "LG TV SSCR2";
+  items[1].width = 3840;
+  items[1].height = 2160;
+  items[1].refresh_hz = 144;
+  items[1].hdr = true;
+  items[1].is_protected = true;
+  items[1].connection = "HDMI";
+  const JsonValue v = Parse(oled::MonitorsMessage(items, "auto"));
+  CHECK_EQ(v.Find("type")->AsString(), std::string("monitors"));
+  CHECK_EQ(v.Find("setting")->AsString(), std::string("auto"));
+  const auto& list = v.Find("monitors")->AsArray();
+  CHECK_EQ(list.size(), size_t{2});
+  if (list.size() != 2) return;
+  CHECK(list[0].Find("primary")->AsBool());
+  CHECK(!list[0].Find("protected")->AsBool());
+  CHECK_EQ(list[1].Find("device")->AsString(), std::string("DISPLAY2"));
+  CHECK_EQ(list[1].Find("name")->AsString(), std::string("LG TV SSCR2"));
+  CHECK_NEAR(list[1].Find("width")->AsNumber(), 3840, 1e-9);
+  CHECK_NEAR(list[1].Find("height")->AsNumber(), 2160, 1e-9);
+  CHECK_NEAR(list[1].Find("refresh_hz")->AsNumber(), 144, 1e-9);
+  CHECK(list[1].Find("hdr")->AsBool());
+  CHECK(list[1].Find("protected")->AsBool());
+  CHECK_EQ(list[1].Find("connection")->AsString(), std::string("HDMI"));
+}
+
+TEST(ui_monitors_message_none_protected) {
+  std::vector<oled::MonitorItem> items(1);
+  items[0].device = "DISPLAY1";
+  const JsonValue v = Parse(oled::MonitorsMessage(items, "LG TV SSCR2"));
+  CHECK(v.type() == JsonValue::Type::Object);
+  if (v.type() != JsonValue::Type::Object) return;
+  CHECK(!v.Find("monitors")->AsArray()[0].Find("protected")->AsBool());
+  const JsonValue empty = Parse(oled::MonitorsMessage({}, "auto"));
+  CHECK(empty.Find("monitors") && empty.Find("monitors")->AsArray().empty());
+}
+
+TEST(ui_activity_messages) {
+  oled::ActivityLog log;
+  log.Add(1000, "pause", "In pausa");
+  log.Add(2000, "resume", "Attivo");
+  const JsonValue all = Parse(oled::ActivityMessage(log));
+  CHECK_EQ(all.Find("type")->AsString(), std::string("activity"));
+  const auto& events = all.Find("events")->AsArray();
+  CHECK_EQ(events.size(), size_t{2});
+  if (events.size() == 2) {
+    CHECK_EQ(events[0].Find("kind")->AsString(), std::string("resume"));
+    CHECK_NEAR(events[1].Find("t")->AsNumber(), 1000, 1e-9);
+  }
+  const auto& merged = log.Add(3000, "resume", "Attivo");
+  const JsonValue add = Parse(oled::ActivityAddMessage(merged));
+  CHECK_EQ(add.Find("type")->AsString(), std::string("activity"));
+  CHECK(add.Find("add") != nullptr);
+  if (!add.Find("add")) return;
+  CHECK_EQ(add.Find("add")->Find("text")->AsString(), std::string("Attivo"));
+  CHECK_NEAR(add.Find("add")->Find("count")->AsNumber(), 2, 1e-9);
+}
+
+TEST(ui_about_and_browsed_messages) {
+  const JsonValue about = Parse(oled::AboutMessage("1.0.0", "C:/cfg \"x\"/config.json", "C:/log"));
+  CHECK_EQ(about.Find("type")->AsString(), std::string("about"));
+  CHECK_EQ(about.Find("version")->AsString(), std::string("1.0.0"));
+  CHECK_EQ(about.Find("config_path")->AsString(), std::string("C:/cfg \"x\"/config.json"));
+  CHECK_EQ(about.Find("log_dir")->AsString(), std::string("C:/log"));
+  const JsonValue br = Parse(oled::BrowsedMessage("gioco.exe"));
+  CHECK_EQ(br.Find("type")->AsString(), std::string("browsed"));
+  CHECK_EQ(br.Find("exe")->AsString(), std::string("gioco.exe"));
+}
+
+TEST(ui_parse_new_commands) {
+  for (const char* simple : {"openLogFolder", "browseExe", "clearActivity"}) {
+    CHECK(oled::ParseUiCommand(std::string(R"({"cmd":")") + simple + "\"}").has_value());
+  }
+  auto log = oled::ParseUiCommand(R"({"cmd":"openLogFolder"})");
+  CHECK(log && log->type == UiCommandType::OpenLogFolder);
+  auto mon = oled::ParseUiCommand(R"({"cmd":"setMonitor","device":"auto"})");
+  CHECK(mon && mon->type == UiCommandType::SetMonitor && mon->id == "auto");
+  auto mon2 = oled::ParseUiCommand(R"({"cmd":"setMonitor","device":"DISPLAY2"})");
+  CHECK(mon2 && mon2->id == "DISPLAY2");
+  auto ex = oled::ParseUiCommand(R"({"cmd":"setDimExclude","exe":"x.exe","on":true})");
+  CHECK(ex && ex->type == UiCommandType::SetDimExclude && ex->exe == "x.exe" && ex->on);
+}
+
+TEST(ui_parse_new_commands_reject) {
+  for (const char* bad : {R"({"cmd":"setMonitor"})", R"({"cmd":"setMonitor","device":""})",
+                          R"({"cmd":"setMonitor","device":5})", R"({"cmd":"setDimExclude","exe":"x.exe"})"}) {
+    CHECK(!oled::ParseUiCommand(bad).has_value());
+  }
+  CHECK(!oled::ParseUiCommand(R"({"cmd":"setDimExclude","on":true,"exe":")" + std::string(261, 'a') + "\"}")
+             .has_value());
 }
