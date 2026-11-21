@@ -98,6 +98,9 @@ Texture2D<float> large_in : register(t2);
 RWTexture2D<float2> sums_out : register(u0);
 RWTexture2D<float> grid_out : register(u0);
 RWTexture2D<float> levels_io : register(u0);
+// Bit 0-1: ultima classe (0 nessuna, 1 elemento piccolo, 2 grande area);
+// bit 2: ritorno lento in corso (classe cambiata con il livello sopra il bersaglio).
+RWTexture2D<uint> class_io : register(u1);
 
 bool ContentStatic(int2 c) {
   return (flags_in[c] & 2u) != 0 && now_s - last_change_in[c] >= delay_s;
@@ -164,14 +167,20 @@ void CSLevel(uint3 id : SV_DispatchThreadID) {
   const float start = large ? large_delay_s : delay_s;
   const float target = cap * saturate((age - start) / ramp_s);
 
+  const uint cls = !m ? 0u : (large ? 2u : 1u);
+  const uint previous = class_io[c];
   float level = levels_io[c];
+  bool slow = (previous & 4u) != 0;
+  if (cls != (previous & 3u) && level > target) slow = true;
   if (level < target) {
     level = min(target, level + cap / ramp_s * dt_s);
   } else if (level > target) {
-    float rate = kMaxLevel / kLargeRecoverS;
+    float rate = strength / kLargeRecoverS;  // da strength a 0 in 30 s
     if (age < delay_s || !bright) rate = max(rate, kMaxLevel / recover_s);
-    if (suspended || !enabled || (cap > 0 && level > cap)) rate = max(rate, kMaxLevel / kCommandRecoverS);
+    if (suspended || !enabled || (cls != 0 && !slow && level > cap)) rate = max(rate, kMaxLevel / kCommandRecoverS);
     level = max(target, level - rate * dt_s);
   }
+  if (level <= target) slow = false;
+  class_io[c] = cls | (slow ? 4u : 0u);
   levels_io[c] = level;
 }

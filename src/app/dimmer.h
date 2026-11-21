@@ -58,7 +58,7 @@ class Dimmer {
   ComPtr<ID3D11DeviceContext> context_;
   ComPtr<ID3D11Buffer> constants_;
   ComPtr<ID3D11ComputeShader> detect_, density_h_, density_v_, max_h_, max_v_, level_;
-  Grid last_change_, flags_, sums_, density_, max_tmp_, large_, levels_grid_;
+  Grid last_change_, flags_, sums_, density_, max_tmp_, large_, levels_grid_, class_;
   ID3D11Texture2D* levels_ = nullptr;  // = levels_grid_.texture
   ComPtr<ID3D11ShaderResourceView> levels_srv_;
   ComPtr<ID3D11Texture2D> frame_copy_;  // ripiego se il frame non e' leggibile come SRV

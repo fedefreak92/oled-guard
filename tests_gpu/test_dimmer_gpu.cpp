@@ -240,3 +240,25 @@ TEST(gpu_readback_matches_srv) {
   CHECK(levels == sim.GpuLevels());
   CHECK(!sim.dimmer().TryReadback(levels));  // gia' consegnata
 }
+
+// Ritorni dopo un cambio di classificazione o dell'opzione grandi aree.
+TEST(gpu_matches_model_recovery_rules) {
+  Sim sim(1024, 576, kHdr, 2.5f);
+  CHECK(sim.Ok());
+  if (!sim.Ok()) return;
+  DimParams p;
+  p.large_enabled = true;
+  LumaImage img = BarScene();
+  sim.Frame(img, 0, p);
+  sim.Run(img, 0.5, 480, BlockEvery10s, p);
+  Fill(img, 0, 0, 1024, 288, 1.0f);  // la meta' alta diventa bianca e ferma
+  sim.Frame(img, 480.5, p);
+  sim.Run(img, 480.5, 668, {}, p);
+  CHECK(sim.model().Large(10, 33));
+  CHECK_NEAR(sim.GpuLevel(10, 33), 0.40 - 0.40 / 30 * 8, 0.01);
+  CHECK(sim.MaxDiff() <= 0.002);
+  sim.Run(img, 668.5, 1700, {}, p);  // la meta' alta e' ora una grande area oscurata
+  p.large_enabled = false;
+  sim.Update(1700.125, 0.125, p);
+  CHECK(sim.MaxDiff() <= 0.002);
+}

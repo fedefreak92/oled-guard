@@ -50,6 +50,9 @@ class DimModel {
   std::vector<uint8_t> bright_;
   std::vector<uint8_t> content_;
   std::vector<uint8_t> large_;
+  // Bit 0-1: ultima classe (0 nessuna, 1 elemento piccolo, 2 grande area);
+  // bit 2: ritorno lento in corso (la classe e' cambiata con il livello sopra il bersaglio).
+  std::vector<uint8_t> class_;
   std::vector<double> targets_;
   std::vector<float> levels_;
 };

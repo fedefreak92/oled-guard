@@ -134,6 +134,15 @@ RenderThread::SessionEnd RenderThread::RunSession() {
     shown = false;
   };
 
+  // La mappa dell'oscuramento riparte da zero, con la griglia e il formato correnti.
+  const auto reset_dimmer = [&] {
+    dim_ok = false;
+    if (!params_.dim) return;
+    const HRESULT dim_hr = dimmer.Init(device.Get(), capture.Width(), capture.Height(), capture.Format(), NowMs());
+    dim_ok = SUCCEEDED(dim_hr);
+    if (!dim_ok) LogWarn("Render: oscuramento non disponibile ({}), continuo senza", Hr(dim_hr));
+  };
+
   // Cache e swap chain con il formato e le dimensioni reali della cattura.
   const auto reshape = [&]() -> bool {
     hide();
@@ -151,6 +160,7 @@ RenderThread::SessionEnd RenderThread::RunSession() {
       return false;
     }
     have_frame = false;
+    reset_dimmer();
     return true;
   };
 
@@ -189,13 +199,8 @@ RenderThread::SessionEnd RenderThread::RunSession() {
                                  presenter.Height() != capture.Height() || presenter.Format() != capture.Format();
       if (needs_reshape && !reshape()) return SessionEnd::Failed;
       have_frame = false;
-      // La mappa dell'oscuramento riparte da zero a ogni (ri)avvio della cattura.
-      dim_ok = false;
-      if (params_.dim) {
-        hr = dimmer.Init(device.Get(), capture.Width(), capture.Height(), capture.Format(), NowMs());
-        dim_ok = SUCCEEDED(hr);
-        if (!dim_ok) LogWarn("Render: oscuramento non disponibile ({}), continuo senza", Hr(hr));
-      }
+      // Anche senza reshape (es. dopo ACCESS_LOST) la mappa riparte da zero.
+      if (!needs_reshape) reset_dimmer();
       LogInfo("Cattura avviata: {}x{} {}", capture.Width(), capture.Height(), FormatName(capture.Format()));
     }
 
@@ -211,7 +216,9 @@ RenderThread::SessionEnd RenderThread::RunSession() {
     }
     double next = now + kMaxAcquireTimeoutMs;
     if (params_.shift) next = std::min(next, params_.shift->NextChangeAt(now));
-    if (dim_ok) {
+    // Senza un frame da mostrare non si ridisegna: i tempi dell'oscuramento non contano
+    // (altrimenti un ridisegno "dovuto" ma impossibile farebbe girare il ciclo a vuoto).
+    if (dim_ok && have_frame) {
       next = std::min(next, dim_schedule.NextRedrawAt(now, dim_in.params, params_.frame_period_ms));
       if (highlight) next = std::min(next, dim_in.highlight_until_ms);
       // Mappa per la scheda: una copia al secondo, letta senza mai attendere la GPU.

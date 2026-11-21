@@ -101,6 +101,7 @@ HRESULT Dimmer::Init(ID3D11Device* device, UINT width, UINT height, DXGI_FORMAT 
   if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_FLOAT, nullptr, 4, max_tmp_))) return hr;
   if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_FLOAT, nullptr, 4, large_))) return hr;
   if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_FLOAT, zeros.data(), 4, levels_grid_))) return hr;
+  if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_UINT, no_flags.data(), 4, class_))) return hr;
   levels_srv_ = levels_grid_.srv;
   levels_ = levels_grid_.texture.Get();
   return S_OK;
@@ -109,7 +110,9 @@ HRESULT Dimmer::Init(ID3D11Device* device, UINT width, UINT height, DXGI_FORMAT 
 void Dimmer::Shutdown() {
   levels_ = nullptr;
   levels_srv_.Reset();
-  for (Grid* g : {&last_change_, &flags_, &sums_, &density_, &max_tmp_, &large_, &levels_grid_}) *g = Grid{};
+  for (Grid* g : {&last_change_, &flags_, &sums_, &density_, &max_tmp_, &large_, &levels_grid_, &class_}) {
+    *g = Grid{};
+  }
   detect_.Reset();
   density_h_.Reset();
   density_v_.Reset();
@@ -215,8 +218,8 @@ void Dimmer::Update(double now_ms, const DimParams& p, bool suspended) {
   Run(density_v_.Get(), {sums_.srv.Get()}, density_.uav.Get(), nullptr, gx, gy);
   Run(max_h_.Get(), {density_.srv.Get()}, max_tmp_.uav.Get(), nullptr, gx, gy);
   Run(max_v_.Get(), {max_tmp_.srv.Get()}, large_.uav.Get(), nullptr, gx, gy);
-  Run(level_.Get(), {flags_.srv.Get(), last_change_.srv.Get(), large_.srv.Get()}, levels_grid_.uav.Get(), nullptr,
-      gx, gy);
+  Run(level_.Get(), {flags_.srv.Get(), last_change_.srv.Get(), large_.srv.Get()}, levels_grid_.uav.Get(),
+      class_.uav.Get(), gx, gy);
 }
 
 void Dimmer::RequestReadback() {

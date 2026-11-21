@@ -63,6 +63,7 @@ DimModel::DimModel(int width, int height, double now_s)
   bright_.assign(n, 0);
   content_.assign(n, 0);
   large_.assign(n, 0);
+  class_.assign(n, 0);
   targets_.assign(n, 0.0);
   levels_.assign(n, 0.0f);
 }
@@ -121,15 +122,24 @@ void DimModel::Update(double now_s, double dt_s, const DimParams& p, bool suspen
     const double target = cap * std::clamp((age - start) / p.ramp_s, 0.0, 1.0);
     targets_[i] = target;
 
+    // Se cambia solo la classe il ritorno e' lento (invisibile); se la classe resta la
+    // stessa e il livello supera il massimo consentito e' un comando (ritorno in 1 s).
+    const uint8_t cls = !m ? 0 : (large ? 2 : 1);
     double level = levels_[i];
+    bool slow = (class_[i] & 4) != 0;
+    if (cls != (class_[i] & 3) && level > target) slow = true;
     if (level < target) {
       level = std::min(target, level + cap / p.ramp_s * dt);
     } else if (level > target) {
-      double rate = kDimMaxLevel / kDimLargeRecoverS;
+      double rate = p.strength / kDimLargeRecoverS;  // da strength a 0 in 30 s
       if (age < p.delay_s || !bright_[i]) rate = std::max(rate, kDimMaxLevel / p.recover_s);
-      if (suspended || !p.enabled || (cap > 0 && level > cap)) rate = std::max(rate, kDimMaxLevel / kDimCommandRecoverS);
+      if (suspended || !p.enabled || (cls != 0 && !slow && level > cap)) {
+        rate = std::max(rate, kDimMaxLevel / kDimCommandRecoverS);
+      }
       level = std::max(target, level - rate * dt);
     }
+    if (level <= target) slow = false;
+    class_[i] = static_cast<uint8_t>(cls | (slow ? 4 : 0));
     levels_[i] = static_cast<float>(level);
   }
 }

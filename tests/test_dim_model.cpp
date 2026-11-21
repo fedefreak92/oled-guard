@@ -174,9 +174,43 @@ TEST(dim_becoming_large_recovers_slow) {
   CHECK_NEAR(m.Level(10, 33), 0.40, 1e-3);  // la zona sopra non e' ancora ferma da 3 min
   Run(m, img, 660.5, 668, DimParams{});
   CHECK(m.Large(10, 33));
-  CHECK_NEAR(m.Level(10, 33), 0.40 - 0.8 / 30 * 8, 0.01);
-  Run(m, img, 668.5, 676, DimParams{});
+  // Da strength a 0 in 30 s (spec 5.2.3): passaggio invisibile.
+  CHECK_NEAR(m.Level(10, 33), 0.40 - 0.40 / 30 * 8, 0.01);
+  Run(m, img, 668.5, 680, DimParams{});
+  CHECK(m.Level(10, 33) > 0.05);
+  Run(m, img, 680.5, 691, DimParams{});
   CHECK_NEAR(m.Level(10, 33), 0.0, 1e-6);
+}
+
+// Con le grandi aree attive, un elemento che diventa parte di una grande area scende
+// lentamente verso il livello delle grandi aree: cambia solo la classificazione.
+TEST(dim_small_to_large_with_option_on_recovers_slow) {
+  LumaImage img;
+  DimModel m = BarAt480(img);
+  DimParams p;
+  p.large_enabled = true;
+  Fill(img, 0, 0, kW, 288, 1.0f);
+  m.OnFrame(img, 480.5);
+  Run(m, img, 480.5, 660, p);
+  CHECK_NEAR(m.Level(10, 33), 0.40, 1e-3);
+  Run(m, img, 660.5, 668, p);
+  CHECK(m.Large(10, 33));
+  CHECK_NEAR(m.Level(10, 33), 0.40 - 0.40 / 30 * 8, 0.01);
+}
+
+// Spegnere l'opzione grandi aree e' un comando: ritorno in 1 s.
+TEST(dim_disabling_large_option_recovers_in_one_second) {
+  LumaImage img = Black();
+  Fill(img, 0, 0, kW, kH, 1.0f);
+  DimParams p;
+  p.large_enabled = true;
+  DimModel m(kW, kH, 0);
+  m.OnFrame(img, 0);
+  Run(m, img, 0.5, 1500, p);
+  CHECK_NEAR(m.Level(32, 18), 0.20, 1e-4);
+  p.large_enabled = false;
+  m.Update(1500.125, 0.125, p, false);
+  CHECK_NEAR(m.Level(32, 18), 0.10, 1e-3);
 }
 
 TEST(dim_suspend_recovers_in_one_second) {
