@@ -134,6 +134,8 @@ int App::Run(HINSTANCE instance) {
   const uint64_t seed = (static_cast<uint64_t>(seed_source()) << 32) ^ seed_source();
   shift_ = std::make_unique<SharedShift>(seed, config_.amplitude_px, EffectiveTiming(), NowMs());
   hysteresis_.SetDelays(config_.pause_enter_delay_ms, config_.resume_delay_ms);
+  app_start_ms_ = NowMs();
+  PushShadeInputs();
 
   StartEmergencyGuard();
 
@@ -285,6 +287,7 @@ void App::ApplyConfig(const Config& next) {
   if (previous.hotkey_display_off != config_.hotkey_display_off) RegisterDisplayOffHotkey();
   SyncAutostart();
   PushDimInputs();
+  PushShadeInputs();
   if (previous.monitor != config_.monitor || previous.allow_tearing != config_.allow_tearing) {
     // Serve un overlay nuovo: altro monitor o altra swap chain. Lo stato "ruotato"
     // riguardava il monitor precedente: RefreshMonitor lo rivaluta.
@@ -512,6 +515,8 @@ UiState App::BuildUiState(double now) {
     s.hdr = monitor_->hdr;
   }
   s.latency_ms = latency_ms_;
+  s.away = away_.Away();
+  s.session_ms = now - app_start_ms_;
   return s;
 }
 
@@ -635,6 +640,38 @@ void App::PushDimToUi(double now) {
   ui_.Post(DimMessage(s));
 }
 
+void App::PushShadeInputs() {
+  ShadeInputs in;
+  in.base = ToShadeParams(config_, 1.0);
+  in.away_since_ms = away_.Away() ? away_.SinceMs() : -1;
+  in.away_target = config_.away_brightness_pct / 100.0;
+  shade_.Set(in);
+}
+
+void App::OnSecond() {
+  const double now = NowMs();
+  // Il movimento si misura solo con l'overlay a schermo (i frame li conta il render).
+  const int frames = shade_.TakeNewFrames();
+  if (overlay_running_ && overlay_shown_) motion_.AddSecond(frames);
+  else motion_.Reset();
+
+  LASTINPUTINFO input{sizeof(input)};
+  const double idle_ms = GetLastInputInfo(&input) ? static_cast<double>(GetTickCount() - input.dwTime) : 0.0;
+  AwayInputs in;
+  in.now_ms = now;
+  in.idle_ms = idle_ms;
+  in.continuous_motion = motion_.Continuous();
+  in.overlay_shown = overlay_running_ && overlay_shown_;
+  in.enabled = config_.away_enabled;
+  in.after_min = config_.away_after_min;
+  if (away_.Update(in)) {
+    if (away_.Away()) LogInfo("Modalita' assente: schermo scurito");
+    else LogInfo("Modalita' assente: fine");
+    PushShadeInputs();
+    UpdateTrayTooltip();
+  }
+}
+
 void App::PushDimInputs() {
   DimInputs in;
   in.params = ToDimParams(config_);
@@ -658,6 +695,7 @@ bool App::StartOverlay() {
   params.allow_tearing = config_.allow_tearing;
   params.shift = shift_.get();
   params.dim = &dim_;
+  params.shade = &shade_;
   params.frame_period_ms = latency_ms_ > 0 ? latency_ms_ : 7.0;
   params.dim_diagnostics = dim_diagnostics_;
   params.diagnostics_dir = LogDir();
@@ -1011,7 +1049,10 @@ LRESULT App::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
   }
   switch (msg) {
     case WM_TIMER:
-      if (wp == kTimerBeat) guard_.BeatMain();
+      if (wp == kTimerBeat) {
+        guard_.BeatMain();
+        OnSecond();
+      }
       if (wp == kTimerPause) Tick();
       if (wp == kTimerConfigReload) {
         KillTimer(main_, kTimerConfigReload);

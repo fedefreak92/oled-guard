@@ -11,6 +11,7 @@
 #include "emergency.h"
 #include "monitors.h"
 #include "shared_dim.h"
+#include "shared_shade.h"
 #include "shift_scheduler.h"
 
 namespace oled {
@@ -31,6 +32,7 @@ struct RenderParams {
   bool allow_tearing = false;
   SharedShift* shift = nullptr;  // nullptr: offset sempre (0,0)
   SharedDim* dim = nullptr;      // nullptr: nessun oscuramento
+  SharedShade* shade = nullptr;  // nullptr: luminosita' piena, niente bordi
   double frame_period_ms = 7;    // periodo di refresh del monitor
   bool dim_diagnostics = false;  // --dim-diagnostics: statistiche nel log e istantanee
   std::filesystem::path diagnostics_dir;

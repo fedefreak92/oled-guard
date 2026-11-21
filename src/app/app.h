@@ -26,7 +26,9 @@
 #include "pause_monitor.h"
 #include "pause_rules.h"
 #include "render_thread.h"
+#include "away_model.h"
 #include "shared_dim.h"
+#include "shared_shade.h"
 #include "single_instance.h"
 #include "stats_file.h"
 #include "tray.h"
@@ -75,6 +77,10 @@ class App {
   void RefreshMonitor();
   // Oscuramento: config, app in primo piano, bianco SDR -> thread di render.
   void PushDimInputs();
+  // Luminosita', bordi e modalita' assente -> thread di render.
+  void PushShadeInputs();
+  // Ogni secondo: movimento sul desktop, input, modalita' assente.
+  void OnSecond();
   void RefreshSdrWhite(double now);
   // Zone dell'oscuramento (desktop/barra o app) dalle finestre visibili.
   void RefreshDimZones(double now);
@@ -146,6 +152,11 @@ class App {
   std::string last_foreground_;
   // Stato dello shift: appartiene all'App e sopravvive alle pause dell'overlay.
   std::unique_ptr<SharedShift> shift_;
+  // Luminosita', bordi scuriti e modalita' assente.
+  SharedShade shade_;
+  MotionWindow motion_;
+  AwayModel away_;
+  double app_start_ms_ = 0;
   // Oscuramento delle aree statiche.
   SharedDim dim_;
   float sdr_white_ = 2.5f;

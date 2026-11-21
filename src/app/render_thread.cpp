@@ -14,6 +14,7 @@
 #include "dim_schedule.h"
 #include "dimmer.h"
 #include "logger.h"
+#include "away_model.h"
 #include "presenter.h"
 #include "text.h"
 
@@ -144,6 +145,14 @@ RenderThread::SessionEnd RenderThread::RunSession() {
   bool have_frame = false;
   bool shown = false;
   Offset last_drawn{INT_MIN, INT_MIN};
+  ShadeParams last_shade;
+  uint64_t shade_version = 0;
+  // Luminosita' effettiva: base x rampa della modalita' assente.
+  const auto shade_at = [&](double t, const ShadeInputs& in) {
+    ShadeParams p = in.base;
+    p.brightness *= static_cast<float>(AwayFactorAt(t, in.away_since_ms, in.away_target));
+    return p;
+  };
   double stats_since = NowMs();
 
   // Nasconde l'overlay e disarma subito il watchdog: le operazioni che seguono
@@ -255,6 +264,16 @@ RenderThread::SessionEnd RenderThread::RunSession() {
     }
     double next = now + kMaxAcquireTimeoutMs;
     if (params_.shift) next = std::min(next, params_.shift->NextChangeAt(now));
+    const ShadeInputs shade_in = params_.shade ? params_.shade->Get() : ShadeInputs{};
+    // Rampa della modalita' assente: ridisegni al massimo a 20 Hz finche' dura.
+    if (have_frame && shade_in.away_since_ms >= 0 && now < shade_in.away_since_ms + kAwayRampMs) {
+      next = std::min(next, now + 50);
+    }
+    // Valori nuovi dall'interfaccia (o ingresso/uscita dall'assenza): ridisegno subito.
+    if (shade_in.version != shade_version) {
+      next = now;
+      shade_version = shade_in.version;
+    }
     // Senza un frame da mostrare non si ridisegna: i tempi dell'oscuramento non contano
     // (altrimenti un ridisegno "dovuto" ma impossibile farebbe girare il ciclo a vuoto).
     if (dim_ok && have_frame) {
@@ -348,13 +367,15 @@ RenderThread::SessionEnd RenderThread::RunSession() {
     }
     const bool new_frame = status == DesktopCapture::Status::NewFrame;
     if (new_frame) have_frame = true;
+    if (new_frame && params_.shade) params_.shade->CountNewFrame();
     if (!have_frame) continue;
 
     now = NowMs();
     const Offset offset = params_.shift ? params_.shift->OffsetAt(now) : Offset{};
     const bool dim_due = dim_ok && now >= dim_schedule.NextRedrawAt(now, dim_in.params, params_.frame_period_ms);
     // Si presenta solo se c'e' qualcosa di nuovo da mostrare.
-    if (new_frame || !(offset == last_drawn) || dim_due || diag_want_snap) {
+    const ShadeParams shade_now = shade_at(now, shade_in);
+    if (new_frame || !(offset == last_drawn) || dim_due || diag_want_snap || !(shade_now == last_shade)) {
       WaitForSingleObjectEx(presenter.FrameWaitable(), 100, TRUE);
       DimDrawInputs dim_draw;
       if (dim_ok) {
@@ -373,7 +394,7 @@ RenderThread::SessionEnd RenderThread::RunSession() {
         grab = [&](ID3D11Texture2D* back_buffer) { snap_out.Request(device.Get(), back_buffer); };
         diag_want_snap = false;
       }
-      hr = presenter.Draw(cache.Get(), offset, dim_draw, ShadeParams{}, grab);
+      hr = presenter.Draw(cache.Get(), offset, dim_draw, shade_now, grab);
       if (FAILED(hr)) {
         LogWarn("Render: Present fallito: {}", Hr(hr));
         hide();
@@ -381,6 +402,7 @@ RenderThread::SessionEnd RenderThread::RunSession() {
       }
       if (!(offset == last_drawn)) LogDebug("Offset disegnato ({},{})", offset.x, offset.y);
       last_drawn = offset;
+      last_shade = shade_now;
       if (!shown) {
         presenter.SetVisible(true);
         shown = true;
