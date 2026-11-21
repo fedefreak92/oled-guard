@@ -94,6 +94,8 @@ DimModel::DimModel(int width, int height, double now_s, const DimSavedState* res
       rows_((height + kDimCellPx - 1) / kDimCellPx) {
   const size_t n = static_cast<size_t>(cols_) * rows_;
   last_change_.assign(n, now_s);
+  content_change_.assign(n, now_s);
+  mean_luma_.assign(n, 0.0f);
   hashes_.assign(n, 0);
   anchor_hash_.assign(n, 0);
   anchor_time_.assign(n, now_s);
@@ -123,6 +125,7 @@ void DimModel::OnFrame(const LumaImage& frame, double now_s) {
       const int y0 = cy * kDimCellPx, y1 = std::min(height_, y0 + kDimCellPx);
       bool changed = first;
       int bright_pixels = 0;
+      double luma_sum = 0;
       uint32_t hash = 2166136261u;  // FNV-1a sui bit dei valori
       for (int y = y0; y < y1; ++y) {
         for (int x = x0; x < x1; ++x) {
@@ -130,6 +133,7 @@ void DimModel::OnFrame(const LumaImage& frame, double now_s) {
           const float v = frame.luma[i];
           if (!first && v != previous_[i]) changed = true;
           if (v >= bright_threshold_) ++bright_pixels;
+          luma_sum += v;
           uint32_t bits = 0;
           std::memcpy(&bits, &v, sizeof(bits));
           hash = (hash ^ bits) * 16777619u;
@@ -162,6 +166,11 @@ void DimModel::OnFrame(const LumaImage& frame, double now_s) {
           excursion_[c] = -1;
         }
       }
+      // Cambio reale: al primo frame come l'eta' (anche dopo una ripresa), poi a ogni
+      // pixel diverso, senza la regola delle deviazioni brevi.
+      if (first) content_change_[c] = last_change_[c];
+      else if (changed) content_change_[c] = now_s;
+      mean_luma_[c] = static_cast<float>(luma_sum / pixels);
       hashes_[c] = hash;
       bright_[c] = bright_pixels >= kDimBrightPixelFraction * pixels ? 1 : 0;
     }

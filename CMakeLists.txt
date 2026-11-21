@@ -35,6 +35,7 @@ add_library(oled_core STATIC
   src/core/shade_model.cpp
   src/core/away_model.cpp
   src/core/activity_log.cpp
+  src/core/summary_model.cpp
 )
 target_include_directories(oled_core PUBLIC src/core)
 
@@ -61,6 +62,7 @@ add_executable(oled-guard-tests
   tests/test_shade_model.cpp
   tests/test_away_model.cpp
   tests/test_activity_log.cpp
+  tests/test_summary_model.cpp
 )
 target_include_directories(oled-guard-tests PRIVATE tests)
 target_link_libraries(oled-guard-tests PRIVATE oled_core)

@@ -51,6 +51,13 @@ class DimModel {
 
   int Cols() const { return cols_; }
   int Rows() const { return rows_; }
+  int Width() const { return width_; }
+  int Height() const { return height_; }
+  // Istante dell'ultimo cambio reale dei pixel della cella: le finestre attive non lo
+  // toccano (a differenza dell'eta' usata per l'oscuramento). Serve alle statistiche.
+  double ContentChange(int cx, int cy) const { return content_change_[Index(cx, cy)]; }
+  // Luminanza media della cella nell'ultimo frame (1 = bianco SDR).
+  float MeanLuma(int cx, int cy) const { return mean_luma_[Index(cx, cy)]; }
   float Level(int cx, int cy) const { return levels_[Index(cx, cy)]; }
   bool Bright(int cx, int cy) const { return bright_[Index(cx, cy)] != 0; }
   // Dentro un'app senza movimento intorno: non e' un elemento da scurire.
@@ -68,6 +75,8 @@ class DimModel {
   double bright_threshold_ = 0.25;
   std::vector<float> previous_;
   std::vector<double> last_change_;
+  std::vector<double> content_change_;
+  std::vector<float> mean_luma_;
   std::vector<uint32_t> hashes_;
   // Contenuto "di riferimento" di ogni cella e da quando c'e'; inizio della deviazione
   // in corso (-1 nessuna): se la cella torna al riferimento entro kDimBlipS, riprende l'eta'.
