@@ -142,7 +142,7 @@ void Presenter::Shutdown() {
   visible_ = false;
 }
 
-HRESULT Presenter::Draw(ID3D11Texture2D* source, Offset offset, const DimDrawInputs& dim,
+HRESULT Presenter::Draw(ID3D11Texture2D* source, Offset offset, const DimDrawInputs& dim, const ShadeParams& shade,
                         const std::function<void(ID3D11Texture2D*)>& before_present) {
   if (!swap_chain_) return E_UNEXPECTED;
   if (source != srv_source_) {
@@ -155,11 +155,15 @@ HRESULT Presenter::Draw(ID3D11Texture2D* source, Offset offset, const DimDrawInp
   const bool sdr = format_ != DXGI_FORMAT_R16G16B16A16_FLOAT;
   unsigned flags = sdr ? kShiftFlagSdr : 0;
   if (dim.levels) flags |= kShiftFlagDim | (dim.highlight ? kShiftFlagHighlight : 0);
-  const ShiftConstants constants{{offset.x, offset.y},
-                                 {width_ - 1, height_ - 1},
-                                 {static_cast<float>(dim.cols * 16), static_cast<float>(dim.rows * 16)},
-                                 dim.sdr_white,
-                                 flags};
+  if (!ShadeIsNeutral(shade)) flags |= kShiftFlagShade;
+  ShiftConstants constants{{offset.x, offset.y},
+                           {width_ - 1, height_ - 1},
+                           {static_cast<float>(dim.cols * 16), static_cast<float>(dim.rows * 16)},
+                           dim.sdr_white,
+                           flags};
+  for (int i = 0; i < 4; ++i) constants.spread[i] = shade.spread[i];
+  constants.brightness = shade.brightness;
+  constants.vignette_strength = shade.vignette_strength;
   context_->UpdateSubresource(constants_.Get(), 0, nullptr, &constants, 0, 0);
 
   const D3D11_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(width_), static_cast<float>(height_), 0.0f, 1.0f};

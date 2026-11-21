@@ -10,6 +10,7 @@
 #include <functional>
 
 #include "offset.h"
+#include "shade_model.h"
 
 namespace oled {
 
@@ -35,7 +36,7 @@ class Presenter {
 
   HANDLE FrameWaitable() const { return waitable_; }
   // before_present riceve il back buffer appena disegnato (diagnostica).
-  HRESULT Draw(ID3D11Texture2D* source, Offset offset, const DimDrawInputs& dim = {},
+  HRESULT Draw(ID3D11Texture2D* source, Offset offset, const DimDrawInputs& dim = {}, const ShadeParams& shade = {},
                const std::function<void(ID3D11Texture2D*)>& before_present = {});
   // Attacca/stacca la swap chain dal visual: staccata, la finestra non mostra nulla.
   void SetVisible(bool visible);

@@ -7,6 +7,7 @@
 #include "fullscreen_vs.h"
 #include "shift_constants.h"
 #include "shift_ps.h"
+#include "shade_model.h"
 #include "test_framework.h"
 
 using namespace oled::gpu_test;
@@ -33,7 +34,8 @@ std::vector<uint8_t> RandomPixels(DXGI_FORMAT format) {
 }
 
 // Disegna `source` con lo shader dell'overlay; livelli uniformi `level` (o nessun dimming).
-std::vector<uint8_t> Draw(DXGI_FORMAT format, const std::vector<uint8_t>& pixels, float level, unsigned flags) {
+std::vector<uint8_t> Draw(DXGI_FORMAT format, const std::vector<uint8_t>& pixels, float level, unsigned flags,
+                          const oled::ShadeParams& shade = {}) {
   auto device = WarpDevice();
   ComPtr<ID3D11DeviceContext> ctx;
   device->GetImmediateContext(&ctx);
@@ -70,7 +72,10 @@ std::vector<uint8_t> Draw(DXGI_FORMAT format, const std::vector<uint8_t>& pixels
   ComPtr<ID3D11SamplerState> sampler;
   device->CreateSamplerState(&sd, &sampler);
 
-  const ShiftConstants c{{0, 0}, {kW - 1, kH - 1}, {64.0f, 48.0f}, format == kHdr ? 2.5f : 1.0f, flags};
+  ShiftConstants c{{0, 0}, {kW - 1, kH - 1}, {64.0f, 48.0f}, format == kHdr ? 2.5f : 1.0f, flags};
+  for (int i = 0; i < 4; ++i) c.spread[i] = shade.spread[i];
+  c.brightness = shade.brightness;
+  c.vignette_strength = shade.vignette_strength;
   D3D11_BUFFER_DESC cbd{};
   cbd.ByteWidth = sizeof(c);
   cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
@@ -97,6 +102,14 @@ std::vector<uint8_t> Draw(DXGI_FORMAT format, const std::vector<uint8_t>& pixels
 
 constexpr unsigned kSdrFlag = 1;
 constexpr unsigned kDimFlag = 4;
+constexpr unsigned kShadeFlag = 8;
+
+float HalfAt(const std::vector<uint8_t>& data, size_t i) {
+  return DirectX::PackedVector::XMConvertHalfToFloat(reinterpret_cast<const DirectX::PackedVector::HALF*>(data.data())[i]);
+}
+
+double SrgbToLinear(double c) { return c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4); }
+double LinearToSrgb(double c) { return c <= 0.0031308 ? c * 12.92 : 1.055 * std::pow(c, 1.0 / 2.4) - 0.055; }
 
 }  // namespace
 
@@ -131,4 +144,85 @@ TEST(shift_ps_sdr_dims_in_linear) {
   CHECK(std::abs(static_cast<int>(out[1]) - 188) <= 1);
   CHECK(std::abs(static_cast<int>(out[2]) - 188) <= 1);
   CHECK_EQ(static_cast<int>(out[3]), 255);
+}
+
+TEST(shift_ps_shade_neutral_is_bit_exact) {
+  for (const DXGI_FORMAT f : {kHdr, kSdr}) {
+    const auto pixels = RandomPixels(f);
+    const unsigned sdr = f == kSdr ? kSdrFlag : 0;
+    oled::ShadeParams strong;
+    strong.brightness = 0.5f;
+    strong.vignette_strength = 0.8f;
+    strong.spread[0] = 0.4f;
+    // Senza il flag Shade i parametri non contano.
+    CHECK(Draw(f, pixels, 0.0f, sdr, strong) == pixels);
+    CHECK(Draw(f, pixels, 0.0f, sdr | kDimFlag, strong) == pixels);
+  }
+}
+
+TEST(shift_ps_brightness_halves_linear_hdr) {
+  const auto pixels = RandomPixels(kHdr);
+  oled::ShadeParams p;
+  p.brightness = 0.5f;
+  const auto out = Draw(kHdr, pixels, 0.0f, kShadeFlag, p);
+  int bad = 0;
+  for (size_t i = 0; i < pixels.size() / 2; ++i) {
+    const float a = HalfAt(pixels, i);
+    const float expected = i % 4 == 3 ? a : a * 0.5f;
+    if (std::fabs(HalfAt(out, i) - expected) > 1e-3f * a + 1e-3f) ++bad;
+  }
+  CHECK_EQ(bad, 0);
+}
+
+TEST(shift_ps_vignette_matches_model) {
+  const auto pixels = RandomPixels(kHdr);
+  oled::ShadeParams p;
+  p.vignette_strength = 0.6f;
+  p.spread[0] = 0.25f;
+  p.spread[2] = 0.1f;
+  p.spread[3] = 0.3f;
+  const auto out = Draw(kHdr, pixels, 0.0f, kShadeFlag, p);
+  const int xs[4] = {0, 7, 31, 63};
+  const int ys[3] = {0, 20, 47};
+  int bad = 0;
+  for (int x : xs) {
+    for (int y : ys) {
+      const float f = oled::ShadeFactor(p, (x + 0.5f) / kW, (y + 0.5f) / kH);
+      const size_t i = (static_cast<size_t>(y) * kW + x) * 4;  // canale rosso
+      const float a = HalfAt(pixels, i);
+      if (std::fabs(HalfAt(out, i) - a * f) > 2e-3f * a + 1e-3f) ++bad;
+    }
+  }
+  CHECK_EQ(bad, 0);
+}
+
+TEST(shift_ps_shade_sdr_in_linear) {
+  const auto pixels = RandomPixels(kSdr);
+  oled::ShadeParams p;
+  p.brightness = 0.5f;
+  const auto out = Draw(kSdr, pixels, 0.0f, kSdrFlag | kShadeFlag, p);
+  int bad = 0;
+  for (size_t i = 0; i < pixels.size(); ++i) {
+    if (i % 4 == 3) {
+      if (out[i] != pixels[i]) ++bad;
+      continue;
+    }
+    const double expected = LinearToSrgb(0.5 * SrgbToLinear(pixels[i] / 255.0)) * 255.0;
+    if (std::abs(out[i] - expected) > 1.01) ++bad;
+  }
+  CHECK_EQ(bad, 0);
+}
+
+TEST(shift_ps_shade_and_dim_multiply) {
+  const auto pixels = RandomPixels(kHdr);
+  oled::ShadeParams p;
+  p.brightness = 0.5f;
+  const auto out = Draw(kHdr, pixels, 0.5f, kDimFlag | kShadeFlag, p);
+  int bad = 0;
+  for (size_t i = 0; i < pixels.size() / 2; ++i) {
+    const float a = HalfAt(pixels, i);
+    const float expected = i % 4 == 3 ? a : a * 0.25f;
+    if (std::fabs(HalfAt(out, i) - expected) > 1e-3f * a + 1e-3f) ++bad;
+  }
+  CHECK_EQ(bad, 0);
 }

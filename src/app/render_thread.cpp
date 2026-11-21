@@ -373,7 +373,7 @@ RenderThread::SessionEnd RenderThread::RunSession() {
         grab = [&](ID3D11Texture2D* back_buffer) { snap_out.Request(device.Get(), back_buffer); };
         diag_want_snap = false;
       }
-      hr = presenter.Draw(cache.Get(), offset, dim_draw, grab);
+      hr = presenter.Draw(cache.Get(), offset, dim_draw, ShadeParams{}, grab);
       if (FAILED(hr)) {
         LogWarn("Render: Present fallito: {}", Hr(hr));
         hide();
