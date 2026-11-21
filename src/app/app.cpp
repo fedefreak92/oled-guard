@@ -29,6 +29,8 @@ constexpr UINT_PTR kTimerPause = 2;
 constexpr UINT_PTR kTimerConfigReload = 3;
 constexpr UINT_PTR kTimerStatsSave = 4;
 constexpr UINT_PTR kTimerTestShift = 5;
+constexpr UINT_PTR kTimerDisplayOff = 6;
+constexpr UINT kDisplayOffDelayMs = 700;
 constexpr UINT kStatsSaveMs = 60000;
 constexpr UINT kTestShiftMs = 30000;
 constexpr UINT kPausePollMs = 250;
@@ -149,6 +151,9 @@ int App::Run(HINSTANCE instance) {
   icon_ = CreateAppIcon(GetSystemMetrics(SM_CXSMICON));
   tray_.Create(main_, WM_APP_TRAY, icon_);
   tray_ready_ = true;
+  ui_.SetFailedHandler([this](const std::string& reason) {
+    ShowNotice(L"Interfaccia non disponibile", Widen(reason));
+  });
   // Avvisi nati prima che la tray esistesse (config, hotkey di emergenza).
   for (const auto& [title, text] : pending_notices_) tray_.ShowBalloon(title, text);
   pending_notices_.clear();
@@ -333,27 +338,54 @@ void App::SaveStatsNow() {
 }
 
 void App::RunWindowsTask(std::function<void()> task) {
-  // Una modifica alla volta: le notifiche di Windows possono richiedere qualche secondo
-  // e non devono bloccare il thread UI (il watchdog lo considererebbe bloccato).
+  // Tutto cio' che tocca le impostazioni di Windows (anche le letture) gira su questo
+  // thread, una cosa alla volta: le notifiche di Windows possono richiedere secondi e
+  // il thread UI non deve mai aspettarle (il watchdog lo considererebbe bloccato).
   if (windows_busy_.exchange(true)) {
-    ui_.Post(R"({"type":"notice","text":"Modifica gia' in corso, attendi un istante."})");
+    if (task) {
+      ui_.Post(NoticeMessage("Modifica gia' in corso, attendi un istante."));
+    } else {
+      windows_refresh_pending_ = true;  // si rilegge appena il lavoro in corso finisce
+    }
     return;
   }
   if (windows_worker_.joinable()) windows_worker_.join();
   windows_worker_ = std::thread([this, task = std::move(task)] {
     const HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-    task();
+    if (task) task();
+    const auto items = windows_.ReadAll();
+    for (const auto& it : items) {
+      LogDebug("Windows per OLED: {} = {} (consigliato: {})", it.id, it.current, it.ok ? "si'" : "no");
+    }
+    {
+      std::lock_guard lock(windows_msg_mutex_);
+      windows_msg_ = WindowsMessage(items);
+    }
     if (SUCCEEDED(hr)) CoUninitialize();
     windows_busy_ = false;
     PostMessageW(main_, WM_APP_WINDOWS_DONE, 0, 0);
   });
 }
 
-void App::PushWindowsToUi() {
-  if (!ui_.IsReady()) return;
-  const auto items = windows_.ReadAll();
-  for (const auto& it : items) LogDebug("Windows per OLED: {} = {} (consigliato: {})", it.id, it.current, it.ok ? "si'" : "no");
-  ui_.Post(WindowsMessage(items));
+void App::PushWindowsToUi() { RunWindowsTask(nullptr); }
+
+void App::ScheduleDisplayOff() {
+  // Rilasciare i tasti della hotkey (o il clic) conta come input e riaccenderebbe
+  // subito lo schermo: si spegne dopo un attimo.
+  SetTimer(main_, kTimerDisplayOff, kDisplayOffDelayMs, nullptr);
+}
+
+void App::OnWindowsDone() {
+  std::string message;
+  {
+    std::lock_guard lock(windows_msg_mutex_);
+    message = windows_msg_;
+  }
+  if (ui_.IsReady() && !message.empty()) ui_.Post(message);
+  if (windows_refresh_pending_) {
+    windows_refresh_pending_ = false;
+    PushWindowsToUi();
+  }
 }
 
 void App::StartEmergencyGuard() {
@@ -421,7 +453,9 @@ void App::Tick() {
   SYSTEMTIME local{};
   GetLocalTime(&local);
   wear_.RollDay(local.wYear * 10000 + local.wMonth * 100 + local.wDay);
-  if (entered_pause) {
+  // Solo le pause dovute all'app in primo piano: un blocco schermo o un errore di
+  // cattura non sono "giochi" e spingerebbero fuori dallo storico quelli veri.
+  if (entered_pause && CausedByApp(reason)) {
     wear_.CountPause(reason);
     // Storico: quale app era in primo piano quando la protezione si e' fermata.
     if (!in.foreground_process.empty()) {
@@ -594,6 +628,12 @@ void App::OpenUi() {
         ui_rect_ = last;
         LogInfo("Interfaccia chiusa ({} aggiornamenti di stato inviati)", ui_updates_sent_);
         ui_updates_sent_ = 0;
+        // Finestra chiusa (o pagina caduta) a meta' registrazione: le hotkey tornano attive.
+        if (hotkey_capture_active_) {
+          hotkey_capture_active_ = false;
+          RegisterToggleHotkey();
+          RegisterDisplayOffHotkey();
+        }
         SaveStatsNow();
       },
       debug_, ui_rect_);
@@ -622,6 +662,7 @@ void App::OnUiMessage(const std::string& json) {
         // Un valore non valido dalla pagina non sostituisce quello attuale con un default.
         for (const auto& w : result.warnings) LogWarn("Interfaccia: {}", w);
         ui_.Post(ConfigMessage(config_));
+        if (!result.warnings.empty()) ui_.Post(NoticeMessage("Non applicato: " + result.warnings.front()));
         break;
       }
       ApplyConfig(NormalizedConfig(result.config));
@@ -644,7 +685,7 @@ void App::OnUiMessage(const std::string& json) {
       break;
     case UiCommandType::DisplayOff:
       LogInfo("Schermo spento dall'interfaccia");
-      TurnDisplayOff(main_);
+      ScheduleDisplayOff();
       break;
     case UiCommandType::SetAppRule:
     case UiCommandType::AddApp:
@@ -666,6 +707,10 @@ void App::OnUiMessage(const std::string& json) {
       ui_.Post(ProcessesMessage(ListWindowedProcesses()));
       break;
     case UiCommandType::TestShift: {
+      if (!overlay_running_) {
+        ui_.Post(NoticeMessage("La prova funziona solo con la protezione attiva: togli prima la pausa."));
+        break;
+      }
       const double now = NowMs();
       testing_shift_until_ms_ = now + kTestShiftMs;
       shift_->Reconfigure(config_.amplitude_px, EffectiveTiming(), now);
@@ -683,7 +728,9 @@ void App::OnUiMessage(const std::string& json) {
         if (display_off_hotkey_registered_) UnregisterHotKey(main_, kDisplayOffHotkeyId);
         toggle_hotkey_registered_ = false;
         display_off_hotkey_registered_ = false;
+        hotkey_capture_active_ = true;
       } else {
+        hotkey_capture_active_ = false;
         RegisterToggleHotkey();
         RegisterDisplayOffHotkey();
       }
@@ -834,6 +881,10 @@ LRESULT App::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
         ReloadConfig();
       }
       if (wp == kTimerStatsSave) SaveStatsNow();
+      if (wp == kTimerDisplayOff) {
+        KillTimer(main_, kTimerDisplayOff);
+        TurnDisplayOff(main_);
+      }
       if (wp == kTimerTestShift) {
         KillTimer(main_, kTimerTestShift);
         testing_shift_until_ms_ = 0;
@@ -845,11 +896,11 @@ LRESULT App::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
       if (wp == kToggleHotkeyId) SetManualPause(!manual_pause_);
       if (wp == kDisplayOffHotkeyId) {
         LogInfo("Schermo spento con la hotkey");
-        TurnDisplayOff(main_);
+        ScheduleDisplayOff();
       }
       return 0;
     case WM_APP_WINDOWS_DONE:
-      PushWindowsToUi();
+      OnWindowsDone();
       return 0;
     case WM_APP_TRAY:
       OnTrayEvent(LOWORD(lp));

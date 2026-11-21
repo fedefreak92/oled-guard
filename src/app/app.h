@@ -6,6 +6,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <thread>
 #include <string>
@@ -60,6 +61,8 @@ class App {
   // Esegue una modifica alle impostazioni di Windows su un thread di lavoro.
   void RunWindowsTask(std::function<void()> task);
   void PushWindowsToUi();
+  void OnWindowsDone();
+  void ScheduleDisplayOff();
   static std::filesystem::path StatsPath();
   void SaveStatsNow();
   void StartEmergencyGuard();
@@ -109,6 +112,10 @@ class App {
   WindowsSettings windows_{AppDataDir() / L"windows-backup.json"};
   std::thread windows_worker_;
   std::atomic<bool> windows_busy_{false};
+  bool windows_refresh_pending_ = false;
+  std::mutex windows_msg_mutex_;
+  std::string windows_msg_;
+  bool hotkey_capture_active_ = false;
   EmergencyGuard guard_;
   Tray tray_;
   OverlayWindow overlay_;

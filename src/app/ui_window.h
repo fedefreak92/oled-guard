@@ -17,6 +17,11 @@ class UiWindow {
  public:
   using MessageHandler = std::function<void(const std::string& utf8_json)>;
   using ClosedHandler = std::function<void(const RECT& last_rect)>;
+  using FailedHandler = std::function<void(const std::string& reason_utf8)>;
+
+  // Chiamato se WebView2 non parte o il suo processo principale termina: la finestra
+  // viene poi chiusa (niente rettangolo nero senza controlli).
+  void SetFailedHandler(FailedHandler handler) { on_failed_ = std::move(handler); }
 
   ~UiWindow() { Close(); }
 
@@ -39,6 +44,7 @@ class UiWindow {
   void CreateWebView(unsigned generation);
   void OnControllerCreated(ICoreWebView2Controller* controller);
   void ResizeWebView();
+  void Fail(const std::string& reason);
   int TopResizeBorder() const;
 
   template <class T>
@@ -50,6 +56,7 @@ class UiWindow {
   ComPtr<ICoreWebView2> webview_;
   MessageHandler on_message_;
   ClosedHandler on_closed_;
+  FailedHandler on_failed_;
   bool devtools_ = false;
   bool ready_ = false;
   unsigned generation_ = 0;  // scarta le callback di una finestra gia' chiusa

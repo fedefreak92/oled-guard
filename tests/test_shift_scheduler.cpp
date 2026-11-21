@@ -147,6 +147,28 @@ TEST(scheduler_move_soon_shortens_dwell) {
   CHECK_NEAR(s.NextChangeAt(1600), during, 1e-9);
 }
 
+TEST(scheduler_move_soon_during_pause_applies_at_resume) {
+  // Pausa di 5 minuti, "Prova ora" a meta' pausa: alla ripresa la mossa parte subito,
+  // non dopo un tempo pari alla pausa.
+  ShiftScheduler s(18, 2, kT, 0);
+  for (double t = 0; t <= 10000; t += 500) s.OffsetAt(t);
+  s.Pause(10000);
+  s.MoveSoon(160000);
+  s.Resume(310000);
+  CHECK(s.NextChangeAt(310000) <= 310500);
+}
+
+TEST(scheduler_reconfigure_during_pause_keeps_frozen_time) {
+  // Una modifica della config durante una pausa lunga non deve spostare in avanti la
+  // fase: dopo la ripresa la prossima mossa arriva entro la sosta massima.
+  ShiftScheduler s(19, 2, kT, 0);
+  for (double t = 0; t <= 10000; t += 500) s.OffsetAt(t);
+  s.Pause(10000);
+  s.Reconfigure(2, kT, 3.6e6);
+  s.Resume(7.2e6);
+  CHECK(s.NextChangeAt(7.2e6) <= 7.2e6 + 60000 + 1);
+}
+
 TEST(shared_shift_matches_scheduler) {
   ShiftScheduler s(33, 2, kT, 0);
   SharedShift sh(33, 2, kT, 0);

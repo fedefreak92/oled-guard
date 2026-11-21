@@ -69,6 +69,10 @@ bool IsFullscreenWindow(ScreenRect window, ScreenRect monitor, bool maximized, b
 // Motivi per cui la pausa scatta subito, senza ritardo di entrata.
 bool IsImmediate(PauseReason reason);
 
+// Pause dovute all'app in primo piano (o decise dall'utente mentre la usava): sono le
+// sole che finiscono nello storico "Giochi e app" e nel conteggio delle pause.
+bool CausedByApp(PauseReason reason);
+
 // Testo italiano (UTF-8) per tray e log.
 std::string_view PauseReasonText(PauseReason reason);
 

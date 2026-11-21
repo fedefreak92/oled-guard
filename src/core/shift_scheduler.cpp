@@ -63,13 +63,20 @@ void ShiftScheduler::Advance(double now_ms) {
   if (phase_ == Phase::Transition) offset_ = animator_->At(now_ms - phase_start_ms_);
 }
 
+double ShiftScheduler::SchedulerTime(double now_ms) {
+  // In pausa il tempo dello scheduler e' fermo all'istante della pausa: modifiche fatte
+  // durante la pausa non devono far scorrere le fasi (Resume aggiunge poi l'intervallo).
+  if (paused_at_ms_) return *paused_at_ms_;
+  return ClampTime(now_ms);
+}
+
 Offset ShiftScheduler::OffsetAt(double now_ms) {
-  Advance(ClampTime(now_ms));
+  Advance(SchedulerTime(now_ms));
   return offset_;
 }
 
 double ShiftScheduler::NextChangeAt(double now_ms) {
-  const double now = ClampTime(now_ms);
+  const double now = SchedulerTime(now_ms);
   Advance(now);
   if (phase_ == Phase::Transition) {
     if (auto step = animator_->NextStepAt(now - phase_start_ms_)) return phase_start_ms_ + *step;
@@ -78,7 +85,7 @@ double ShiftScheduler::NextChangeAt(double now_ms) {
 }
 
 void ShiftScheduler::Reconfigure(int amplitude, ShiftTiming timing, double now_ms) {
-  const double now = ClampTime(now_ms);
+  const double now = SchedulerTime(now_ms);
   Advance(now);
   generator_.SetAmplitude(amplitude);
   timing_ = timing;
@@ -110,7 +117,7 @@ void ShiftScheduler::Resume(double now_ms) {
 }
 
 void ShiftScheduler::MoveSoon(double now_ms) {
-  const double now = ClampTime(now_ms);
+  const double now = SchedulerTime(now_ms);
   Advance(now);
   if (phase_ == Phase::Dwell && phase_end_ms_ > now + 500) phase_end_ms_ = now + 500;
 }

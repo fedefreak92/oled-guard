@@ -50,6 +50,8 @@ std::string ConfigMessage(const Config& config);
 std::string AppsMessage(const AppHistory& history, const Config& config);
 std::string WindowsMessage(const std::vector<WindowsItem>& items);
 std::string ProcessesMessage(const std::vector<std::string>& processes);
+// Avviso breve mostrato dalla pagina (testo italiano, UTF-8).
+std::string NoticeMessage(std::string_view text);
 
 enum class UiCommandType {
   Ready,

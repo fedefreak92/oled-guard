@@ -87,6 +87,12 @@ TEST(ui_config_and_processes_messages) {
   CHECK_EQ(p.Find("processes")->AsArray().size(), size_t{2});
 }
 
+TEST(ui_notice_message_escapes_text) {
+  const JsonValue v = Parse(oled::NoticeMessage("amplitude_px: valore \"9\" fuori intervallo"));
+  CHECK_EQ(v.Find("type")->AsString(), std::string("notice"));
+  CHECK_EQ(v.Find("text")->AsString(), std::string("amplitude_px: valore \"9\" fuori intervallo"));
+}
+
 TEST(ui_command_parses_known_commands) {
   auto ready = oled::ParseUiCommand(R"({"cmd":"ready"})");
   CHECK(ready && ready->type == UiCommandType::Ready);

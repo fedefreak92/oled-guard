@@ -146,6 +146,16 @@ TEST(window_not_covering_monitor_is_not_fullscreen) {
   CHECK(!IsFullscreenWindow({100, 0, 3840, 2160}, kMonitor, false, false));
 }
 
+TEST(only_app_reasons_go_to_history) {
+  // Lo storico "Giochi e app" conta solo le pause causate dall'app in primo piano.
+  for (auto r : {PauseReason::Manual, PauseReason::Denylisted, PauseReason::NotificationState,
+                 PauseReason::FullscreenWindow})
+    CHECK(CausedByApp(r));
+  for (auto r : {PauseReason::None, PauseReason::SessionLocked, PauseReason::SessionInactive, PauseReason::SecureDesktop,
+                 PauseReason::CaptureFailed, PauseReason::DisplayRotated, PauseReason::MonitorMissing})
+    CHECK(!CausedByApp(r));
+}
+
 TEST(immediate_reasons) {
   for (auto r : {PauseReason::Manual, PauseReason::SessionLocked, PauseReason::SessionInactive,
                  PauseReason::SecureDesktop, PauseReason::CaptureFailed, PauseReason::DisplayRotated,

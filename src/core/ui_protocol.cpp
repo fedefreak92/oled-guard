@@ -149,6 +149,13 @@ std::string ProcessesMessage(const std::vector<std::string>& processes) {
   return Compact(o);
 }
 
+std::string NoticeMessage(std::string_view text) {
+  JsonValue o = JsonValue::MakeObject();
+  o.Set("type", JsonValue("notice"));
+  o.Set("text", JsonValue(std::string(text)));
+  return Compact(o);
+}
+
 std::optional<UiCommand> ParseUiCommand(std::string_view json) {
   const auto parsed = ParseJson(json);
   if (!parsed.value || parsed.value->type() != JsonValue::Type::Object) return std::nullopt;

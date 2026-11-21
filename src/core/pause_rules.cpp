@@ -69,6 +69,18 @@ bool IsImmediate(PauseReason reason) {
   }
 }
 
+bool CausedByApp(PauseReason reason) {
+  switch (reason) {
+    case PauseReason::Manual:
+    case PauseReason::Denylisted:
+    case PauseReason::NotificationState:
+    case PauseReason::FullscreenWindow:
+      return true;
+    default:
+      return false;
+  }
+}
+
 std::string_view PauseReasonText(PauseReason reason) {
   switch (reason) {
     case PauseReason::None: return "Attivo";

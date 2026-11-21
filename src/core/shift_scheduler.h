@@ -38,6 +38,7 @@ class ShiftScheduler {
   enum class Phase { Dwell, Transition };
 
   double ClampTime(double now_ms);
+  double SchedulerTime(double now_ms);
   void Advance(double now_ms);
   void StartDwell(double start_ms);
   void StartTransition(double start_ms);

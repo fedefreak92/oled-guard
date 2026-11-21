@@ -279,6 +279,11 @@ document.querySelectorAll('[data-hotkey]').forEach((b) => b.addEventListener('cl
   b.textContent = 'premi la combinazione...';
   send({ cmd: 'hotkeyCapture', on: true });
 }));
+// La registrazione si interrompe se la finestra perde il focus o si cambia scheda:
+// altrimenti le hotkey globali resterebbero sospese.
+window.addEventListener('blur', () => stopCapture(true));
+document.addEventListener('visibilitychange', () => { if (document.hidden) stopCapture(true); });
+document.querySelectorAll('#tabs button').forEach((b) => b.addEventListener('click', () => stopCapture(true)));
 window.addEventListener('keydown', (e) => {
   if (!capturing) return;
   e.preventDefault();

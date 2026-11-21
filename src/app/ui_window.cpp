@@ -5,6 +5,9 @@
 #include <windowsx.h>
 #include <wrl/event.h>
 
+#include <filesystem>
+#include <system_error>
+
 #include "logger.h"
 #include "paths.h"
 #include "text.h"
@@ -99,7 +102,7 @@ void UiWindow::CreateWebView(unsigned generation) {
           [this, generation](HRESULT result, ICoreWebView2Environment* env) -> HRESULT {
             if (generation != generation_ || !hwnd_) return S_OK;  // finestra gia' chiusa
             if (FAILED(result) || !env) {
-              LogError("WebView2: ambiente non creato ({}). Runtime installato?", Hr(result));
+              Fail("ambiente WebView2 non creato (" + Hr(result) + "): il runtime WebView2 e' installato?");
               return S_OK;
             }
             env_ = env;
@@ -111,7 +114,7 @@ void UiWindow::CreateWebView(unsigned generation) {
                                return S_OK;
                              }
                              if (FAILED(res) || !controller) {
-                               LogError("WebView2: controller non creato ({})", Hr(res));
+                               Fail("controller WebView2 non creato (" + Hr(res) + ")");
                                return S_OK;
                              }
                              OnControllerCreated(controller);
@@ -121,7 +124,14 @@ void UiWindow::CreateWebView(unsigned generation) {
             return S_OK;
           })
           .Get());
-  if (FAILED(hr)) LogError("WebView2: CreateCoreWebView2EnvironmentWithOptions fallito ({})", Hr(hr));
+  if (FAILED(hr)) Fail("WebView2 non avviato (" + Hr(hr) + "): il runtime WebView2 e' installato?");
+}
+
+void UiWindow::Fail(const std::string& reason) {
+  LogError("Interfaccia: {}", reason);
+  if (on_failed_) on_failed_(reason);
+  // Chiusura rimandata: si puo' essere dentro una callback di WebView2.
+  if (hwnd_) PostMessageW(hwnd_, WM_CLOSE, 0, 0);
 }
 
 void UiWindow::OnControllerCreated(ICoreWebView2Controller* controller) {
@@ -146,6 +156,11 @@ void UiWindow::OnControllerCreated(ICoreWebView2Controller* controller) {
 
   // Solo i file dell'interfaccia accanto all'eseguibile.
   const std::wstring ui_dir = ExecutablePath().parent_path().wstring() + L"\\ui";
+  std::error_code ec;
+  if (!std::filesystem::exists(std::filesystem::path(ui_dir) / L"index.html", ec)) {
+    Fail("file dell'interfaccia mancanti in " + Narrow(ui_dir));
+    return;
+  }
   ComPtr<ICoreWebView2_3> webview3;
   if (SUCCEEDED(webview_.As(&webview3))) {
     webview3->SetVirtualHostNameToFolderMapping(kHost, ui_dir.c_str(), COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_DENY_CORS);
@@ -196,10 +211,20 @@ void UiWindow::OnControllerCreated(ICoreWebView2Controller* controller) {
       &token);
   webview_->add_ProcessFailed(
       Callback<ICoreWebView2ProcessFailedEventHandler>(
-          [](ICoreWebView2*, ICoreWebView2ProcessFailedEventArgs* args) -> HRESULT {
+          [this](ICoreWebView2*, ICoreWebView2ProcessFailedEventArgs* args) -> HRESULT {
             COREWEBVIEW2_PROCESS_FAILED_KIND kind{};
             args->get_ProcessFailedKind(&kind);
-            LogWarn("Interfaccia: processo WebView2 terminato (tipo {})", static_cast<int>(kind));
+            if (kind == COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED) {
+              Fail("il processo principale di WebView2 si e' chiuso");
+            } else if (kind == COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED ||
+                       kind == COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_UNRESPONSIVE) {
+              // Cade solo la pagina: la si ricarica, e lei invia di nuovo "ready".
+              LogWarn("Interfaccia: pagina caduta (tipo {}), la ricarico", static_cast<int>(kind));
+              ready_ = false;
+              if (webview_) webview_->Reload();
+            } else {
+              LogWarn("Interfaccia: processo WebView2 terminato (tipo {})", static_cast<int>(kind));
+            }
             return S_OK;
           })
           .Get(),
