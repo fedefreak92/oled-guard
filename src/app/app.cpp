@@ -3,7 +3,9 @@
 #include <shellapi.h>
 
 #include <algorithm>
+#include <random>
 
+#include "clock.h"
 #include "diagnostics.h"
 #include "logger.h"
 #include "paths.h"
@@ -44,6 +46,16 @@ int App::Run(HINSTANCE instance) {
     LogShutdown();
     return code;
   }
+
+  ShiftTiming timing = ToShiftTiming(config_);
+  if (HasArg(L"--fast-shift")) {
+    // Solo per la verifica a occhio: soste di 3-5 s e transizioni di 1-2 s.
+    timing = ShiftTiming{3000, 5000, 1000, 2000};
+    LogInfo("Modalita' --fast-shift attiva");
+  }
+  std::random_device seed_source;
+  const uint64_t seed = (static_cast<uint64_t>(seed_source()) << 32) ^ seed_source();
+  shift_ = std::make_unique<SharedShift>(seed, config_.amplitude_px, timing, NowMs());
 
   if (const auto exit_key = ParseHotkey(config_.hotkey_emergency_exit)) guard_.Start(*exit_key);
 
@@ -107,8 +119,10 @@ bool App::StartOverlay() {
   params.main = main_;
   params.monitor = *monitor_;
   params.allow_tearing = config_.allow_tearing;
-  params.shift = nullptr;
+  params.shift = shift_.get();
   params.guard = &guard_;
+  // Si riparte dall'ultima posizione mostrata, con una sosta nuova.
+  shift_->Resume(NowMs());
   if (!render_.Start(params)) {
     overlay_.Destroy();
     return false;

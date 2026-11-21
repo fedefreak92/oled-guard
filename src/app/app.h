@@ -3,6 +3,7 @@
 
 #include <windows.h>
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -44,6 +45,8 @@ class App {
   Tray tray_;
   OverlayWindow overlay_;
   RenderThread render_;
+  // Stato dello shift: appartiene all'App e sopravvive alle pause dell'overlay.
+  std::unique_ptr<SharedShift> shift_;
   std::optional<MonitorInfo> monitor_;
   bool overlay_running_ = false;
 };
