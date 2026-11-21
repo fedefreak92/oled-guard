@@ -53,6 +53,28 @@ std::string ProcessesMessage(const std::vector<std::string>& processes);
 // Avviso breve mostrato dalla pagina (testo italiano, UTF-8).
 std::string NoticeMessage(std::string_view text);
 
+// Mappa dei livelli di oscuramento ridotta per la miniatura della scheda.
+struct DimMapSummary {
+  int cols = 0;
+  int rows = 0;
+  std::string cells;  // cols*rows caratteri 0-9a-f (livello / kDimMaxLevel in 16 passi)
+  double dimmed_pct = 0;  // % di celle con livello > 0,01 sulla griglia piena
+  double max_level = 0;
+};
+// Riduce con il massimo per blocchi (fattore intero uguale sui due assi) finche'
+// cols <= max_cols.
+DimMapSummary SummarizeDimLevels(const std::vector<float>& levels, int cols, int rows, int max_cols);
+
+struct DimUiState {
+  std::string status;        // "active" | "waiting" | "suspended" | "off" | "paused"
+  std::string suspended_by;  // .exe se sospeso da un'app
+  DimMapSummary map;         // vuota se non disponibile
+  double sdr_white_nits = 0;
+  bool hdr = false;
+  double highlight_left_ms = 0;
+};
+std::string DimMessage(const DimUiState& s);
+
 enum class UiCommandType {
   Ready,
   SetConfig,
@@ -68,6 +90,8 @@ enum class UiCommandType {
   DisplayOff,
   HotkeyCapture,
   Window,
+  DimWatch,
+  DimHighlight,
 };
 
 struct UiCommand {

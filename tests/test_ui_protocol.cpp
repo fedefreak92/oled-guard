@@ -138,3 +138,64 @@ TEST(config_patch_invalid_is_rejected) {
   auto u = oled::ApplyConfigPatch(c, Parse(R"({"pippo":1})"));
   CHECK(!u.warnings.empty());
 }
+
+// ---------------------------------------------------------------- oscuramento
+
+TEST(ui_dim_summarize_keeps_small_grid) {
+  const std::vector<float> levels = {0, 0.8f, 0.4f, 0, 0, 0, 0, 0};
+  const oled::DimMapSummary s = oled::SummarizeDimLevels(levels, 4, 2, 120);
+  CHECK_EQ(s.cols, 4);
+  CHECK_EQ(s.rows, 2);
+  CHECK_EQ(s.cells, std::string("0f800000"));
+  CHECK_NEAR(s.max_level, 0.8, 1e-6);
+  CHECK_NEAR(s.dimmed_pct, 25.0, 1e-9);
+}
+
+TEST(ui_dim_summarize_downsamples_with_max) {
+  std::vector<float> levels(240 * 135, 0.0f);
+  levels[67 * 240 + 101] = 0.4f;
+  const oled::DimMapSummary s = oled::SummarizeDimLevels(levels, 240, 135, 120);
+  CHECK_EQ(s.cols, 120);
+  CHECK_EQ(s.rows, 68);
+  CHECK_EQ(s.cells.size(), size_t{120 * 68});
+  if (s.cells.size() != size_t{120 * 68}) return;
+  CHECK_EQ(s.cells[33 * 120 + 50], '8');
+  CHECK_EQ(s.cells[0], '0');
+  CHECK_NEAR(s.dimmed_pct, 100.0 / 32400, 1e-9);
+}
+
+TEST(ui_dim_message_fields) {
+  oled::DimUiState st;
+  st.status = "suspended";
+  st.suspended_by = "photoshop.exe";
+  st.map = oled::SummarizeDimLevels({0, 0.8f}, 2, 1, 120);
+  st.sdr_white_nits = 240;
+  st.hdr = true;
+  st.highlight_left_ms = 1200;
+  const JsonValue v = Parse(oled::DimMessage(st));
+  CHECK(v.type() == JsonValue::Type::Object);
+  if (v.type() != JsonValue::Type::Object) return;
+  CHECK_EQ(v.Find("type")->AsString(), std::string("dim"));
+  CHECK_EQ(v.Find("status")->AsString(), std::string("suspended"));
+  CHECK_EQ(v.Find("suspended_by")->AsString(), std::string("photoshop.exe"));
+  CHECK_NEAR(v.Find("cols")->AsNumber(), 2, 1e-9);
+  CHECK_NEAR(v.Find("rows")->AsNumber(), 1, 1e-9);
+  CHECK_EQ(v.Find("cells")->AsString(), std::string("0f"));
+  CHECK_NEAR(v.Find("dimmed_pct")->AsNumber(), 50, 1e-9);
+  CHECK_NEAR(v.Find("max_level")->AsNumber(), 0.8, 1e-6);
+  CHECK_NEAR(v.Find("sdr_white_nits")->AsNumber(), 240, 1e-9);
+  CHECK(v.Find("hdr")->AsBool());
+  CHECK_NEAR(v.Find("highlight_left_ms")->AsNumber(), 1200, 1e-9);
+}
+
+TEST(ui_parse_dim_commands) {
+  const auto watch = oled::ParseUiCommand(R"({"cmd":"dimWatch","on":true})");
+  CHECK(watch.has_value());
+  if (watch) {
+    CHECK(watch->type == UiCommandType::DimWatch);
+    CHECK(watch->on);
+  }
+  CHECK(!oled::ParseUiCommand(R"({"cmd":"dimWatch"})").has_value());
+  const auto hl = oled::ParseUiCommand(R"({"cmd":"dimHighlight"})");
+  CHECK(hl.has_value() && hl->type == UiCommandType::DimHighlight);
+}

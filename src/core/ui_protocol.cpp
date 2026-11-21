@@ -1,6 +1,9 @@
 #include "ui_protocol.h"
 
 #include <algorithm>
+#include <cmath>
+
+#include "dim_params.h"
 
 namespace oled {
 namespace {
@@ -156,6 +159,47 @@ std::string NoticeMessage(std::string_view text) {
   return Compact(o);
 }
 
+DimMapSummary SummarizeDimLevels(const std::vector<float>& levels, int cols, int rows, int max_cols) {
+  DimMapSummary s;
+  if (cols <= 0 || rows <= 0 || levels.size() != static_cast<size_t>(cols) * rows) return s;
+  int dimmed = 0;
+  for (float v : levels) {
+    if (v > 0.01f) ++dimmed;
+    s.max_level = std::max(s.max_level, static_cast<double>(v));
+  }
+  s.dimmed_pct = 100.0 * dimmed / static_cast<double>(levels.size());
+  const int factor = std::max(1, (cols + max_cols - 1) / std::max(1, max_cols));
+  s.cols = (cols + factor - 1) / factor;
+  s.rows = (rows + factor - 1) / factor;
+  s.cells.assign(static_cast<size_t>(s.cols) * s.rows, '0');
+  for (int y = 0; y < rows; ++y) {
+    for (int x = 0; x < cols; ++x) {
+      const double v = std::clamp(static_cast<double>(levels[static_cast<size_t>(y) * cols + x]), 0.0, kDimMaxLevel);
+      const int q = static_cast<int>(std::lround(v / kDimMaxLevel * 15));
+      const char c = "0123456789abcdef"[q];
+      char& out = s.cells[static_cast<size_t>(y / factor) * s.cols + x / factor];
+      out = std::max(out, c);  // '0'-'9' < 'a'-'f' in ASCII
+    }
+  }
+  return s;
+}
+
+std::string DimMessage(const DimUiState& s) {
+  JsonValue o = JsonValue::MakeObject();
+  o.Set("type", JsonValue("dim"));
+  o.Set("status", JsonValue(s.status));
+  o.Set("suspended_by", JsonValue(s.suspended_by));
+  o.Set("cols", JsonValue(s.map.cols));
+  o.Set("rows", JsonValue(s.map.rows));
+  o.Set("cells", JsonValue(s.map.cells));
+  o.Set("dimmed_pct", JsonValue(s.map.dimmed_pct));
+  o.Set("max_level", JsonValue(s.map.max_level));
+  o.Set("sdr_white_nits", JsonValue(s.sdr_white_nits));
+  o.Set("hdr", JsonValue(s.hdr));
+  o.Set("highlight_left_ms", JsonValue(s.highlight_left_ms));
+  return Compact(o);
+}
+
 std::optional<UiCommand> ParseUiCommand(std::string_view json) {
   const auto parsed = ParseJson(json);
   if (!parsed.value || parsed.value->type() != JsonValue::Type::Object) return std::nullopt;
@@ -218,6 +262,11 @@ std::optional<UiCommand> ParseUiCommand(std::string_view json) {
     c.type = UiCommandType::WindowsRestoreAll;
   } else if (name == "displayOff") {
     c.type = UiCommandType::DisplayOff;
+  } else if (name == "dimWatch") {
+    if (!need_on()) return std::nullopt;
+    c.type = UiCommandType::DimWatch;
+  } else if (name == "dimHighlight") {
+    c.type = UiCommandType::DimHighlight;
   } else if (name == "window") {
     const JsonValue* action = Field(o, "action", JsonValue::Type::String);
     if (!action) return std::nullopt;

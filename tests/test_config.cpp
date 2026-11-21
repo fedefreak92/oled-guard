@@ -206,3 +206,59 @@ TEST(config_conversions) {
   CHECK_NEAR(timing.dwell_min_ms, 20000, 1e-9);
   CHECK_NEAR(timing.transition_max_ms, 5000, 1e-9);
 }
+
+// ---------------------------------------------------------------- oscuramento
+
+TEST(config_dim_defaults_and_round_trip) {
+  const Config d;
+  CHECK(d.dim_enabled);
+  CHECK_EQ(d.dim_strength_pct, 40);
+  CHECK_EQ(d.dim_delay_s, 180);
+  CHECK_EQ(d.dim_ramp_s, 300);
+  CHECK_EQ(d.dim_recover_ms, 500);
+  CHECK(!d.dim_large_enabled);
+  CHECK_EQ(d.dim_large_delay_s, 1200);
+  CHECK_EQ(d.dim_large_strength_pct, 20);
+  CHECK_EQ(d.dim_bright_threshold_pct, 25);
+  CHECK_EQ(d.dim_large_fraction_pct, 40);
+  CHECK(d.dim_exclude.empty());
+
+  Config c;
+  c.dim_enabled = false;
+  c.dim_strength_pct = 65;
+  c.dim_delay_s = 60;
+  c.dim_ramp_s = 120;
+  c.dim_recover_ms = 300;
+  c.dim_large_enabled = true;
+  c.dim_large_delay_s = 900;
+  c.dim_large_strength_pct = 30;
+  c.dim_bright_threshold_pct = 50;
+  c.dim_large_fraction_pct = 60;
+  c.dim_exclude = {"photoshop.exe"};
+  const auto r = ConfigFromJson(ConfigToJson(c));
+  CHECK(r.warnings.empty());
+  CHECK(r.config == c);
+}
+
+TEST(config_dim_ranges_validated) {
+  const auto strength = ConfigFromJson(R"({"dim_strength_pct": 90})");
+  CHECK_EQ(strength.config.dim_strength_pct, 40);
+  CHECK_EQ(strength.warnings.size(), size_t{1});
+  CHECK_EQ(ConfigFromJson(R"({"dim_delay_s": 10})").config.dim_delay_s, 180);
+  CHECK_EQ(ConfigFromJson(R"({"dim_recover_ms": 6000})").config.dim_recover_ms, 500);
+  CHECK_EQ(ConfigFromJson(R"({"dim_large_fraction_pct": 5})").config.dim_large_fraction_pct, 40);
+}
+
+TEST(config_dim_large_delay_not_before_delay) {
+  const auto r = ConfigFromJson(R"({"dim_delay_s": 600, "dim_large_delay_s": 400})");
+  CHECK_EQ(r.config.dim_delay_s, 180);
+  CHECK_EQ(r.config.dim_large_delay_s, 1200);
+  CHECK(AnyContains(r.warnings, "dim_large_delay_s"));
+}
+
+TEST(config_dim_exclude_lowercased) {
+  const auto r = ConfigFromJson(R"({"dim_exclude": ["Photoshop.EXE", " vlc.exe "]})");
+  CHECK_EQ(r.config.dim_exclude.size(), size_t{2});
+  CHECK_EQ(r.config.dim_exclude[0], std::string("photoshop.exe"));
+  CHECK_EQ(r.config.dim_exclude[1], std::string("vlc.exe"));
+}

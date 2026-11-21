@@ -164,6 +164,17 @@ ConfigLoadResult ConfigFromJson(std::string_view raw) {
     else if (key == "hotkey_display_off") r.String(key, v, c.hotkey_display_off);
     else if (key == "allow_tearing") r.Bool(key, v, c.allow_tearing);
     else if (key == "autostart") r.Bool(key, v, c.autostart);
+    else if (key == "dim_enabled") r.Bool(key, v, c.dim_enabled);
+    else if (key == "dim_strength_pct") r.Int(key, v, 10, 80, c.dim_strength_pct);
+    else if (key == "dim_delay_s") r.Int(key, v, 30, 3600, c.dim_delay_s);
+    else if (key == "dim_ramp_s") r.Int(key, v, 30, 3600, c.dim_ramp_s);
+    else if (key == "dim_recover_ms") r.Int(key, v, 100, 5000, c.dim_recover_ms);
+    else if (key == "dim_large_enabled") r.Bool(key, v, c.dim_large_enabled);
+    else if (key == "dim_large_delay_s") r.Int(key, v, 300, 14400, c.dim_large_delay_s);
+    else if (key == "dim_large_strength_pct") r.Int(key, v, 5, 80, c.dim_large_strength_pct);
+    else if (key == "dim_bright_threshold_pct") r.Int(key, v, 5, 100, c.dim_bright_threshold_pct);
+    else if (key == "dim_large_fraction_pct") r.Int(key, v, 10, 90, c.dim_large_fraction_pct);
+    else if (key == "dim_exclude") r.List(key, v, c.dim_exclude);
     else if (key == "log_level") {
       std::string level = c.log_level;
       r.String(key, v, level);
@@ -182,6 +193,12 @@ ConfigLoadResult ConfigFromJson(std::string_view raw) {
   FixRange(r, "transition_min_s/transition_max_s", c.transition_min_s, c.transition_max_s, d.transition_min_s,
            d.transition_max_s);
   FixHotkeys(r, c);
+  if (c.dim_large_delay_s < c.dim_delay_s) {
+    r.Warn("dim_delay_s/dim_large_delay_s: le grandi aree devono iniziare dopo gli elementi piccoli, uso " +
+           std::to_string(d.dim_delay_s) + "-" + std::to_string(d.dim_large_delay_s));
+    c.dim_delay_s = d.dim_delay_s;
+    c.dim_large_delay_s = d.dim_large_delay_s;
+  }
   return result;
 }
 
@@ -210,6 +227,17 @@ std::string ConfigToJson(const Config& c) {
   o.Set("allow_tearing", JsonValue(c.allow_tearing));
   o.Set("autostart", JsonValue(c.autostart));
   o.Set("log_level", JsonValue(c.log_level));
+  o.Set("dim_enabled", JsonValue(c.dim_enabled));
+  o.Set("dim_strength_pct", JsonValue(c.dim_strength_pct));
+  o.Set("dim_delay_s", JsonValue(c.dim_delay_s));
+  o.Set("dim_ramp_s", JsonValue(c.dim_ramp_s));
+  o.Set("dim_recover_ms", JsonValue(c.dim_recover_ms));
+  o.Set("dim_large_enabled", JsonValue(c.dim_large_enabled));
+  o.Set("dim_large_delay_s", JsonValue(c.dim_large_delay_s));
+  o.Set("dim_large_strength_pct", JsonValue(c.dim_large_strength_pct));
+  o.Set("dim_bright_threshold_pct", JsonValue(c.dim_bright_threshold_pct));
+  o.Set("dim_large_fraction_pct", JsonValue(c.dim_large_fraction_pct));
+  o.Set("dim_exclude", list(c.dim_exclude));
   return SerializeJson(o) + "\n";
 }
 

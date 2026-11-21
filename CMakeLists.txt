@@ -27,6 +27,9 @@ add_library(oled_core STATIC
   src/core/wear_stats.cpp
   src/core/app_history.cpp
   src/core/ui_protocol.cpp
+  src/core/dim_params.cpp
+  src/core/dim_model.cpp
+  src/core/dim_schedule.cpp
 )
 target_include_directories(oled_core PUBLIC src/core)
 
@@ -46,6 +49,8 @@ add_executable(oled-guard-tests
   tests/test_wear_stats.cpp
   tests/test_app_history.cpp
   tests/test_ui_protocol.cpp
+  tests/test_dim_model.cpp
+  tests/test_dim_schedule.cpp
 )
 target_include_directories(oled-guard-tests PRIVATE tests)
 target_link_libraries(oled-guard-tests PRIVATE oled_core)

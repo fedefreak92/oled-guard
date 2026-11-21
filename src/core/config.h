@@ -30,6 +30,19 @@ struct Config {
   bool autostart = false;
   std::string log_level = "info";
 
+  // Oscuramento delle aree statiche (elementi piccoli fermi e luminosi).
+  bool dim_enabled = true;
+  int dim_strength_pct = 40;          // 10-80
+  int dim_delay_s = 180;              // 30-3600
+  int dim_ramp_s = 300;               // 30-3600
+  int dim_recover_ms = 500;           // 100-5000
+  bool dim_large_enabled = false;
+  int dim_large_delay_s = 1200;       // 300-14400
+  int dim_large_strength_pct = 20;    // 5-80
+  int dim_bright_threshold_pct = 25;  // 5-100, % del bianco SDR in luce lineare
+  int dim_large_fraction_pct = 40;    // 10-90
+  std::vector<std::string> dim_exclude;
+
   bool operator==(const Config&) const = default;
 };
 
