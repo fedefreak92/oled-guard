@@ -26,6 +26,7 @@
 #include "pause_rules.h"
 #include "render_thread.h"
 #include "single_instance.h"
+#include "stats_file.h"
 #include "tray.h"
 #include "ui_window.h"
 #include "windows_settings.h"
@@ -59,6 +60,8 @@ class App {
   // Esegue una modifica alle impostazioni di Windows su un thread di lavoro.
   void RunWindowsTask(std::function<void()> task);
   void PushWindowsToUi();
+  static std::filesystem::path StatsPath();
+  void SaveStatsNow();
   void StartEmergencyGuard();
 
   // Valuta i segnali di pausa e crea/distrugge l'overlay di conseguenza.

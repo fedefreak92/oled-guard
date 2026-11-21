@@ -109,6 +109,17 @@ void ShiftScheduler::Resume(double now_ms) {
   paused_at_ms_.reset();
 }
 
+void ShiftScheduler::MoveSoon(double now_ms) {
+  const double now = ClampTime(now_ms);
+  Advance(now);
+  if (phase_ == Phase::Dwell && phase_end_ms_ > now + 500) phase_end_ms_ = now + 500;
+}
+
+void SharedShift::MoveSoon(double now_ms) {
+  std::lock_guard lock(mutex_);
+  scheduler_.MoveSoon(now_ms);
+}
+
 SharedShift::SharedShift(uint64_t seed, int amplitude, ShiftTiming timing, double now_ms)
     : scheduler_(seed, amplitude, timing, now_ms) {}
 

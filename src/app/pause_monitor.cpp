@@ -4,6 +4,7 @@
 #include <shellapi.h>
 #include <wtsapi32.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <string>
 
@@ -61,6 +62,31 @@ std::string ProcessName(DWORD pid) {
 }
 
 }  // namespace
+
+std::vector<std::string> ListWindowedProcesses() {
+  std::vector<DWORD> pids;
+  EnumWindows(
+      [](HWND hwnd, LPARAM lp) -> BOOL {
+        if (!IsWindowVisible(hwnd) || GetWindowTextLengthW(hwnd) == 0 || GetWindow(hwnd, GW_OWNER)) return TRUE;
+        if (GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) return TRUE;
+        BOOL cloaked = FALSE;  // finestre UWP sospese o su altri desktop virtuali
+        DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
+        if (cloaked) return TRUE;
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (pid != GetCurrentProcessId()) reinterpret_cast<std::vector<DWORD>*>(lp)->push_back(pid);
+        return TRUE;
+      },
+      reinterpret_cast<LPARAM>(&pids));
+  std::vector<std::string> names;
+  for (DWORD pid : pids) {
+    std::string name = ProcessName(pid);
+    if (!name.empty()) names.push_back(std::move(name));
+  }
+  std::sort(names.begin(), names.end());
+  names.erase(std::unique(names.begin(), names.end()), names.end());
+  return names;
+}
 
 PauseMonitor::PauseMonitor() { inactive_ = GetSystemMetrics(SM_REMOTESESSION) != 0; }
 

@@ -72,6 +72,7 @@ add_executable(oled-guard WIN32
   src/app/single_instance.cpp
   src/app/ui_window.cpp
   src/app/windows_settings.cpp
+  src/app/stats_file.cpp
   src/app/oled-guard.manifest
 )
 

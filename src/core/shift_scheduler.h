@@ -31,6 +31,8 @@ class ShiftScheduler {
   // Overlay ricreato: la fase riprende da dove era, slittata della durata della pausa.
   // Senza una Pause precedente riparte con una sosta nuova dalla posizione corrente.
   void Resume(double now_ms);
+  // Se in sosta, la prossima transizione parte entro 500 ms ("Prova ora").
+  void MoveSoon(double now_ms);
 
  private:
   enum class Phase { Dwell, Transition };
@@ -62,6 +64,7 @@ class SharedShift {
   void Reconfigure(int amplitude, ShiftTiming timing, double now_ms);
   void Pause(double now_ms);
   void Resume(double now_ms);
+  void MoveSoon(double now_ms);
 
  private:
   std::mutex mutex_;

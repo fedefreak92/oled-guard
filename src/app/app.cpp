@@ -5,6 +5,7 @@
 #include <wtsapi32.h>
 
 #include <algorithm>
+#include <ctime>
 #include <functional>
 #include <random>
 #include <thread>
@@ -26,6 +27,10 @@ constexpr wchar_t kMainClass[] = L"OledGuardMain";
 constexpr UINT_PTR kTimerBeat = 1;
 constexpr UINT_PTR kTimerPause = 2;
 constexpr UINT_PTR kTimerConfigReload = 3;
+constexpr UINT_PTR kTimerStatsSave = 4;
+constexpr UINT_PTR kTimerTestShift = 5;
+constexpr UINT kStatsSaveMs = 60000;
+constexpr UINT kTestShiftMs = 30000;
 constexpr UINT kPausePollMs = 250;
 constexpr UINT kConfigQuietMs = 300;
 constexpr double kCaptureRetryMs = 30000;
@@ -114,6 +119,12 @@ int App::Run(HINSTANCE instance) {
   LogInfo("OLED Guard avviato");
   LoadInitialConfig();
   if (fast_shift_) LogInfo("Modalita' --fast-shift attiva");
+  {
+    StatsData stats = LoadStats(StatsPath());
+    wear_ = std::move(stats.wear);
+    app_history_ = std::move(stats.apps);
+    ui_rect_ = stats.ui_rect;
+  }
 
   std::random_device seed_source;
   const uint64_t seed = (static_cast<uint64_t>(seed_source()) << 32) ^ seed_source();
@@ -128,6 +139,7 @@ int App::Run(HINSTANCE instance) {
   }
   SetTimer(main_, kTimerBeat, 1000, nullptr);
   SetTimer(main_, kTimerPause, kPausePollMs, nullptr);
+  SetTimer(main_, kTimerStatsSave, kStatsSaveMs, nullptr);
   guard_.BeatMain();
   WTSRegisterSessionNotification(main_, NOTIFY_FOR_THIS_SESSION);
   foreground_hook_ = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, ForegroundHook, 0, 0,
@@ -160,6 +172,7 @@ int App::Run(HINSTANCE instance) {
   if (windows_worker_.joinable()) windows_worker_.join();
   ui_.Close();
   StopOverlay();
+  SaveStatsNow();
   if (foreground_hook_) UnhookWinEvent(foreground_hook_);
   tray_.Destroy();
   if (icon_) DestroyIcon(icon_);
@@ -249,8 +262,9 @@ void App::ReloadConfig() {
 }
 
 ShiftTiming App::EffectiveTiming() const {
-  // --fast-shift: solo per la verifica a occhio, soste di 3-5 s e transizioni di 1-2 s.
-  return fast_shift_ ? ShiftTiming{3000, 5000, 1000, 2000} : ToShiftTiming(config_);
+  // --fast-shift e "Prova ora": soste di 3-5 s e transizioni di 1-2 s.
+  const bool fast = fast_shift_ || testing_shift_until_ms_ > NowMs();
+  return fast ? ShiftTiming{3000, 5000, 1000, 2000} : ToShiftTiming(config_);
 }
 
 void App::ApplyConfig(const Config& next) {
@@ -310,6 +324,12 @@ void App::RegisterDisplayOffHotkey() {
     ShowNotice(L"Hotkey non disponibile",
                L"La combinazione " + Widen(config_.hotkey_display_off) + L" per spegnere lo schermo è già in uso.");
   }
+}
+
+std::filesystem::path App::StatsPath() { return AppDataDir() / L"stats.json"; }
+
+void App::SaveStatsNow() {
+  if (!SaveStats(StatsPath(), StatsData{wear_, app_history_, ui_rect_})) LogWarn("stats.json non salvato");
 }
 
 void App::RunWindowsTask(std::function<void()> task) {
@@ -401,7 +421,14 @@ void App::Tick() {
   SYSTEMTIME local{};
   GetLocalTime(&local);
   wear_.RollDay(local.wYear * 10000 + local.wMonth * 100 + local.wDay);
-  if (entered_pause) wear_.CountPause(reason);
+  if (entered_pause) {
+    wear_.CountPause(reason);
+    // Storico: quale app era in primo piano quando la protezione si e' fermata.
+    if (!in.foreground_process.empty()) {
+      app_history_.Record(in.foreground_process, reason, static_cast<int64_t>(std::time(nullptr)));
+      if (ui_.IsReady()) ui_.Post(AppsMessage(app_history_, config_));
+    }
+  }
   if (overlay_running_ && overlay_shown_) {
     current_offset_ = shift_->OffsetAt(now);
     if (trail_.empty() || !(trail_.back() == current_offset_)) {
@@ -567,6 +594,7 @@ void App::OpenUi() {
         ui_rect_ = last;
         LogInfo("Interfaccia chiusa ({} aggiornamenti di stato inviati)", ui_updates_sent_);
         ui_updates_sent_ = 0;
+        SaveStatsNow();
       },
       debug_, ui_rect_);
   if (ok) {
@@ -617,6 +645,48 @@ void App::OnUiMessage(const std::string& json) {
     case UiCommandType::DisplayOff:
       LogInfo("Schermo spento dall'interfaccia");
       TurnDisplayOff(main_);
+      break;
+    case UiCommandType::SetAppRule:
+    case UiCommandType::AddApp:
+    case UiCommandType::RemoveApp: {
+      const std::string exe = LowerUnicode(command->exe);
+      const AppRule rule = command->type == UiCommandType::SetAppRule ? command->rule
+                           : command->type == UiCommandType::AddApp  ? AppRule::AlwaysPause
+                                                                     : AppRule::Auto;
+      if (command->type == UiCommandType::RemoveApp) app_history_.Remove(exe);
+      LogInfo("Regola per {}: {}", exe, rule == AppRule::AlwaysPause ? "sempre in pausa"
+                                       : rule == AppRule::NeverPause ? "mai in pausa"
+                                                                     : "automatica");
+      ApplyConfig(NormalizedConfig(WithRule(config_, exe, rule)));
+      SaveConfig();
+      ui_.Post(AppsMessage(app_history_, config_));
+      break;
+    }
+    case UiCommandType::ListProcesses:
+      ui_.Post(ProcessesMessage(ListWindowedProcesses()));
+      break;
+    case UiCommandType::TestShift: {
+      const double now = NowMs();
+      testing_shift_until_ms_ = now + kTestShiftMs;
+      shift_->Reconfigure(config_.amplitude_px, EffectiveTiming(), now);
+      shift_->MoveSoon(now);
+      SetTimer(main_, kTimerTestShift, kTestShiftMs, nullptr);
+      LogInfo("Prova dello spostamento per {} s", kTestShiftMs / 1000);
+      PushUiUpdates(now);
+      break;
+    }
+    case UiCommandType::HotkeyCapture:
+      // Mentre l'utente registra una combinazione, le hotkey globali non devono scattare.
+      // L'uscita di emergenza resta sempre attiva.
+      if (command->on) {
+        if (toggle_hotkey_registered_) UnregisterHotKey(main_, kToggleHotkeyId);
+        if (display_off_hotkey_registered_) UnregisterHotKey(main_, kDisplayOffHotkeyId);
+        toggle_hotkey_registered_ = false;
+        display_off_hotkey_registered_ = false;
+      } else {
+        RegisterToggleHotkey();
+        RegisterDisplayOffHotkey();
+      }
       break;
     case UiCommandType::Window:
       // Mai chiudere WebView2 dentro un suo evento: si rimanda al ciclo dei messaggi.
@@ -762,6 +832,13 @@ LRESULT App::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
       if (wp == kTimerConfigReload) {
         KillTimer(main_, kTimerConfigReload);
         ReloadConfig();
+      }
+      if (wp == kTimerStatsSave) SaveStatsNow();
+      if (wp == kTimerTestShift) {
+        KillTimer(main_, kTimerTestShift);
+        testing_shift_until_ms_ = 0;
+        shift_->Reconfigure(config_.amplitude_px, EffectiveTiming(), NowMs());
+        LogInfo("Fine della prova dello spostamento");
       }
       return 0;
     case WM_HOTKEY:

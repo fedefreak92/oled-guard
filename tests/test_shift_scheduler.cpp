@@ -134,6 +134,19 @@ TEST(scheduler_reconfigure_shrinks_amplitude) {
   CHECK(std::abs(o.x) <= 1 && std::abs(o.y) <= 1);
 }
 
+TEST(scheduler_move_soon_shortens_dwell) {
+  // "Prova ora": la prossima mossa deve partire entro mezzo secondo anche a meta' sosta.
+  ShiftScheduler s(17, 2, kT, 0);
+  s.OffsetAt(1000);
+  s.MoveSoon(1000);
+  CHECK(s.NextChangeAt(1000) <= 1500);
+  // Durante una transizione non cambia nulla.
+  for (double t = 1000; t < 1600; t += 50) s.OffsetAt(t);
+  const double during = s.NextChangeAt(1600);
+  s.MoveSoon(1600);
+  CHECK_NEAR(s.NextChangeAt(1600), during, 1e-9);
+}
+
 TEST(shared_shift_matches_scheduler) {
   ShiftScheduler s(33, 2, kT, 0);
   SharedShift sh(33, 2, kT, 0);

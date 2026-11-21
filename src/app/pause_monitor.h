@@ -3,6 +3,9 @@
 
 #include <windows.h>
 
+#include <string>
+#include <vector>
+
 #include "monitors.h"
 #include "pause_rules.h"
 
@@ -21,5 +24,9 @@ class PauseMonitor {
   bool locked_ = false;
   bool inactive_ = false;
 };
+
+// Nomi .exe (minuscoli, unici, ordinati) dei processi con una finestra visibile e con
+// titolo, escluso questo processo. Per scegliere un'app da mettere in regola.
+std::vector<std::string> ListWindowedProcesses();
 
 }  // namespace oled
