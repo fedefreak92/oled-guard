@@ -76,6 +76,7 @@ calcolata da `Luma()` nel rilevamento.
 | **Concentrazione** | valore della zona peggiore / media delle zone. |
 | **Zone oltre il doppio** | numero di zone con valore > 2 × media, e % del pannello. |
 | **Usura evitata** | `luce tolta / luce prima` sulle celle ferme da almeno 60 s, in %, oggi e in totale. Luce tolta = luminanza × (1 − (1 − livello) × fattore luminosita'/bordi). |
+| **Rischio non protetto** | Come il Rischio, ma solo le celle il cui livello di oscuramento e' ancora ≤ 0,05 (non scurite). Serve all'avviso (decisione dell'utente: avvisare solo per le zone che la protezione non sta gia' scurendo); non compare come grafico. |
 | **Grafico del rischio** | Media del Rischio ogni 5 minuti; 7 giorni conservati. Intervalli senza misure (pausa, app chiusa) = vuoti, non zero. |
 | **App piu' usate (7 g)** | Secondi in primo piano per eseguibile, divisi in "protetto" (overlay a schermo) e "in pausa". |
 | **Usura per contenuto (7 g)** | Secondi per categoria: Interfaccia ferma e lavoro (Movimento ≤ 15%), Video e animazioni (> 15%), Giochi e schermo intero (pausa per `NotificationState`, `FullscreenWindow`, `Denylisted`), Assente (modalita' assente), Pausa manuale. Le altre pause (blocco, sessione inattiva, errori) non contano. |
@@ -107,8 +108,9 @@ azzerato prima di ogni passaggio (`ClearUnorderedAccessViewUint`), sommato con
 `InterlockedAdd` a virgola fissa:
 - per ognuna delle 576 zone: somma della luminanza arrivata al pannello (× 256) e
   numero di celle;
-- totali: celle (area in pixel), area a rischio, area in movimento, somma luminanza
-  prima, luce prima e luce tolta sulle celle ferme.
+- totali: celle (area in pixel), area a rischio, area a rischio non protetta (livello
+  ≤ 0,05), area in movimento, somma luminanza prima, luce prima e luce tolta sulle
+  celle ferme.
 Zona di una cella: `floor(cx × 32 / colonne)`, `floor(cy × 18 / righe)`. Il fattore
 luminosita'/bordi si calcola al centro della cella con la formula di `shade_model`
 (include il fattore della modalita' assente in corso). Le somme sono pesate per area in
@@ -143,7 +145,7 @@ livello e' 0).
   - Interrogazioni: app piu' usate (7 g), quote per contenuto (7 g), giorni di fila e
     record, usura evitata oggi/totale, zona peggiore/concentrazione/zone oltre il doppio.
 - `alert_model.*`: soglie Bassa 10% / Media 20% / Alta 35%; il conteggio parte quando il
-  Rischio supera la soglia e si azzera dopo 2 minuti consecutivi sotto; avviso quando il
+  **Rischio non protetto** supera la soglia e si azzera dopo 2 minuti consecutivi sotto; avviso quando il
   conteggio raggiunge `alert_after_min`; al massimo un avviso all'ora.
 
 ### 6.3 App (thread UI)
@@ -154,8 +156,8 @@ livello e' 0).
 - All'avvio: sessione +1. Salvataggio di `history.json` ogni 60 s e all'uscita
   (scrittura atomica come `stats.json`); file mancante o rovinato = storico vuoto con un
   avviso nel log, mai un errore all'avvio.
-- Avviso: `tray_.ShowBalloon("OLED Guard", "Da 60 minuti il 24% dello schermo e' fermo e
-  luminoso. Una pausa o \"Spegni schermo\" aiutano il pannello.")` e un evento
+- Avviso: `tray_.ShowBalloon("OLED Guard", "Da 60 minuti il 24% dello schermo e' fermo,
+  luminoso e non protetto. Una pausa o \"Spegni schermo\" aiutano il pannello.")` e un evento
   "Avviso: schermo fermo da 60 min" nell'Attivita' recente.
 - Statistiche per app spente (Privacy): i secondi per app non si registrano; quelli gia'
   salvati restano finche' non si cancella lo storico.
