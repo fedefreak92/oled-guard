@@ -33,10 +33,9 @@ TEST(motion_window_caret_is_not) {
   for (int i = 0; i < 41; ++i) a.AddSecond(0);
   CHECK(!a.Continuous());
   MotionWindow b;
+  for (int i = 0; i < 40; ++i) b.AddSecond(0);
   for (int i = 0; i < 20; ++i) b.AddSecond(30);
   CHECK(b.Continuous());
-  b.Reset();
-  CHECK(!b.Continuous());
 }
 
 TEST(motion_window_forgets_old_seconds) {
@@ -98,4 +97,19 @@ TEST(away_factor_ramp) {
   CHECK_NEAR(AwayFactorAt(since + 10000, since, 0.3), 0.3, 1e-9);
   CHECK_NEAR(AwayFactorAt(since + 99999, since, 0.3), 0.3, 1e-9);
   CHECK_NEAR(AwayFactorAt(since + 5000, -1, 0.3), 1.0, 1e-9);
+}
+
+// Dopo un azzeramento (overlay nascosto per un attimo) mancano i dati: finche' non c'e'
+// un minuto intero di campioni si considera "in movimento", cosi' un video in finestra
+// non viene scurito per errore.
+TEST(motion_window_without_full_minute_counts_as_moving) {
+  MotionWindow w;
+  for (int i = 0; i < 60; ++i) w.AddSecond(24);
+  w.Reset();
+  for (int i = 0; i < 59; ++i) {
+    w.AddSecond(0);
+    CHECK(w.Continuous());
+  }
+  w.AddSecond(0);
+  CHECK(!w.Continuous());
 }

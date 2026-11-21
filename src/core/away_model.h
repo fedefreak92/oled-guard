@@ -15,12 +15,14 @@ inline constexpr double kAwayRampMs = 10000;
 class MotionWindow {
  public:
   void AddSecond(int new_frames);  // un campione al secondo
+  // Vero anche senza un minuto intero di campioni (dopo Reset): senza dati non si scurisce.
   bool Continuous() const;
   void Reset();
 
  private:
   std::array<int, kMotionWindowS> frames_{};
   int next_ = 0;
+  int samples_ = 0;
 };
 
 struct AwayInputs {

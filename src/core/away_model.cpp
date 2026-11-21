@@ -7,9 +7,11 @@ namespace oled {
 void MotionWindow::AddSecond(int new_frames) {
   frames_[next_] = new_frames;
   next_ = (next_ + 1) % kMotionWindowS;
+  if (samples_ < kMotionWindowS) ++samples_;
 }
 
 bool MotionWindow::Continuous() const {
+  if (samples_ < kMotionWindowS) return true;
   const auto moving = std::count_if(frames_.begin(), frames_.end(), [](int f) { return f >= kMovingSecondFrames; });
   return moving >= kContinuousSeconds;
 }
@@ -17,6 +19,7 @@ bool MotionWindow::Continuous() const {
 void MotionWindow::Reset() {
   frames_.fill(0);
   next_ = 0;
+  samples_ = 0;
 }
 
 bool AwayModel::Update(const AwayInputs& in) {
