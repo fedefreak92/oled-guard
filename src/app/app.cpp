@@ -1,5 +1,6 @@
 #include "app.h"
 
+#include <dwmapi.h>
 #include <shellapi.h>
 #include <wtsapi32.h>
 
@@ -265,6 +266,7 @@ void App::ApplyConfig(const Config& next) {
     StopOverlay();
   }
   Tick();
+  if (ui_.IsReady()) ui_.Post(ConfigMessage(config_));
 }
 
 void App::SaveConfig() {
@@ -307,6 +309,12 @@ void App::StartEmergencyGuard() {
 void App::RefreshMonitor() {
   monitor_ = FindMonitor(config_.monitor);
   monitor_valid_ = true;
+  // Latenza aggiunta stimata: un periodo di refresh (frame catturato e ripresentato).
+  DWM_TIMING_INFO timing{};
+  timing.cbSize = sizeof(timing);
+  if (SUCCEEDED(DwmGetCompositionTimingInfo(nullptr, &timing)) && timing.rateRefresh.uiNumerator > 0) {
+    latency_ms_ = 1000.0 * timing.rateRefresh.uiDenominator / timing.rateRefresh.uiNumerator;
+  }
   // Un display ruotato resta in pausa finche' la configurazione non cambia.
   if (monitor_ && !IsSupportedRotation(monitor_->rotation)) display_rotated_ = true;
 }
@@ -331,6 +339,8 @@ void App::Tick() {
   const bool paused = hysteresis_.Update(raw, now);
   const PauseReason reason = hysteresis_.Reason();
 
+  last_foreground_ = in.foreground_process;
+  const bool entered_pause = !first_tick_ && paused && !last_paused_;
   if (first_tick_ || paused != last_paused_ || (paused && reason != last_reason_)) {
     if (paused) {
       LogInfo("In pausa: {} (processo in primo piano: {})", PauseReasonText(reason),
@@ -344,11 +354,77 @@ void App::Tick() {
     UpdateTrayTooltip();
   }
 
+  // Statistiche: tempo con l'overlay a schermo sulla posizione corrente.
+  SYSTEMTIME local{};
+  GetLocalTime(&local);
+  wear_.RollDay(local.wYear * 10000 + local.wMonth * 100 + local.wDay);
+  if (entered_pause) wear_.CountPause(reason);
+  if (overlay_running_ && overlay_shown_) {
+    current_offset_ = shift_->OffsetAt(now);
+    if (trail_.empty() || !(trail_.back() == current_offset_)) {
+      trail_.push_back(current_offset_);
+      if (trail_.size() > 4) trail_.erase(trail_.begin());
+    }
+    // Buchi lunghi (sospensione, blocchi) non contano come tempo protetto.
+    if (last_wear_ms_ > 0) wear_.AddProtectedTime(current_offset_, std::min(now - last_wear_ms_, 1000.0));
+    last_wear_ms_ = now;
+  } else {
+    last_wear_ms_ = 0;
+  }
+
   if (!paused && !overlay_running_) {
     if (!StartOverlay()) capture_failed_until_ms_ = now + kCaptureRetryMs;
   } else if (paused && overlay_running_) {
     StopOverlay();
   }
+  PushUiUpdates(now);
+}
+
+UiState App::BuildUiState(double now) {
+  UiState s;
+  s.paused = last_paused_;
+  s.manual_pause = manual_pause_;
+  s.testing_shift = testing_shift_until_ms_ > now;
+  s.reason = last_reason_;
+  s.foreground_process = last_foreground_;
+  s.offset = current_offset_;
+  s.trail = trail_;
+  // Lo scheduler si interroga solo con l'overlay attivo: in pausa il suo tempo e' fermo.
+  if (overlay_running_) s.next_move_ms = std::max(0.0, shift_->NextChangeAt(now) - now);
+  s.amplitude = config_.amplitude_px;
+  if (monitor_) {
+    s.monitor_name = Narrow(monitor_->friendly_name);
+    s.width = monitor_->rect.right - monitor_->rect.left;
+    s.height = monitor_->rect.bottom - monitor_->rect.top;
+    s.hdr = monitor_->hdr;
+  }
+  s.latency_ms = latency_ms_;
+  return s;
+}
+
+void App::PushUiUpdates(double now) {
+  if (!ui_.IsReady()) return;
+  // Lo stato al massimo 4 volte al secondo (Tick arriva anche dagli eventi di sistema).
+  if (now - last_state_push_ms_ >= 200) {
+    ui_.Post(StateMessage(BuildUiState(now)));
+    last_state_push_ms_ = now;
+    ++ui_updates_sent_;
+  }
+  if (now - last_stats_push_ms_ >= 5000) {
+    ui_.Post(StatsMessage(wear_, config_.amplitude_px));
+    last_stats_push_ms_ = now;
+  }
+}
+
+void App::PushAllToUi() {
+  if (!ui_.IsReady()) return;
+  const double now = NowMs();
+  ui_.Post(ConfigMessage(config_));
+  ui_.Post(StatsMessage(wear_, config_.amplitude_px));
+  ui_.Post(AppsMessage(app_history_, config_));
+  ui_.Post(StateMessage(BuildUiState(now)));
+  last_state_push_ms_ = now;
+  last_stats_push_ms_ = now;
 }
 
 bool App::StartOverlay() {
@@ -445,7 +521,8 @@ void App::OpenUi() {
       instance_, [this](const std::string& json) { OnUiMessage(json); },
       [this](const RECT& last) {
         ui_rect_ = last;
-        LogInfo("Interfaccia chiusa");
+        LogInfo("Interfaccia chiusa ({} aggiornamenti di stato inviati)", ui_updates_sent_);
+        ui_updates_sent_ = 0;
       },
       debug_, ui_rect_);
   if (ok) {
@@ -465,7 +542,22 @@ void App::OnUiMessage(const std::string& json) {
     case UiCommandType::Ready:
       ui_.MarkReady();
       LogInfo("Interfaccia pronta");
-      ui_.Post(ConfigMessage(config_));
+      PushAllToUi();
+      break;
+    case UiCommandType::SetConfig: {
+      const ConfigLoadResult result = ApplyConfigPatch(config_, command->patch);
+      if (result.parse_failed || !result.warnings.empty()) {
+        // Un valore non valido dalla pagina non sostituisce quello attuale con un default.
+        for (const auto& w : result.warnings) LogWarn("Interfaccia: {}", w);
+        ui_.Post(ConfigMessage(config_));
+        break;
+      }
+      ApplyConfig(NormalizedConfig(result.config));
+      SaveConfig();
+      break;
+    }
+    case UiCommandType::SetManualPause:
+      SetManualPause(command->on);
       break;
     case UiCommandType::Window:
       // Mai chiudere WebView2 dentro un suo evento: si rimanda al ciclo dei messaggi.

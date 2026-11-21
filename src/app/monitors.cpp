@@ -67,6 +67,11 @@ std::vector<MonitorInfo> EnumerateMonitors() {
       info.rect = desc.DesktopCoordinates;
       info.adapter_luid = adapter_desc.AdapterLuid;
       info.rotation = desc.Rotation;
+      ComPtr<IDXGIOutput6> output6;
+      if (SUCCEEDED(output.As(&output6))) {
+        DXGI_OUTPUT_DESC1 desc1{};
+        if (SUCCEEDED(output6->GetDesc1(&desc1))) info.hdr = desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
+      }
       MONITORINFO mi{sizeof(mi)};
       if (GetMonitorInfoW(desc.Monitor, &mi)) info.primary = (mi.dwFlags & MONITORINFOF_PRIMARY) != 0;
       result.push_back(std::move(info));

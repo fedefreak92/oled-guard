@@ -19,6 +19,7 @@ struct MonitorInfo {
   LUID adapter_luid{};
   bool primary = false;
   DXGI_MODE_ROTATION rotation = DXGI_MODE_ROTATION_IDENTITY;
+  bool hdr = false;  // desktop in HDR (colorspace ST.2084)
 };
 
 std::vector<MonitorInfo> EnumerateMonitors();

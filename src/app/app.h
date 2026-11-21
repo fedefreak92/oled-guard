@@ -10,8 +10,11 @@
 #include <utility>
 #include <vector>
 
+#include "app_history.h"
 #include "config.h"
 #include "config_file.h"
+#include "ui_protocol.h"
+#include "wear_stats.h"
 #include "emergency.h"
 #include "monitors.h"
 #include "overlay_window.h"
@@ -60,6 +63,9 @@ class App {
   // Interfaccia.
   void OpenUi();
   void OnUiMessage(const std::string& json);
+  UiState BuildUiState(double now);
+  void PushUiUpdates(double now);
+  void PushAllToUi();
 
   // Tray.
   void OnTrayEvent(UINT event);
@@ -94,6 +100,19 @@ class App {
   RenderThread render_;
   UiWindow ui_;
   std::optional<RECT> ui_rect_;
+  double last_state_push_ms_ = 0;
+  double last_stats_push_ms_ = 0;
+  unsigned ui_updates_sent_ = 0;
+
+  // Statistiche e dati per l'interfaccia.
+  WearStats wear_;
+  AppHistory app_history_;
+  Offset current_offset_{};
+  std::vector<Offset> trail_;
+  double last_wear_ms_ = 0;
+  double latency_ms_ = 0;
+  double testing_shift_until_ms_ = 0;
+  std::string last_foreground_;
   // Stato dello shift: appartiene all'App e sopravvive alle pause dell'overlay.
   std::unique_ptr<SharedShift> shift_;
 

@@ -2,29 +2,131 @@
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OLED Guard</title>
-<style>
-  html, body { margin: 0; height: 100%; background: #000; color: #ddd; font-family: "Cascadia Mono", Consolas, monospace; }
-  .cap { display: flex; align-items: center; height: 40px; padding: 0 0 0 20px; font-size: 11px; letter-spacing: 2px; color: #999; app-region: drag; }
-  .cap button { app-region: no-drag; background: none; border: 0; color: #777; width: 46px; height: 40px; font-size: 14px; }
-  .cap button:hover { background: #1a1a1a; color: #fff; }
-  .cap .sp { flex: 1; }
-  #out { padding: 20px; font-size: 12px; white-space: pre-wrap; color: #888; }
-</style>
+<link rel="stylesheet" href="app.css">
 </head>
 <body>
-<div class="cap">OLED GUARD<span class="sp"></span>
-  <button onclick="send({cmd:'window',action:'minimize'})">&#8212;</button>
-  <button onclick="send({cmd:'window',action:'maximize'})">&#9633;</button>
-  <button onclick="send({cmd:'window',action:'close'})">&#10005;</button>
-</div>
-<div id="out">in attesa dell'app...</div>
-<script>
-  const wv = window.chrome && window.chrome.webview;
-  function send(o) { if (wv) wv.postMessage(JSON.stringify(o)); }
-  if (wv) wv.addEventListener('message', e => { document.getElementById('out').textContent = JSON.stringify(e.data, null, 2); });
-  send({cmd: 'ready'});
-</script>
+<header class="cap">
+  <span class="cap-title" id="capTitle">OLED GUARD</span>
+  <span class="st" id="statusPill">...</span>
+  <span class="cap-fill"></span>
+  <button class="wb" data-win="minimize" title="Riduci a icona">&#8212;</button>
+  <button class="wb" data-win="maximize" title="Ingrandisci">&#9633;</button>
+  <button class="wb close" data-win="close" title="Chiudi">&#10005;</button>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button class="on" data-tab="stato">Stato</button>
+  <button data-tab="spostamento">Spostamento</button>
+  <button data-tab="app">Giochi e app</button>
+  <button data-tab="windows">Windows per OLED</button>
+</nav>
+
+<main>
+  <!-- STATO -->
+  <section class="tab on" id="tab-stato">
+    <div class="stato">
+      <div class="radar-wrap">
+        <svg id="radar" viewBox="0 0 300 300" aria-label="Posizioni dello spostamento"></svg>
+        <div class="radar-caption">tempo su ogni posizione · totale</div>
+      </div>
+      <div>
+        <div class="countdown"><span id="countdown">--:--</span><small id="countdownLabel">PROSSIMA MOSSA</small></div>
+        <div class="rows">
+          <div class="row"><span class="k">Offset</span><span class="v" id="vOffset">-</span></div>
+          <div class="row"><span class="k">Protetta oggi</span><span class="v" id="vToday">-</span></div>
+          <div class="row"><span class="k">Protetta in totale</span><span class="v" id="vTotal">-</span></div>
+          <div class="row hl"><span class="k">Uniformita'</span><span class="v" id="vUniform">-</span></div>
+          <div class="row"><span class="k">Pause oggi</span><span class="v" id="vPauses">-</span></div>
+          <div class="row"><span class="k">In primo piano</span><span class="v" id="vForeground">-</span></div>
+          <div class="row"><span class="k">Latenza aggiunta</span><span class="v" id="vLatency">-</span></div>
+        </div>
+        <div class="actions">
+          <button class="btn" id="btnPause">Pausa manuale</button>
+          <button class="btn ghost" id="btnTestFromStato">Prova lo spostamento</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SPOSTAMENTO -->
+  <section class="tab" id="tab-spostamento">
+    <div class="cols">
+      <div>
+        <div class="sec">Ampiezza</div>
+        <div class="row"><span class="k">Massimo spostamento (px)</span>
+          <span class="seg" id="ampSeg"><button data-amp="1">1</button><button data-amp="2">2</button><button data-amp="3">3</button></span></div>
+        <div class="row"><span class="k">Posizioni usate</span><span class="mini" id="ampMini"></span></div>
+        <div class="row"><span class="k">Sfasamento medio dei clic</span><span class="v" id="vClick">-</span></div>
+
+        <div class="sec gap">Tempi</div>
+        <div class="row col">
+          <div class="row-head"><span class="k">Sosta fra una mossa e l'altra</span><span class="v" id="vDwell">-</span></div>
+          <div class="dual" id="dualDwell"><input type="range" min="5" max="180" step="1"><input type="range" min="5" max="180" step="1"></div>
+        </div>
+        <div class="row col">
+          <div class="row-head"><span class="k">Durata della transizione</span><span class="v" id="vTrans">-</span></div>
+          <div class="dual" id="dualTrans"><input type="range" min="0.5" max="15" step="0.5"><input type="range" min="0.5" max="15" step="0.5"></div>
+        </div>
+      </div>
+      <div>
+        <div class="sec">Prova</div>
+        <div class="row"><span class="k">Spostamento accelerato per 30 s</span><button class="btn solid" id="btnTest">Prova ora</button></div>
+
+        <div class="sec gap">Tasti rapidi</div>
+        <div class="row"><span class="k">Pausa / riprendi</span><button class="key" data-hotkey="hotkey_toggle">-</button></div>
+        <div class="row"><span class="k">Spegni schermo ora</span><button class="key" data-hotkey="hotkey_display_off">-</button></div>
+        <div class="row"><span class="k">Uscita di emergenza</span><button class="key" data-hotkey="hotkey_emergency_exit">-</button></div>
+        <div class="hint" id="hotkeyHint">Clicca un tasto rapido e premi la nuova combinazione (Esc per annullare).</div>
+
+        <div class="sec gap">Avanzate</div>
+        <div class="row col">
+          <div class="row-head"><span class="k">Ritardo della ripresa dopo un gioco</span><span class="v" id="vResume">-</span></div>
+          <input type="range" class="single" id="rangeResume" min="0" max="10000" step="250">
+        </div>
+        <div class="row"><span class="k">Tearing (solo con VRR attivo)</span><button class="toggle" data-toggle="allow_tearing">OFF</button></div>
+        <div class="row"><span class="k">Avvio automatico con Windows</span><button class="toggle" data-toggle="autostart">OFF</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- GIOCHI E APP -->
+  <section class="tab" id="tab-app">
+    <div class="sec">Rilevate di recente</div>
+    <table class="apps">
+      <thead><tr><th>App</th><th>Motivo</th><th>Ultima volta</th><th>Volte</th><th>Regola</th></tr></thead>
+      <tbody id="appsBody"></tbody>
+    </table>
+    <div class="empty" id="appsEmpty">Nessuna app ha ancora messo in pausa la protezione.</div>
+    <div class="add">
+      <input id="addExe" placeholder="nome dell'app, es. gioco.exe" maxlength="260" spellcheck="false">
+      <button class="btn ghost" id="btnProcesses">App aperte</button>
+      <button class="btn" id="btnAdd">Metti sempre in pausa</button>
+    </div>
+    <div class="proc" id="procList" hidden></div>
+
+    <div class="sec gap">Pausa automatica</div>
+    <div class="row"><span class="k">Giochi DirectX a schermo intero, presentazioni, schermo assente</span><button class="toggle" data-toggle="pause_on_notification_state">ON</button></div>
+    <div class="row"><span class="k">Qualsiasi finestra a tutto schermo (borderless, video)</span><button class="toggle" data-toggle="pause_on_fullscreen_window">ON</button></div>
+  </section>
+
+  <!-- WINDOWS PER OLED -->
+  <section class="tab" id="tab-windows">
+    <div class="score">
+      <b id="winScore">-/-</b><span>IMPOSTAZIONI CONSIGLIATE ATTIVE</span>
+      <span class="cap-fill"></span>
+      <button class="btn solid" id="btnApplyAll">Applica tutti i consigli</button>
+      <button class="btn ghost" id="btnRestoreAll">Ripristina come prima</button>
+    </div>
+    <div id="winList"></div>
+    <div class="row gap"><span class="k">Spegni lo schermo adesso (la TV va in standby, si riaccende muovendo il mouse)</span><button class="btn" id="btnDisplayOff">Spegni schermo</button></div>
+    <div class="hint">Ogni modifica parte solo da un tuo clic. Il valore originale viene salvato e "Ripristina come prima" lo rimette.</div>
+  </section>
+</main>
+
+<div class="toast" id="toast" hidden></div>
+<script src="app.js"></script>
 </body>
 </html>
