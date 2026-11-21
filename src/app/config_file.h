@@ -5,6 +5,7 @@
 
 #include <filesystem>
 #include <optional>
+#include <string>
 #include <thread>
 
 #include "config.h"
@@ -22,6 +23,9 @@ class ConfigFile {
   bool Save(const Config& config);
   // true se il file e' cambiato dall'ultima Load/Save (data di modifica).
   bool ChangedOnDisk() const;
+  // false se il file su disco esiste ma non si riesce a leggere come config (es.
+  // l'utente lo sta modificando): in quel caso non va sovrascritto.
+  bool OnDiskIsValid() const;
 
   // Invia `msg` a `notify` quando qualcosa cambia nella cartella del file.
   bool StartWatching(HWND notify, UINT msg);
@@ -29,6 +33,7 @@ class ConfigFile {
 
  private:
   std::optional<std::filesystem::file_time_type> WriteTime() const;
+  std::optional<std::string> ReadText() const;
 
   std::filesystem::path path_;
   std::optional<std::filesystem::file_time_type> known_write_time_;

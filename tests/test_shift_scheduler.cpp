@@ -68,11 +68,45 @@ TEST(scheduler_next_change_is_when_offset_changes) {
 
 TEST(scheduler_resume_keeps_offset) {
   ShiftScheduler s(8, 2, kT, 0);
+  for (double t = 0; t <= 200000; t += 500) s.OffsetAt(t);
   const Offset before = s.OffsetAt(200000);
+  s.Pause(200000);
   const double resumed = 200000 + 7.2e6;
   s.Resume(resumed);
   CHECK_EQ(s.OffsetAt(resumed), before);
-  CHECK_EQ(s.OffsetAt(resumed + 19999), before);
+}
+
+TEST(scheduler_pause_freezes_phase_timing) {
+  ShiftScheduler s(14, 2, kT, 0);
+  const double next_before = s.NextChangeAt(1000);
+  s.Pause(1000);
+  s.Resume(1000 + 3.6e6);
+  // Il tempo trascorso in pausa non conta: il prossimo cambio slitta della durata della pausa.
+  CHECK_NEAR(s.NextChangeAt(1000 + 3.6e6), next_before + 3.6e6, 1e-6);
+  CHECK_EQ(s.OffsetAt(1000 + 3.6e6), (Offset{0, 0}));
+}
+
+TEST(scheduler_short_pause_cycles_still_progress) {
+  // Pause frequenti piu' brevi della sosta minima (es. alt-tab in un gioco ogni 5 s):
+  // lo spostamento deve comunque procedere col tempo attivo accumulato.
+  ShiftScheduler s(15, 2, kT, 0);
+  const Offset start = s.OffsetAt(0);
+  bool moved = false;
+  double t = 0;
+  for (int cycle = 0; cycle < 40 && !moved; ++cycle) {
+    for (int i = 0; i < 10; ++i, t += 500) moved = moved || !(s.OffsetAt(t) == start);
+    s.Pause(t);
+    t += 5000;
+    s.Resume(t);
+  }
+  CHECK(moved);
+}
+
+TEST(scheduler_resume_without_pause_is_safe) {
+  ShiftScheduler s(16, 2, kT, 0);
+  const Offset a = s.OffsetAt(1000);
+  s.Resume(2000);
+  CHECK_EQ(s.OffsetAt(2000), a);
 }
 
 TEST(scheduler_tolerates_time_going_backwards) {

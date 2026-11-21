@@ -5,6 +5,7 @@
 #include "ascii.h"
 #include "hotkey_parse.h"
 #include "json.h"
+#include "utf.h"
 
 namespace oled {
 namespace {
@@ -109,8 +110,23 @@ void FixHotkeys(Reader& reader, Config& c) {
 
 }  // namespace
 
-ConfigLoadResult ConfigFromJson(std::string_view text) {
+ConfigLoadResult ConfigFromJson(std::string_view raw) {
   ConfigLoadResult result;
+  // Blocco note puo' salvare in UTF-16 (LE o BE, con BOM): si converte in UTF-8.
+  std::string converted;
+  std::string_view text = raw;
+  const bool utf16_le = raw.substr(0, 2) == "\xFF\xFE";
+  const bool utf16_be = raw.substr(0, 2) == "\xFE\xFF";
+  if (utf16_le || utf16_be) {
+    const auto decoded = Utf16ToUtf8(raw.substr(2), utf16_le);
+    if (!decoded) {
+      result.parse_failed = true;
+      result.warnings.push_back("file in UTF-16 non valido: salvalo in UTF-8 (Blocco note: Salva con nome > Codifica)");
+      return result;
+    }
+    converted = *decoded;
+    text = converted;
+  }
   const auto parsed = ParseJson(text);
   if (!parsed.value) {
     result.parse_failed = true;

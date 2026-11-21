@@ -88,9 +88,25 @@ void ShiftScheduler::Reconfigure(int amplitude, ShiftTiming timing, double now_m
   if (!Inside(offset_, a) || target_outside) StartTransition(now);
 }
 
+void ShiftScheduler::Pause(double now_ms) {
+  const double now = ClampTime(now_ms);
+  Advance(now);
+  paused_at_ms_ = now;
+}
+
 void ShiftScheduler::Resume(double now_ms) {
-  // offset_ e' l'ultima posizione mostrata: si riparte da li' con una sosta nuova.
-  StartDwell(ClampTime(now_ms));
+  const double now = ClampTime(now_ms);
+  if (!paused_at_ms_) {
+    // offset_ e' l'ultima posizione mostrata: si riparte da li' con una sosta nuova.
+    StartDwell(now);
+    return;
+  }
+  // La fase slitta della durata della pausa: stessa posizione, stesso tempo residuo.
+  // Pause brevi e frequenti non congelano quindi lo spostamento.
+  const double gap = now - *paused_at_ms_;
+  phase_start_ms_ += gap;
+  phase_end_ms_ += gap;
+  paused_at_ms_.reset();
 }
 
 SharedShift::SharedShift(uint64_t seed, int amplitude, ShiftTiming timing, double now_ms)
@@ -109,6 +125,11 @@ double SharedShift::NextChangeAt(double now_ms) {
 void SharedShift::Reconfigure(int amplitude, ShiftTiming timing, double now_ms) {
   std::lock_guard lock(mutex_);
   scheduler_.Reconfigure(amplitude, timing, now_ms);
+}
+
+void SharedShift::Pause(double now_ms) {
+  std::lock_guard lock(mutex_);
+  scheduler_.Pause(now_ms);
 }
 
 void SharedShift::Resume(double now_ms) {

@@ -26,7 +26,10 @@ class ShiftScheduler {
   // Istante assoluto (ms) del prossimo possibile cambio di offset.
   double NextChangeAt(double now_ms);
   void Reconfigure(int amplitude, ShiftTiming timing, double now_ms);
-  // Dopo una pausa: riparte con una sosta dalla posizione corrente.
+  // Overlay distrutto: il tempo della fase corrente si ferma.
+  void Pause(double now_ms);
+  // Overlay ricreato: la fase riprende da dove era, slittata della durata della pausa.
+  // Senza una Pause precedente riparte con una sosta nuova dalla posizione corrente.
   void Resume(double now_ms);
 
  private:
@@ -46,6 +49,7 @@ class ShiftScheduler {
   Offset offset_{};
   std::optional<OffsetAnimator> animator_;
   double last_now_ms_ = 0;
+  std::optional<double> paused_at_ms_;
 };
 
 // Stessa API di ShiftScheduler, protetta da mutex: usata dal thread UI e dal render.
@@ -56,6 +60,7 @@ class SharedShift {
   Offset OffsetAt(double now_ms);
   double NextChangeAt(double now_ms);
   void Reconfigure(int amplitude, ShiftTiming timing, double now_ms);
+  void Pause(double now_ms);
   void Resume(double now_ms);
 
  private:

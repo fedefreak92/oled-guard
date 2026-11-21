@@ -17,6 +17,7 @@ namespace {
 
 constexpr int kMaxFailures = 5;
 constexpr UINT kMaxAcquireTimeoutMs = 500;
+constexpr double kMaxUnavailableMs = 30000;
 
 // Errori di avvio della duplicazione che passano da soli (UAC, lock, cambio modalita').
 bool IsTransient(HRESULT hr) {
@@ -107,6 +108,7 @@ RenderThread::SessionEnd RenderThread::RunSession() {
   Presenter presenter;
   ComPtr<ID3D11Texture2D> cache;
   DWORD backoff_ms = 100;
+  double unavailable_since = -1;  // inizio degli errori "transitori" consecutivi
   bool have_frame = false;
   bool shown = false;
   Offset last_drawn{INT_MIN, INT_MIN};
@@ -153,12 +155,22 @@ RenderThread::SessionEnd RenderThread::RunSession() {
           LogWarn("Render: DuplicateOutput1 fallito: {}", Hr(hr));
           return SessionEnd::Failed;
         }
+        // Lock e UAC mettono in pausa l'app entro pochi istanti; se la duplicazione resta
+        // indisponibile a lungo (es. altre app di cattura occupano tutti gli slot) non
+        // e' piu' un caso transitorio e la tray deve dirlo.
+        if (unavailable_since < 0) unavailable_since = NowMs();
+        if (NowMs() - unavailable_since > kMaxUnavailableMs) {
+          LogWarn("Render: duplicazione non disponibile da {} s ({})", kMaxUnavailableMs / 1000, Hr(hr));
+          Post(RenderEvent::CaptureFailed);
+          return SessionEnd::Stop;
+        }
         LogDebug("Render: duplicazione non disponibile ({}), nuovo tentativo tra {} ms", Hr(hr), backoff_ms);
         SleepMs(backoff_ms);
         backoff_ms = std::min<DWORD>(backoff_ms * 2, 2000);
         continue;
       }
       backoff_ms = 100;
+      unavailable_since = -1;
       if (!IsSupportedRotation(capture.Rotation())) {
         LogWarn("Render: display ruotato ({}), non supportato", static_cast<int>(capture.Rotation()));
         Post(RenderEvent::DisplayRotated);

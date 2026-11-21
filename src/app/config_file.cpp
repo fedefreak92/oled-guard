@@ -22,17 +22,33 @@ ConfigLoadResult ConfigFile::Load() {
     if (Save(result.config)) LogInfo("Creato il file di configurazione con i valori predefiniti");
     return result;
   }
-  std::ifstream in(path_, std::ios::binary);
-  if (!in) {
+  // La data va letta prima del contenuto: una scrittura che arriva in mezzo verra'
+  // vista come modifica e ricaricata.
+  const auto write_time = WriteTime();
+  const auto text = ReadText();
+  if (!text) {
     ConfigLoadResult result;
     result.parse_failed = true;
     result.warnings.push_back("impossibile leggere il file di configurazione");
     return result;
   }
+  known_write_time_ = write_time;
+  return ConfigFromJson(*text);
+}
+
+std::optional<std::string> ConfigFile::ReadText() const {
+  std::ifstream in(path_, std::ios::binary);
+  if (!in) return std::nullopt;
   std::ostringstream text;
   text << in.rdbuf();
-  known_write_time_ = WriteTime();
-  return ConfigFromJson(text.str());
+  return text.str();
+}
+
+bool ConfigFile::OnDiskIsValid() const {
+  std::error_code ec;
+  if (!std::filesystem::exists(path_, ec)) return true;
+  const auto text = ReadText();
+  return text && !ConfigFromJson(*text).parse_failed;
 }
 
 bool ConfigFile::Save(const Config& config) {

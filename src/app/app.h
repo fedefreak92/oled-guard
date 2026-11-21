@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "config.h"
@@ -39,7 +40,11 @@ class App {
   void ReloadConfig();
   void ApplyConfig(const Config& next);
   void SaveConfig();
-  void ReportConfigWarnings(const ConfigLoadResult& result);
+  void ReportConfigWarnings(const ConfigLoadResult& result, bool at_startup);
+  static Config NormalizedConfig(Config config);
+  void SyncAutostart();
+  // Notifica nella tray; se la tray non esiste ancora la mostra appena creata.
+  void ShowNotice(const std::wstring& title, const std::wstring& text);
   ShiftTiming EffectiveTiming() const;
   void RegisterToggleHotkey();
   void StartEmergencyGuard();
@@ -72,6 +77,8 @@ class App {
   ConfigFile config_file_{ConfigPath()};
   Config config_;
   bool initial_config_failed_ = false;
+  bool tray_ready_ = false;
+  std::vector<std::pair<std::wstring, std::wstring>> pending_notices_;
   unsigned render_generation_ = 0;
   bool fast_shift_ = false;
   bool debug_ = false;

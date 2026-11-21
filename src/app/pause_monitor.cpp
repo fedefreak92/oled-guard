@@ -54,7 +54,7 @@ std::string ProcessName(DWORD pid) {
   DWORD size = ARRAYSIZE(path);
   std::string name;
   if (QueryFullProcessImageNameW(process, 0, path, &size)) {
-    name = ToLowerAscii(Narrow(std::filesystem::path(path).filename().wstring()));
+    name = LowerUnicode(Narrow(std::filesystem::path(path).filename().wstring()));
   }
   CloseHandle(process);
   return name;

@@ -19,4 +19,8 @@ struct MonitorDesc {
 // Altrimenti nome amichevole o device name (senza distinzione maiuscole).
 std::optional<size_t> SelectMonitor(std::span<const MonitorDesc> monitors, std::string_view setting);
 
+// Valore da salvare in config per scegliere il monitor `index`: il nome amichevole se
+// e' unico, altrimenti il device name.
+std::string MonitorSettingFor(std::span<const MonitorDesc> monitors, size_t index);
+
 }  // namespace oled

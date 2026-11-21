@@ -23,4 +23,13 @@ std::optional<size_t> SelectMonitor(std::span<const MonitorDesc> monitors, std::
   return std::nullopt;
 }
 
+std::string MonitorSettingFor(std::span<const MonitorDesc> monitors, size_t index) {
+  if (index >= monitors.size()) return "auto";
+  const auto& chosen = monitors[index];
+  for (size_t i = 0; i < monitors.size(); ++i) {
+    if (i != index && EqualsIgnoreCase(monitors[i].friendly_name, chosen.friendly_name)) return chosen.device_name;
+  }
+  return chosen.friendly_name;
+}
+
 }  // namespace oled

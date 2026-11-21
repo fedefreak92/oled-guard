@@ -24,4 +24,11 @@ inline std::string Narrow(std::wstring_view s) {
   return out;
 }
 
+// Minuscolo secondo le regole Unicode di Windows (anche lettere accentate).
+inline std::string LowerUnicode(std::string_view utf8) {
+  std::wstring w = Widen(utf8);
+  if (!w.empty()) CharLowerBuffW(w.data(), static_cast<DWORD>(w.size()));
+  return Narrow(w);
+}
+
 }  // namespace oled

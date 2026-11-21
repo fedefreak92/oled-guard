@@ -4,13 +4,16 @@
 #include <wtsapi32.h>
 
 #include <algorithm>
+#include <functional>
 #include <random>
+#include <thread>
 
 #include "ascii.h"
 #include "autostart.h"
 #include "clock.h"
 #include "diagnostics.h"
 #include "logger.h"
+#include "monitor_select.h"
 #include "paths.h"
 #include "text.h"
 
@@ -51,6 +54,16 @@ LONG WINAPI CrashFilter(EXCEPTION_POINTERS* info) {
 
 bool IsSupportedRotation(DXGI_MODE_ROTATION r) {
   return r == DXGI_MODE_ROTATION_IDENTITY || r == DXGI_MODE_ROTATION_UNSPECIFIED;
+}
+
+// ShellExecute su un thread proprio con COM inizializzato: puo' bloccarsi (estensioni
+// della shell) e non deve fermare il thread UI mentre il watchdog e' armato.
+void RunShellAction(std::function<void()> action) {
+  std::thread([action = std::move(action)] {
+    const HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    action();
+    if (SUCCEEDED(hr)) CoUninitialize();
+  }).detach();
 }
 
 LogLevel ParseLogLevel(const std::string& level) {
@@ -115,10 +128,14 @@ int App::Run(HINSTANCE instance) {
   taskbar_created_msg_ = RegisterWindowMessageW(L"TaskbarCreated");
   icon_ = CreateAppIcon(GetSystemMetrics(SM_CXSMICON));
   tray_.Create(main_, WM_APP_TRAY, icon_);
+  tray_ready_ = true;
+  // Avvisi nati prima che la tray esistesse (config, hotkey di emergenza).
+  for (const auto& [title, text] : pending_notices_) tray_.ShowBalloon(title, text);
+  pending_notices_.clear();
   RegisterToggleHotkey();
   // Con una config illeggibile i valori sono quelli predefiniti: non si tocca il
   // registro, altrimenti un errore di battitura toglierebbe l'avvio automatico.
-  if (!initial_config_failed_ && config_.autostart != IsAutostartEnabled()) SetAutostart(config_.autostart);
+  if (!initial_config_failed_) SyncAutostart();
   config_file_.StartWatching(main_, WM_APP_CONFIG_CHANGED);
 
   Tick();
@@ -161,21 +178,48 @@ bool App::CreateMainWindow() {
 // ---------------------------------------------------------------- configurazione
 
 void App::LoadInitialConfig() {
-  const ConfigLoadResult result = config_file_.Load();
+  ConfigLoadResult result = config_file_.Load();
   initial_config_failed_ = result.parse_failed;
-  if (!result.parse_failed) config_ = result.config;
+  if (!result.parse_failed) config_ = NormalizedConfig(result.config);
   LogSetLevel(debug_ ? LogLevel::Debug : ParseLogLevel(config_.log_level));
-  for (const auto& warning : result.warnings) LogWarn("Configurazione: {}", warning);
   LogInfo("Configurazione: {}", Narrow(config_file_.Path().wstring()));
+  ReportConfigWarnings(result, /*at_startup=*/true);
 }
 
-void App::ReportConfigWarnings(const ConfigLoadResult& result) {
+Config App::NormalizedConfig(Config config) {
+  // Nomi .exe in minuscolo anche oltre l'ASCII, come quelli letti dai processi.
+  for (auto* list : {&config.denylist, &config.allowlist}) {
+    for (auto& name : *list) name = LowerUnicode(name);
+  }
+  return config;
+}
+
+void App::ShowNotice(const std::wstring& title, const std::wstring& text) {
+  LogDebug("Notifica{}: {} - {}", tray_ready_ ? "" : " (in attesa della tray)", Narrow(title), Narrow(text));
+  if (tray_ready_) {
+    tray_.ShowBalloon(title, text);
+  } else {
+    pending_notices_.emplace_back(title, text);
+  }
+}
+
+void App::SyncAutostart() {
+  // Ripara anche un percorso vecchio (exe spostato).
+  const AutostartState state = GetAutostartState();
+  if (config_.autostart && state != AutostartState::ThisExe) SetAutostart(true);
+  if (!config_.autostart && state != AutostartState::Missing) SetAutostart(false);
+}
+
+void App::ReportConfigWarnings(const ConfigLoadResult& result, bool at_startup) {
   for (const auto& warning : result.warnings) LogWarn("Configurazione: {}", warning);
-  if (result.parse_failed) {
-    tray_.ShowBalloon(L"Configurazione non valida",
+  if (result.parse_failed && at_startup) {
+    ShowNotice(L"Configurazione non valida",
+               L"Il file non si legge: uso i valori predefiniti finché non lo correggi. Dettagli nel log.");
+  } else if (result.parse_failed) {
+    ShowNotice(L"Configurazione non valida",
                       L"Il file non è un JSON valido: tengo i valori precedenti. Dettagli nel log.");
   } else if (!result.warnings.empty()) {
-    tray_.ShowBalloon(L"Configurazione",
+    ShowNotice(L"Configurazione",
                       std::to_wstring(result.warnings.size()) + L" avvisi: alcuni valori sono stati sostituiti "
                                                                 L"con i predefiniti. Dettagli nel log.");
   }
@@ -184,10 +228,11 @@ void App::ReportConfigWarnings(const ConfigLoadResult& result) {
 void App::ReloadConfig() {
   if (!config_file_.ChangedOnDisk()) return;
   const ConfigLoadResult result = config_file_.Load();
-  ReportConfigWarnings(result);
+  ReportConfigWarnings(result, /*at_startup=*/false);
   if (result.parse_failed) return;
   LogInfo("Configurazione ricaricata");
-  ApplyConfig(result.config);
+  initial_config_failed_ = false;
+  ApplyConfig(NormalizedConfig(result.config));
 }
 
 ShiftTiming App::EffectiveTiming() const {
@@ -203,9 +248,11 @@ void App::ApplyConfig(const Config& next) {
   hysteresis_.SetDelays(config_.pause_enter_delay_ms, config_.resume_delay_ms);
   if (previous.hotkey_toggle != config_.hotkey_toggle) RegisterToggleHotkey();
   if (previous.hotkey_emergency_exit != config_.hotkey_emergency_exit) StartEmergencyGuard();
-  if (config_.autostart != IsAutostartEnabled()) SetAutostart(config_.autostart);
+  SyncAutostart();
   if (previous.monitor != config_.monitor || previous.allow_tearing != config_.allow_tearing) {
-    // Serve un overlay nuovo: altro monitor o altra swap chain.
+    // Serve un overlay nuovo: altro monitor o altra swap chain. Lo stato "ruotato"
+    // riguardava il monitor precedente: RefreshMonitor lo rivaluta.
+    display_rotated_ = false;
     monitor_valid_ = false;
     StopOverlay();
   }
@@ -213,7 +260,14 @@ void App::ApplyConfig(const Config& next) {
 }
 
 void App::SaveConfig() {
-  if (!config_file_.Save(config_)) tray_.ShowBalloon(L"Configurazione", L"Impossibile salvare il file.");
+  // Un file che non si legge e' probabilmente in modifica: non lo si sovrascrive.
+  if (!config_file_.OnDiskIsValid()) {
+    LogWarn("Configurazione non salvata: il file su disco contiene errori");
+    ShowNotice(L"Configurazione non salvata",
+               L"Il file contiene errori: la modifica vale fino alla chiusura. Correggi il file per salvarla.");
+    return;
+  }
+  if (!config_file_.Save(config_)) ShowNotice(L"Configurazione", L"Impossibile salvare il file.");
 }
 
 void App::RegisterToggleHotkey() {
@@ -224,7 +278,7 @@ void App::RegisterToggleHotkey() {
   toggle_hotkey_registered_ = RegisterHotKey(main_, kToggleHotkeyId, key->modifiers | MOD_NOREPEAT, key->vk) != FALSE;
   if (!toggle_hotkey_registered_) {
     LogWarn("Hotkey {} non registrata: gia' in uso", config_.hotkey_toggle);
-    tray_.ShowBalloon(L"Hotkey non disponibile", L"La combinazione " + Widen(config_.hotkey_toggle) +
+    ShowNotice(L"Hotkey non disponibile", L"La combinazione " + Widen(config_.hotkey_toggle) +
                                                      L" è già usata da un'altra app.");
   }
 }
@@ -233,7 +287,7 @@ void App::StartEmergencyGuard() {
   const auto key = ParseHotkey(config_.hotkey_emergency_exit);
   if (!key) return;
   if (!guard_.Start(*key)) {
-    tray_.ShowBalloon(L"Hotkey di emergenza non disponibile",
+    ShowNotice(L"Hotkey di emergenza non disponibile",
                       L"La combinazione " + Widen(config_.hotkey_emergency_exit) + L" è già in uso.");
   }
   guard_.BeatMain();
@@ -316,6 +370,8 @@ bool App::StartOverlay() {
 
 void App::StopOverlay() {
   if (!overlay_running_) return;
+  // Il tempo dello shift si ferma finche' l'overlay non riparte.
+  shift_->Pause(NowMs());
   guard_.SetOverlayActive(false);
   overlay_shown_ = false;
   // Prima il thread (rilascia device, duplicazione, swap chain), poi la finestra.
@@ -388,9 +444,15 @@ void App::ShowTrayMenu() {
   }
 
   HMENU menu = CreatePopupMenu();
-  const std::wstring state =
-      last_paused_ ? L"In pausa (" + Widen(PauseReasonText(last_reason_)) + L")" : std::wstring(L"Attivo");
-  AppendMenuW(menu, MF_STRING | (last_paused_ ? MF_UNCHECKED : MF_CHECKED), kCmdToggle, state.c_str());
+  // Riga di sola informazione: lo stato reale, con il motivo della pausa automatica.
+  const std::wstring state = last_paused_ ? L"Stato: in pausa (" + Widen(PauseReasonText(last_reason_)) + L")"
+                                          : std::wstring(L"Stato: attivo");
+  AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, state.c_str());
+  // La pausa manuale e' una voce a parte: cliccare durante una pausa automatica non
+  // lascia una pausa manuale attiva dopo la fine del gioco.
+  AppendMenuW(menu, MF_STRING | (manual_pause_ ? MF_CHECKED : MF_UNCHECKED), kCmdToggle,
+              (L"Pausa manuale\t" + Widen(config_.hotkey_toggle)).c_str());
+  AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
   AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(monitor_menu), L"Monitor");
   AppendMenuW(menu, MF_STRING, kCmdOpenConfig, L"Apri configurazione");
   AppendMenuW(menu, MF_STRING, kCmdOpenLogs, L"Apri cartella log");
@@ -411,8 +473,12 @@ void App::ShowTrayMenu() {
   else if (cmd == kCmdOpenLogs) OpenLogFolder();
   else if (cmd == kCmdAutostart) ToggleAutostart();
   else if (cmd == kCmdMonitorAuto) SelectMonitorSetting("auto");
-  else if (cmd >= kCmdMonitorFirst && cmd < kCmdMonitorFirst + monitors.size())
-    SelectMonitorSetting(Narrow(monitors[cmd - kCmdMonitorFirst].friendly_name));
+  else if (cmd >= kCmdMonitorFirst && cmd < kCmdMonitorFirst + monitors.size()) {
+    // Nome amichevole se unico, altrimenti device name (monitor identici).
+    std::vector<MonitorDesc> descs;
+    for (const auto& m : monitors) descs.push_back({Narrow(m.device_name), Narrow(m.friendly_name), m.primary});
+    SelectMonitorSetting(MonitorSettingFor(descs, cmd - kCmdMonitorFirst));
+  }
   else if (cmd == kCmdExit) Quit();
 }
 
@@ -434,16 +500,19 @@ void App::ToggleAutostart() {
 
 void App::OpenConfig() {
   const std::wstring path = config_file_.Path().wstring();
-  // Editor associato ai .json; se non c'e', Blocco note.
-  const auto result = reinterpret_cast<INT_PTR>(ShellExecuteW(main_, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
-  if (result <= 32) {
-    const std::wstring quoted = L"\"" + path + L"\"";
-    ShellExecuteW(main_, L"open", L"notepad.exe", quoted.c_str(), nullptr, SW_SHOWNORMAL);
-  }
+  RunShellAction([path] {
+    // Editor associato ai .json; se non c'e', Blocco note.
+    const auto result = reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
+    if (result <= 32) {
+      const std::wstring quoted = L"\"" + path + L"\"";
+      ShellExecuteW(nullptr, L"open", L"notepad.exe", quoted.c_str(), nullptr, SW_SHOWNORMAL);
+    }
+  });
 }
 
 void App::OpenLogFolder() {
-  ShellExecuteW(main_, L"open", LogDir().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+  const std::wstring dir = LogDir().wstring();
+  RunShellAction([dir] { ShellExecuteW(nullptr, L"open", dir.c_str(), nullptr, nullptr, SW_SHOWNORMAL); });
 }
 
 void App::Quit() {

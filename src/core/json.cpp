@@ -4,6 +4,8 @@
 #include <cmath>
 #include <cstdint>
 
+#include "utf.h"
+
 namespace oled {
 namespace {
 
@@ -126,24 +128,6 @@ class Parser {
       else return Fail("cifra esadecimale non valida");
     }
     return true;
-  }
-
-  static void AppendUtf8(std::string& s, uint32_t cp) {
-    if (cp < 0x80) {
-      s += static_cast<char>(cp);
-    } else if (cp < 0x800) {
-      s += static_cast<char>(0xC0 | (cp >> 6));
-      s += static_cast<char>(0x80 | (cp & 0x3F));
-    } else if (cp < 0x10000) {
-      s += static_cast<char>(0xE0 | (cp >> 12));
-      s += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-      s += static_cast<char>(0x80 | (cp & 0x3F));
-    } else {
-      s += static_cast<char>(0xF0 | (cp >> 18));
-      s += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
-      s += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-      s += static_cast<char>(0x80 | (cp & 0x3F));
-    }
   }
 
   bool ParseString(std::string& out) {

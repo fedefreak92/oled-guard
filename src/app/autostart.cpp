@@ -33,10 +33,19 @@ bool SetAutostart(bool enable) {
   return true;
 }
 
-bool IsAutostartEnabled() {
+AutostartState GetAutostartState() {
   DWORD size = 0;
-  return RegGetValueW(HKEY_CURRENT_USER, kRunKey, kValueName, RRF_RT_REG_SZ, nullptr, nullptr, &size) ==
-         ERROR_SUCCESS;
+  if (RegGetValueW(HKEY_CURRENT_USER, kRunKey, kValueName, RRF_RT_REG_SZ, nullptr, nullptr, &size) != ERROR_SUCCESS) {
+    return AutostartState::Missing;
+  }
+  std::wstring value(size / sizeof(wchar_t), L'\0');
+  if (RegGetValueW(HKEY_CURRENT_USER, kRunKey, kValueName, RRF_RT_REG_SZ, nullptr, value.data(), &size) !=
+      ERROR_SUCCESS) {
+    return AutostartState::OtherPath;
+  }
+  value.resize(wcsnlen(value.c_str(), value.size()));
+  const std::wstring expected = L"\"" + ExecutablePath().wstring() + L"\"";
+  return _wcsicmp(value.c_str(), expected.c_str()) == 0 ? AutostartState::ThisExe : AutostartState::OtherPath;
 }
 
 }  // namespace oled

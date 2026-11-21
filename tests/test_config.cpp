@@ -113,6 +113,40 @@ TEST(config_unknown_key_warns) {
   CHECK(AnyContains(r.warnings, "foo"));
 }
 
+namespace {
+// Testo ASCII in UTF-16 con BOM (little o big endian).
+std::string Utf16(const std::string& ascii, bool little_endian) {
+  std::string out = little_endian ? std::string("\xFF\xFE", 2) : std::string("\xFE\xFF", 2);
+  for (char c : ascii) {
+    if (little_endian) {
+      out += c;
+      out += '\0';
+    } else {
+      out += '\0';
+      out += c;
+    }
+  }
+  return out;
+}
+}  // namespace
+
+TEST(config_reads_utf16_files) {
+  // Blocco note puo' salvare in "UTF-16 LE/BE".
+  for (bool le : {true, false}) {
+    auto r = ConfigFromJson(Utf16(R"({"amplitude_px": 3, "monitor": "LG TV"})", le));
+    CHECK(!r.parse_failed);
+    CHECK(r.warnings.empty());
+    CHECK_EQ(r.config.amplitude_px, 3);
+    CHECK_EQ(r.config.monitor, std::string("LG TV"));
+  }
+}
+
+TEST(config_truncated_utf16_reports_encoding) {
+  auto r = ConfigFromJson(std::string("\xFF\xFE{\0\"", 5));
+  CHECK(r.parse_failed);
+  CHECK(AnyContains(r.warnings, "UTF-16"));
+}
+
 TEST(config_malformed_json) {
   auto r = ConfigFromJson("{");
   CHECK(r.parse_failed);

@@ -39,6 +39,13 @@ void Rotate() {
   std::filesystem::remove(FileAt(2), ec);
   std::filesystem::rename(FileAt(1), FileAt(2), ec);
   std::filesystem::rename(FileAt(0), FileAt(1), ec);
+  if (ec) {
+    // Un altro processo tiene il file senza permettere la rinomina: lo si svuota,
+    // cosi' il log resta comunque entro il limite e non si ritenta a ogni riga.
+    g_file = _wfsopen(FileAt(0).c_str(), L"wb", _SH_DENYNO);
+    g_size = 0;
+    return;
+  }
   OpenFile();
 }
 

@@ -3,7 +3,13 @@
 
 namespace oled {
 
+enum class AutostartState {
+  Missing,    // nessun valore
+  ThisExe,    // punta a questo eseguibile
+  OtherPath,  // punta altrove (exe spostato o copia vecchia)
+};
+
 bool SetAutostart(bool enable);
-bool IsAutostartEnabled();
+AutostartState GetAutostartState();
 
 }  // namespace oled
