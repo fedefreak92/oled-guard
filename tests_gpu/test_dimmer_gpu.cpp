@@ -324,3 +324,60 @@ TEST(gpu_brief_change_keeps_age) {
   CHECK_NEAR(sim.GpuLevel(2, 2), 0.0, 1e-6);
   CHECK(sim.MaxDiff() <= 0.002);
 }
+
+// Movimento di un'altra finestra: non conta (niente alone intorno ai video).
+TEST(gpu_motion_of_other_window_does_not_count) {
+  std::vector<uint8_t> zones(static_cast<size_t>(kCols) * kRows, 3);
+  for (int y = 0; y < kRows; ++y)
+    for (int x = 0; x < 20; ++x) zones[static_cast<size_t>(y) * kCols + x] = 2;
+  Sim sim(kW, kH, kHdr, 3.0f, zones);
+  CHECK(sim.Ok());
+  if (!sim.Ok()) return;
+  LumaImage img = VideoWithLogo(0);
+  Fill(img, 0, 0, 320, kH, 1.0f);
+  sim.Frame(img, 0);
+  sim.Run(img, 0.5, 480, PlayVideo);
+  CHECK_NEAR(sim.GpuLevel(18, 10), 0.0, 1e-6);
+  CHECK_NEAR(sim.GpuLevel(48, 5), 0.40, 0.002);
+  CHECK(sim.MaxDiff() <= 0.002);
+}
+
+TEST(gpu_save_before_first_frame_keeps_pending_restore) {
+  ComPtr<ID3D11Device> device = WarpDevice();
+  CHECK(device != nullptr);
+  if (!device) return;
+  DimSavedState saved;
+  saved.width = kW;
+  saved.height = kH;
+  saved.ages.assign(kCols * kRows, 123.0f);
+  saved.hashes.assign(kCols * kRows, 42u);
+  Dimmer d;
+  CHECK(SUCCEEDED(d.Init(device.Get(), kW, kH, kHdr, 0, &saved)));
+  DimSavedState again;
+  CHECK(d.SaveState(5000, again));
+  CHECK(again.ages == saved.ages);
+  CHECK(again.hashes == saved.hashes);
+}
+
+TEST(gpu_save_during_brief_change_keeps_anchor) {
+  Sim before(kW, kH, kHdr, 3.0f, Zones(kShell));
+  CHECK(before.Ok());
+  if (!before.Ok()) return;
+  LumaImage img = DesktopIcons();
+  before.Frame(img, 0);
+  before.Run(img, 0.5, 480);
+  const LumaImage original = img;
+  Fill(img, 16, 16, 80, 80, 0.9f);
+  before.Frame(img, 480.5);
+  DimSavedState gpu_saved;
+  CHECK(before.dimmer().SaveState(482 * 1000, gpu_saved));
+  const DimSavedState model_saved = before.model().Save(482);
+  Sim after(kW, kH, kHdr, 3.0f, Zones(kShell), 1000, &model_saved, &gpu_saved);
+  CHECK(after.Ok());
+  if (!after.Ok()) return;
+  img = original;
+  after.Frame(img, 1000);
+  after.Run(img, 1000.5, 1150);
+  CHECK_NEAR(after.GpuLevel(2, 2), 0.20, 0.01);
+  CHECK(after.MaxDiff() <= 0.002);
+}

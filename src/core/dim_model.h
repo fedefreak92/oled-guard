@@ -17,9 +17,10 @@ struct LumaImage {
   std::vector<float> luma;
 };
 
-// Zone per cella: desktop e barra delle applicazioni, oppure finestra di un'app.
+// Zone per cella: 0 desktop e barra delle applicazioni, altrimenti il numero della
+// finestra dell'app (1-255). Il movimento intorno conta solo dentro la stessa zona.
 inline constexpr uint8_t kDimZoneShell = 0;
-inline constexpr uint8_t kDimZoneApp = 1;
+inline constexpr uint8_t kDimZoneApp = 1;  // finestra generica (default prima della mappa)
 
 // Stato salvato prima di distruggere l'overlay (pausa), per riprendere dopo.
 struct DimSavedState {
@@ -85,5 +86,9 @@ class DimModel {
 // separabili.
 std::vector<double> WindowMean(const std::vector<double>& grid, int cols, int rows, int radius);
 std::vector<double> WindowMax(const std::vector<double>& grid, int cols, int rows, int radius);
+// Come WindowMean, ma conta solo le celle della stessa zona della cella centrale (passo
+// orizzontale e poi verticale, ciascuno filtrato sulla zona: esatto per finestre rettangolari).
+std::vector<double> ZoneWindowMean(const std::vector<double>& grid, const std::vector<uint8_t>& zones, int cols,
+                                   int rows, int radius);
 
 }  // namespace oled

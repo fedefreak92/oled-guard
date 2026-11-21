@@ -82,6 +82,7 @@ class Dimmer {
   Grid last_change_, flags_, hash_, sums_, motion_, levels_grid_, class_, zones_, saved_hash_, saved_age_;
   Grid anchor_hash_, anchor_time_, excursion_;
   bool restore_ = false;
+  DimSavedState pending_restore_;  // da restituire se si salva prima del primo frame
   ID3D11Texture2D* levels_ = nullptr;  // = levels_grid_.texture
   ComPtr<ID3D11ShaderResourceView> levels_srv_;
   ComPtr<ID3D11Texture2D> frame_copy_;  // ripiego se il frame non e' leggibile come SRV

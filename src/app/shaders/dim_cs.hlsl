@@ -35,7 +35,7 @@ static const float kBlipS = 15.0;  // deviazione breve: la cella riprende l'eta'
 static const float kMaxLevel = 0.8;
 static const float kCommandRecoverS = 1.0;
 static const float kLargeRecoverS = 30.0;
-static const uint kZoneApp = 1;
+static const uint kZoneShell = 0;  // altrimenti numero della finestra dell'app
 
 // ------------------------------------------------------------------ rilevamento
 
@@ -148,24 +148,35 @@ RWTexture2D<float> levels_io : register(u0);
 // bit 2: ritorno lento in corso (classe cambiata con il livello sopra il bersaglio).
 RWTexture2D<uint> class_io : register(u1);
 
+// Quota di celle cambiate da poco nella finestra 33x33, contando solo la stessa zona della
+// cella centrale (prima per righe, poi per colonne: come ZoneWindowMean del modello).
 [numthreads(8, 8, 1)]
 void CSMotionH(uint3 id : SV_DispatchThreadID) {
   if (id.x >= cols || id.y >= rows) return;
+  const uint zone = zones_in[id.xy];
   const int x0 = max(0, (int)id.x - kRadius);
   const int x1 = min((int)cols - 1, (int)id.x + kRadius);
-  float sum = 0;
-  for (int x = x0; x <= x1; ++x) sum += now_s - last_change_in[int2(x, id.y)] < kMotionWindowS ? 1.0 : 0.0;
-  sums_out[id.xy] = float2(sum, x1 - x0 + 1);
+  float2 s = 0;
+  for (int x = x0; x <= x1; ++x) {
+    const int2 c = int2(x, id.y);
+    if (zones_in[c] != zone) continue;
+    s += float2(now_s - last_change_in[c] < kMotionWindowS ? 1.0 : 0.0, 1.0);
+  }
+  sums_out[id.xy] = s;
 }
 
 [numthreads(8, 8, 1)]
 void CSMotionV(uint3 id : SV_DispatchThreadID) {
   if (id.x >= cols || id.y >= rows) return;
+  const uint zone = zones_in[id.xy];
   const int y0 = max(0, (int)id.y - kRadius);
   const int y1 = min((int)rows - 1, (int)id.y + kRadius);
   float2 s = 0;
-  for (int y = y0; y <= y1; ++y) s += sums_in[int2(id.x, y)];
-  motion_out[id.xy] = s.x / s.y;
+  for (int y = y0; y <= y1; ++y) {
+    const int2 c = int2(id.x, y);
+    if (zones_in[c] == zone) s += sums_in[c];
+  }
+  motion_out[id.xy] = s.x / s.y;  // s.y >= 1: la cella centrale conta sempre
 }
 
 // ------------------------------------------------------------------ livello
@@ -178,7 +189,7 @@ void CSLevel(uint3 id : SV_DispatchThreadID) {
   const bool bright = (flags_in[c] & 1u) != 0;
   const bool m = bright && age >= delay_s;
   // Desktop e barra: ogni elemento fermo e luminoso. Dentro un'app: solo con movimento intorno.
-  const bool large = zones_in[c] == kZoneApp && motion_in[c] < motion_fraction;
+  const bool large = zones_in[c] != kZoneShell && motion_in[c] < motion_fraction;
   const bool enabled = (flags & kFlagEnabled) != 0;
   const bool suspended = (flags & kFlagSuspended) != 0;
 

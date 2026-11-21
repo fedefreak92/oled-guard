@@ -111,6 +111,7 @@ HRESULT Dimmer::Init(ID3D11Device* device, UINT width, UINT height, DXGI_FORMAT 
   restore_ = restore && restore->width == static_cast<int>(width) && restore->height == static_cast<int>(height) &&
              restore->ages.size() == n && restore->hashes.size() == n;
   if (restore_) {
+    pending_restore_ = *restore;
     if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_UINT, restore->hashes.data(), 4, saved_hash_))) return hr;
     if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_FLOAT, restore->ages.data(), 4, saved_age_))) return hr;
   }
@@ -139,6 +140,7 @@ void Dimmer::Shutdown() {
   for (auto& s : debug_staging_) s.Reset();
   debug_pending_ = false;
   restore_ = false;
+  pending_restore_ = DimSavedState{};
   context_.Reset();
   device_.Reset();
   cols_ = rows_ = width_ = height_ = 0;
@@ -233,6 +235,7 @@ HRESULT Dimmer::Detect(ID3D11Texture2D* frame, ID3D11Texture2D* previous_cache, 
     saved_hash_ = Grid{};
     saved_age_ = Grid{};
     restore_ = false;
+    pending_restore_ = DimSavedState{};
   }
   first_frame_ = false;
   return S_OK;
@@ -245,8 +248,8 @@ void Dimmer::Update(double now_ms, const DimParams& p, bool suspended) {
   last_update_s_ = now_s;
   SetConstants(now_s, dt, p, last_white_, suspended, false);
   const UINT gx = (cols_ + 7) / 8, gy = (rows_ + 7) / 8;
-  Run(motion_h_.Get(), {nullptr, last_change_.srv.Get()}, {sums_.uav.Get()}, gx, gy);
-  Run(motion_v_.Get(), {sums_.srv.Get()}, {motion_.uav.Get()}, gx, gy);
+  Run(motion_h_.Get(), {nullptr, last_change_.srv.Get(), nullptr, zones_.srv.Get()}, {sums_.uav.Get()}, gx, gy);
+  Run(motion_v_.Get(), {sums_.srv.Get(), nullptr, nullptr, zones_.srv.Get()}, {motion_.uav.Get()}, gx, gy);
   Run(level_.Get(), {flags_.srv.Get(), last_change_.srv.Get(), motion_.srv.Get(), zones_.srv.Get()},
       {levels_grid_.uav.Get(), class_.uav.Get()}, gx, gy);
 }
@@ -274,21 +277,44 @@ std::vector<uint8_t> Dimmer::ReadGridBlocking(ID3D11Texture2D* texture) {
 }
 
 bool Dimmer::SaveState(double now_ms, DimSavedState& out) {
-  if (!Ready() || first_frame_) return false;  // senza un frame le firme non valgono
+  if (!Ready()) return false;
+  if (first_frame_) {
+    // Nessun frame ancora: si restituisce lo stato ricevuto, se c'era (es. cattura persa
+    // subito dopo il riavvio), altrimenti le firme non valgono.
+    if (!restore_) return false;
+    out = pending_restore_;
+    return true;
+  }
   const auto last_change = ReadGridBlocking(last_change_.texture.Get());
   const auto hashes = ReadGridBlocking(hash_.texture.Get());
+  const auto anchor_hash = ReadGridBlocking(anchor_hash_.texture.Get());
+  const auto anchor_time = ReadGridBlocking(anchor_time_.texture.Get());
+  const auto excursion = ReadGridBlocking(excursion_.texture.Get());
   const size_t n = static_cast<size_t>(cols_) * rows_;
-  if (last_change.size() != n * 4 || hashes.size() != n * 4) return false;
+  for (const auto* grid : {&last_change, &hashes, &anchor_hash, &anchor_time, &excursion}) {
+    if (grid->size() != n * 4) return false;
+  }
+  const auto read_f = [](const std::vector<uint8_t>& g, size_t i) {
+    float v = 0;
+    std::memcpy(&v, g.data() + i * 4, 4);
+    return v;
+  };
+  const auto read_u = [](const std::vector<uint8_t>& g, size_t i) {
+    uint32_t v = 0;
+    std::memcpy(&v, g.data() + i * 4, 4);
+    return v;
+  };
   out.width = static_cast<int>(width_);
   out.height = static_cast<int>(height_);
   out.ages.resize(n);
   out.hashes.resize(n);
   const float now_s = static_cast<float>(Seconds(now_ms));
   for (size_t i = 0; i < n; ++i) {
-    float lc = 0;
-    std::memcpy(&lc, last_change.data() + i * 4, 4);
-    out.ages[i] = std::max(0.0f, now_s - lc);
-    std::memcpy(&out.hashes[i], hashes.data() + i * 4, 4);
+    // Durante una deviazione breve vale il contenuto di riferimento (es. icona sotto il mouse).
+    const float exc = read_f(excursion, i);
+    const bool brief = exc >= 0 && now_s - exc <= static_cast<float>(kDimBlipS);
+    out.hashes[i] = brief ? read_u(anchor_hash, i) : read_u(hashes, i);
+    out.ages[i] = std::max(0.0f, now_s - (brief ? read_f(anchor_time, i) : read_f(last_change, i)));
   }
   return true;
 }

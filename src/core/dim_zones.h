@@ -18,8 +18,9 @@ struct ZoneRect {
   int bottom = 0;
 };
 
-// Coordinate desktop (pixel fisici). Una cella e' "app" se il suo centro sta in una
-// finestra di un'app; le barre delle applicazioni vincono sulle finestre sotto.
+// Coordinate desktop (pixel fisici). Valore per cella: 0 desktop/barra, altrimenti il
+// numero della finestra (1-255) piu' in alto che vi mostra almeno un pixel non coperto
+// dalla barra delle applicazioni. `apps` in ordine dall'alto (z-order).
 std::vector<uint8_t> ComputeDimZones(int cols, int rows, ZoneRect monitor, const std::vector<ZoneRect>& apps,
                                      const std::vector<ZoneRect>& taskbars);
 

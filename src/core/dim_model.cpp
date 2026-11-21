@@ -54,6 +54,39 @@ std::vector<double> WindowMax(const std::vector<double>& grid, int cols, int row
   return out;
 }
 
+std::vector<double> ZoneWindowMean(const std::vector<double>& grid, const std::vector<uint8_t>& zones, int cols,
+                                   int rows, int radius) {
+  const auto at = [cols](int x, int y) { return static_cast<size_t>(y) * cols + x; };
+  std::vector<double> hsum(grid.size()), hcount(grid.size());
+  for (int y = 0; y < rows; ++y) {
+    for (int x = 0; x < cols; ++x) {
+      const uint8_t z = zones[at(x, y)];
+      double s = 0, n = 0;
+      for (int i = std::max(0, x - radius); i <= std::min(cols - 1, x + radius); ++i) {
+        if (zones[at(i, y)] != z) continue;
+        s += grid[at(i, y)];
+        n += 1;
+      }
+      hsum[at(x, y)] = s;
+      hcount[at(x, y)] = n;
+    }
+  }
+  std::vector<double> out(grid.size());
+  for (int y = 0; y < rows; ++y) {
+    for (int x = 0; x < cols; ++x) {
+      const uint8_t z = zones[at(x, y)];
+      double s = 0, n = 0;
+      for (int j = std::max(0, y - radius); j <= std::min(rows - 1, y + radius); ++j) {
+        if (zones[at(x, j)] != z) continue;
+        s += hsum[at(x, j)];
+        n += hcount[at(x, j)];
+      }
+      out[at(x, y)] = s / n;  // n >= 1: la cella centrale conta sempre
+    }
+  }
+  return out;
+}
+
 DimModel::DimModel(int width, int height, double now_s, const DimSavedState* restore)
     : width_(width),
       height_(height),
@@ -138,12 +171,19 @@ void DimModel::OnFrame(const LumaImage& frame, double now_s) {
 }
 
 DimSavedState DimModel::Save(double now_s) const {
+  // Nessun frame ancora: lo stato da riprendere e' ancora quello ricevuto.
+  if (!restore_.ages.empty()) return restore_;
   DimSavedState s;
   s.width = width_;
   s.height = height_;
-  s.hashes = hashes_;
+  s.hashes.resize(hashes_.size());
   s.ages.resize(last_change_.size());
-  for (size_t i = 0; i < last_change_.size(); ++i) s.ages[i] = static_cast<float>(now_s - last_change_[i]);
+  for (size_t i = 0; i < last_change_.size(); ++i) {
+    // Durante una deviazione breve vale il contenuto di riferimento (es. icona sotto il mouse).
+    const bool brief = excursion_[i] >= 0 && now_s - excursion_[i] <= kDimBlipS;
+    s.hashes[i] = brief ? anchor_hash_[i] : hashes_[i];
+    s.ages[i] = static_cast<float>(now_s - (brief ? anchor_time_[i] : last_change_[i]));
+  }
   return s;
 }
 
@@ -153,14 +193,14 @@ void DimModel::Update(double now_s, double dt_s, const DimParams& p, bool suspen
   // Movimento intorno: quota di celle cambiate da poco nella finestra 33x33.
   std::vector<double> motion(n);
   for (size_t i = 0; i < n; ++i) motion[i] = now_s - last_change_[i] < kDimMotionWindowS ? 1.0 : 0.0;
-  const auto motion_density = WindowMean(motion, cols_, rows_, kDimWindowRadius);
+  const auto motion_density = ZoneWindowMean(motion, zones_, cols_, rows_, kDimWindowRadius);
   const double dt = std::max(0.0, dt_s);
 
   for (size_t i = 0; i < n; ++i) {
     const double age = now_s - last_change_[i];
     const bool m = bright_[i] && age >= p.delay_s;
     // Desktop e barra: ogni elemento fermo e luminoso. Dentro un'app: solo con movimento intorno.
-    const bool large = zones_[i] == kDimZoneApp && motion_density[i] < p.motion_fraction;
+    const bool large = zones_[i] != kDimZoneShell && motion_density[i] < p.motion_fraction;
     large_[i] = large ? 1 : 0;
 
     double cap = 0;

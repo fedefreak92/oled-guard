@@ -370,3 +370,53 @@ TEST(dim_brief_change_ignores_new_content) {
   m.Update(482, 1.5, DimParams{}, false);
   CHECK_NEAR(m.Target(2, 2), 0.0, 1e-9);
 }
+
+// Pagina chiara ferma in una finestra accanto a un video in un'altra finestra: il
+// movimento dell'altra finestra non conta, la pagina non si scurisce (niente alone).
+TEST(dim_motion_of_other_window_does_not_count) {
+  LumaImage img = VideoWithLogo(0);
+  Fill(img, 0, 0, 320, kH, 1.0f);  // pagina bianca a sinistra del video
+  std::vector<uint8_t> zones(static_cast<size_t>(kCols) * kRows, 3);  // finestra del video
+  for (int y = 0; y < kRows; ++y)
+    for (int x = 0; x < 20; ++x) zones[static_cast<size_t>(y) * kCols + x] = 2;  // finestra della pagina
+  DimModel m(kW, kH, 0);
+  m.SetZones(zones);
+  m.OnFrame(img, 0);
+  Run(m, img, 0.5, 480, DimParams{}, PlayVideo);
+  CHECK_NEAR(m.Level(18, 10), 0.0, 1e-6);   // pagina vicino al bordo: nessun alone
+  CHECK_NEAR(m.Level(48, 5), 0.40, 1e-4);   // il logo sul video si' (stessa finestra)
+}
+
+// Riavvio prima del primo frame (es. accesso alla cattura perso subito dopo lo sblocco):
+// lo stato da riprendere non va perso.
+TEST(dim_save_before_first_frame_keeps_pending_restore) {
+  LumaImage img = DesktopIcons();
+  DimModel before(kW, kH, 0);
+  before.SetZones(Zones(kShell));
+  before.OnFrame(img, 0);
+  Run(before, img, 0.5, 480, DimParams{});
+  const oled::DimSavedState saved = before.Save(480);
+  DimModel restarted(kW, kH, 1000, &saved);
+  const oled::DimSavedState again = restarted.Save(1001);
+  CHECK(again.ages == saved.ages);
+  CHECK(again.hashes == saved.hashes);
+}
+
+// Icona evidenziata dal mouse proprio quando parte la pausa: si salva il contenuto di
+// riferimento, cosi' al ritorno (mouse altrove) la cella riprende l'eta'.
+TEST(dim_save_during_brief_change_keeps_anchor) {
+  LumaImage img = DesktopIcons();
+  DimModel before(kW, kH, 0);
+  before.SetZones(Zones(kShell));
+  before.OnFrame(img, 0);
+  Run(before, img, 0.5, 480, DimParams{});
+  const LumaImage original = img;
+  Fill(img, 16, 16, 80, 80, 0.9f);
+  before.OnFrame(img, 480.5);
+  const oled::DimSavedState saved = before.Save(482);
+  DimModel after(kW, kH, 1000, &saved);
+  after.SetZones(Zones(kShell));
+  after.OnFrame(original, 1000);
+  after.Update(1000, 0, DimParams{}, false);
+  CHECK_NEAR(after.Target(2, 2), 0.40, 1e-6);
+}

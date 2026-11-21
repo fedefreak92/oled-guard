@@ -127,9 +127,14 @@ PauseInputs PauseMonitor::Collect(const MonitorInfo* monitor) const {
           IsFullscreenWindow({bounds.left, bounds.top, bounds.right, bounds.bottom}, {m.left, m.top, m.right, m.bottom},
                              IsZoomed(fg) != FALSE, has_caption);
       if (in.foreground_covers_monitor) {
-        wchar_t cls[128] = {};
-        GetClassNameW(fg, cls, ARRAYSIZE(cls));
-        LogDebug("Finestra a tutto schermo: classe {} ({})", Narrow(cls), in.foreground_process);
+        // Solo quando cambia: in un gioco si resterebbe qui 4 volte al secondo per ore.
+        static HWND last_logged = nullptr;
+        if (fg != last_logged) {
+          wchar_t cls[128] = {};
+          GetClassNameW(fg, cls, ARRAYSIZE(cls));
+          LogDebug("Finestra a tutto schermo: classe {} ({})", Narrow(cls), in.foreground_process);
+          last_logged = fg;
+        }
       }
     }
   }

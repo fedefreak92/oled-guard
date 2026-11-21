@@ -1,11 +1,19 @@
 #include "dim_zones.h"
 
+#include <algorithm>
+
 #include "ascii.h"
 
 namespace oled {
 namespace {
 
-bool Contains(const ZoneRect& r, int x, int y) { return x >= r.left && x < r.right && y >= r.top && y < r.bottom; }
+ZoneRect Intersect(const ZoneRect& a, const ZoneRect& b) {
+  return {std::max(a.left, b.left), std::max(a.top, b.top), std::min(a.right, b.right), std::min(a.bottom, b.bottom)};
+}
+bool Empty(const ZoneRect& r) { return r.left >= r.right || r.top >= r.bottom; }
+bool Covers(const ZoneRect& outer, const ZoneRect& inner) {
+  return inner.left >= outer.left && inner.top >= outer.top && inner.right <= outer.right && inner.bottom <= outer.bottom;
+}
 
 bool AnyOf(std::string_view cls, std::initializer_list<std::string_view> names) {
   const std::string lower = ToLowerAscii(cls);
@@ -22,12 +30,20 @@ std::vector<uint8_t> ComputeDimZones(int cols, int rows, ZoneRect monitor, const
   std::vector<uint8_t> zones(static_cast<size_t>(cols) * rows, kDimZoneShell);
   for (int cy = 0; cy < rows; ++cy) {
     for (int cx = 0; cx < cols; ++cx) {
-      const int x = monitor.left + cx * kDimCellPx + kDimCellPx / 2;
-      const int y = monitor.top + cy * kDimCellPx + kDimCellPx / 2;
-      bool app = false;
-      for (const ZoneRect& r : apps) app = app || Contains(r, x, y);
-      for (const ZoneRect& r : taskbars) app = app && !Contains(r, x, y);
-      zones[static_cast<size_t>(cy) * cols + cx] = app ? kDimZoneApp : kDimZoneShell;
+      const ZoneRect cell = Intersect({monitor.left + cx * kDimCellPx, monitor.top + cy * kDimCellPx,
+                                       monitor.left + (cx + 1) * kDimCellPx, monitor.top + (cy + 1) * kDimCellPx},
+                                      monitor);
+      // La prima finestra (la piu' in alto) con almeno un pixel visibile nella cella, cioe'
+      // non coperto dalla barra delle applicazioni.
+      for (size_t i = 0; i < apps.size(); ++i) {
+        const ZoneRect part = Intersect(cell, apps[i]);
+        if (Empty(part)) continue;
+        bool under_taskbar = false;
+        for (const ZoneRect& t : taskbars) under_taskbar = under_taskbar || Covers(t, part);
+        if (under_taskbar) continue;
+        zones[static_cast<size_t>(cy) * cols + cx] = static_cast<uint8_t>(1 + i % 255);
+        break;
+      }
     }
   }
   return zones;

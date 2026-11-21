@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <climits>
 #include <fstream>
+#include <limits>
 #include <optional>
 
 #include "capture.h"
@@ -280,8 +281,8 @@ RenderThread::SessionEnd RenderThread::RunSession() {
                                                     diag_grids.last_change, diag_grids.now_s, dim_in.params.delay_s);
           LogInfo("Oscuramento diag: {} (bianco {:.2f}, attivo {}, sospeso {})", FormatDimGridStats(st), white,
                   dim_in.params.enabled, dim_in.suspended);
-          // Mappa delle celle: ' ' niente, '.' contenuto, 'b' luminosa, 'S' elemento piccolo,
-          // 'L' grande area, '1'-'9' livello di oscuramento (decimi), '*' cambiata da 2 s.
+          // Mappa delle celle: ' ' niente, '.' in movimento, 'b' luminosa, 'S' elemento da
+          // scurire, 'L' da non toccare, '1'-'9' livello (decimi), '*' cambiata da 2 s.
           std::ofstream grid(params_.diagnostics_dir / "dim-grid.txt");
           const UINT gc = dimmer.Cols(), gr = dimmer.Rows();
           for (UINT y = 0; y < gr; ++y) {
@@ -290,7 +291,7 @@ RenderThread::SessionEnd RenderThread::RunSession() {
               const size_t i = static_cast<size_t>(y) * gc + x;
               const uint32_t cls = diag_grids.classes[i] & 3u;
               const float lv = diag_grids.levels[i];
-              char ch = (diag_grids.flags[i] & 2u) ? '.' : ' ';
+              char ch = diag_grids.now_s - diag_grids.last_change[i] < kDimMotionWindowS ? '.' : ' ';
               if (diag_grids.flags[i] & 1u) ch = 'b';
               if (cls == 2) ch = 'L';
               if (cls == 1) ch = 'S';
@@ -301,9 +302,10 @@ RenderThread::SessionEnd RenderThread::RunSession() {
             grid << line << '\n';
           }
         }
-        if (now >= diag_snap_at && diag_snaps < 8) {
-          diag_want_snap = true;
-          diag_snap_at = now + 60000;
+        if (now >= diag_snap_at) {
+          diag_want_snap = diag_snaps < 8;
+          // Dopo l'ultima istantanea il timer non deve restare nel passato (timeout 0).
+          diag_snap_at = diag_snaps + 1 < 8 ? now + 60000 : std::numeric_limits<double>::infinity();
         }
         if (snap_in.TryWrite(snap_in_file, white) | snap_out.TryWrite(snap_out_file, white)) {}
         if (snap_in.Pending() || snap_out.Pending()) next = std::min(next, now + 16);
