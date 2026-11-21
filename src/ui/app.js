@@ -12,7 +12,9 @@ const model = {
   config: null,
   apps: [],
   windows: null,
+  dim: null,
   nextMoveAt: 0,
+  highlightUntil: 0,
 };
 
 // ------------------------------------------------------------------ comunicazione
@@ -34,6 +36,11 @@ function receive(msg) {
     case 'apps': model.apps = msg.apps; renderApps(); break;
     case 'windows': model.windows = msg; renderWindows(); break;
     case 'processes': renderProcesses(msg.processes); break;
+    case 'dim':
+      model.dim = msg;
+      model.highlightUntil = performance.now() + msg.highlight_left_ms;
+      renderDim();
+      break;
     case 'notice': toast(msg.text); break;
   }
 }
@@ -81,6 +88,7 @@ function debounce(fn, ms) {
 document.querySelectorAll('#tabs button').forEach((b) => b.addEventListener('click', () => {
   document.querySelectorAll('#tabs button').forEach((x) => x.classList.toggle('on', x === b));
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('on', t.id === 'tab-' + b.dataset.tab));
+  updateDimWatch();
 }));
 
 document.querySelectorAll('[data-win]').forEach((b) => b.addEventListener('click', () => send({ cmd: 'window', action: b.dataset.win })));
@@ -208,6 +216,7 @@ function renderConfig() {
   document.querySelectorAll('[data-hotkey]').forEach((b) => { if (!b.classList.contains('rec')) b.textContent = c[b.dataset.hotkey].replace(/\+/g, ' + '); });
   document.querySelectorAll('[data-toggle]').forEach((b) => { const on = !!c[b.dataset.toggle]; b.classList.toggle('on', on); b.textContent = on ? 'ON' : 'OFF'; });
   renderRadar();
+  renderDimConfig();
 }
 
 document.querySelectorAll('#ampSeg button').forEach((b) => b.addEventListener('click', () => setConfig({ amplitude_px: Number(b.dataset.amp) })));
@@ -337,22 +346,155 @@ function addTypedApp() {
 }
 $('btnAdd').addEventListener('click', addTypedApp);
 $('addExe').addEventListener('keydown', (e) => { if (e.key === 'Enter') addTypedApp(); });
-$('btnProcesses').addEventListener('click', () => {
-  const list = $('procList');
-  if (!list.hidden) { list.hidden = true; return; }
+// Elenco delle app aperte: riempie il campo della scheda che l'ha chiesto.
+let procTarget = { list: 'procList', input: 'addExe' };
+function askProcesses(list, input) {
+  if (!$(list).hidden) { $(list).hidden = true; return; }
+  procTarget = { list, input };
   send({ cmd: 'listProcesses' });
-});
+}
+$('btnProcesses').addEventListener('click', () => askProcesses('procList', 'addExe'));
 function renderProcesses(processes) {
-  const list = $('procList');
+  const { list: listId, input } = procTarget;
+  const list = $(listId);
   list.innerHTML = '';
   for (const p of processes) {
     const b = document.createElement('button');
     b.textContent = p;
-    b.addEventListener('click', () => { $('addExe').value = p; list.hidden = true; $('addExe').focus(); });
+    b.addEventListener('click', () => { $(input).value = p; list.hidden = true; $(input).focus(); });
     list.appendChild(b);
   }
   list.hidden = processes.length === 0;
 }
+
+// ------------------------------------------------------------------ oscuramento
+
+const DIM_STATUS = { active: 'ATTIVO', waiting: 'IN ATTESA', suspended: 'SOSPESO', off: 'SPENTO', paused: 'IN PAUSA' };
+const fmtMin = (s) => `${String(Math.round(s / 6) / 10).replace('.', ',')} min`;
+
+// La mappa arriva solo mentre la scheda e' visibile: a finestra nascosta o su un'altra
+// scheda l'app non legge nulla dalla GPU.
+let dimWatching = false;
+function updateDimWatch() {
+  const want = $('tab-oscuramento').classList.contains('on') && !document.hidden;
+  if (want === dimWatching) return;
+  dimWatching = want;
+  send({ cmd: 'dimWatch', on: want });
+}
+document.addEventListener('visibilitychange', updateDimWatch);
+
+function renderDim() {
+  const d = model.dim;
+  if (!d) return;
+  $('vDimStatus').textContent = (DIM_STATUS[d.status] || d.status) + (d.suspended_by ? ` · ${d.suspended_by.toUpperCase()}` : '');
+  $('vDimArea').textContent = d.cells ? `${d.dimmed_pct.toFixed(1).replace('.', ',')} % dello schermo` : '-';
+  $('vDimMax').textContent = d.cells ? `${Math.round(d.max_level * 100)} %` : '-';
+  $('vDimWhite').textContent = d.hdr ? `${Math.round(d.sdr_white_nits)} nit (HDR)` : 'SDR';
+  renderHighlight();
+  drawDimMap();
+}
+
+function drawDimMap() {
+  const cv = $('dimMap'), ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height, d = model.dim;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+  if (d && d.cells && d.cols > 0 && d.rows > 0) {
+    const cw = W / d.cols, ch = H / d.rows;
+    for (let y = 0; y < d.rows; y++) {
+      for (let x = 0; x < d.cols; x++) {
+        const v = parseInt(d.cells[y * d.cols + x], 16);
+        if (!v) continue;
+        ctx.fillStyle = `rgba(255,176,32,${(v / 15).toFixed(3)})`;
+        ctx.fillRect(Math.floor(x * cw), Math.floor(y * ch), Math.ceil(cw), Math.ceil(ch));
+      }
+    }
+  } else {
+    ctx.fillStyle = '#444';
+    ctx.font = '12px "Cascadia Mono", Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(d && d.status === 'paused' ? 'in pausa' : 'mappa non ancora disponibile', W / 2, H / 2);
+  }
+  ctx.strokeStyle = '#333';
+  ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
+}
+
+function renderHighlight() {
+  const b = $('btnHighlight'), d = model.dim;
+  const left = Math.max(0, model.highlightUntil - performance.now());
+  b.disabled = !d || ['off', 'suspended', 'paused'].includes(d.status);
+  b.classList.toggle('on', left > 0);
+  b.textContent = left > 0 ? `Evidenziato · ${Math.ceil(left / 1000)} s` : 'Evidenzia sullo schermo · 15 s';
+}
+setInterval(renderHighlight, 250);
+$('btnHighlight').addEventListener('click', () => send({ cmd: 'dimHighlight' }));
+
+function setRange(id, value) {
+  const el = $(id);
+  if (document.activeElement !== el) el.value = value;
+}
+
+function renderDimConfig() {
+  const c = model.config;
+  if (!c || c.dim_strength_pct === undefined) return;
+  setRange('rangeDimStrength', c.dim_strength_pct);
+  setRange('rangeDimDelay', c.dim_delay_s / 60);
+  setRange('rangeDimRamp', c.dim_ramp_s / 60);
+  setRange('rangeDimLargeDelay', c.dim_large_delay_s / 60);
+  setRange('rangeDimLargeStrength', c.dim_large_strength_pct);
+  $('vDimStrength').textContent = `${c.dim_strength_pct} %`;
+  $('vDimDelay').textContent = fmtMin(c.dim_delay_s);
+  $('vDimRamp').textContent = fmtMin(c.dim_ramp_s);
+  $('vDimLargeDelay').textContent = fmtMin(c.dim_large_delay_s);
+  $('vDimLargeStrength').textContent = `${c.dim_large_strength_pct} %`;
+  const list = $('dimExList');
+  list.innerHTML = '';
+  for (const exe of c.dim_exclude) {
+    const row = document.createElement('div');
+    row.className = 'exrow';
+    const name = document.createElement('span');
+    name.textContent = exe;
+    const rm = document.createElement('button');
+    rm.className = 'tag';
+    rm.textContent = 'TOGLI';
+    rm.addEventListener('click', () => setConfig({ dim_exclude: c.dim_exclude.filter((e) => e !== exe) }));
+    row.append(name, rm);
+    list.appendChild(row);
+  }
+  $('dimExEmpty').hidden = c.dim_exclude.length > 0;
+}
+
+// Slider: etichetta subito, config dopo 400 ms. Le grandi aree non possono iniziare
+// prima degli elementi piccoli: se serve si sposta anche l'altro valore.
+function wireDimRange(id, label, toConfig, fmt) {
+  const push = debounce((patch) => setConfig(patch), 400);
+  $(id).addEventListener('input', (e) => {
+    const patch = toConfig(Number(e.target.value));
+    const value = Object.values(patch)[0];
+    const c = model.config || {};
+    if (patch.dim_delay_s !== undefined && c.dim_large_delay_s < patch.dim_delay_s) patch.dim_large_delay_s = Math.max(300, patch.dim_delay_s);
+    if (patch.dim_large_delay_s !== undefined && c.dim_delay_s > patch.dim_large_delay_s) patch.dim_delay_s = patch.dim_large_delay_s;
+    $(label).textContent = fmt(value);
+    push(patch);
+  });
+}
+wireDimRange('rangeDimStrength', 'vDimStrength', (v) => ({ dim_strength_pct: v }), (v) => `${v} %`);
+wireDimRange('rangeDimDelay', 'vDimDelay', (v) => ({ dim_delay_s: Math.round(v * 60) }), fmtMin);
+wireDimRange('rangeDimRamp', 'vDimRamp', (v) => ({ dim_ramp_s: Math.round(v * 60) }), fmtMin);
+wireDimRange('rangeDimLargeDelay', 'vDimLargeDelay', (v) => ({ dim_large_delay_s: Math.round(v * 60) }), fmtMin);
+wireDimRange('rangeDimLargeStrength', 'vDimLargeStrength', (v) => ({ dim_large_strength_pct: v }), (v) => `${v} %`);
+
+function addDimExclusion() {
+  const raw = $('dimExe').value.trim().toLowerCase();
+  if (!raw || !model.config) return;
+  const exe = /\.exe$/.test(raw) ? raw : raw + '.exe';
+  if (!model.config.dim_exclude.includes(exe)) setConfig({ dim_exclude: [...model.config.dim_exclude, exe] });
+  $('dimExe').value = '';
+}
+$('btnDimAdd').addEventListener('click', addDimExclusion);
+$('dimExe').addEventListener('keydown', (e) => { if (e.key === 'Enter') addDimExclusion(); });
+$('btnDimProcesses').addEventListener('click', () => askProcesses('dimProcList', 'dimExe'));
+drawDimMap();
 
 // ------------------------------------------------------------------ windows per oled
 
@@ -403,7 +545,11 @@ const Mock = {
     pause_on_notification_state: true, pause_on_fullscreen_window: true, pause_enter_delay_ms: 300, resume_delay_ms: 2500,
     denylist: ['netflix.exe'], allowlist: ['vlc.exe'], hotkey_toggle: 'Ctrl+Alt+Shift+P', hotkey_emergency_exit: 'Ctrl+Alt+Shift+F12',
     hotkey_display_off: 'Ctrl+Alt+Shift+O', allow_tearing: false, autostart: true, log_level: 'info',
+    dim_enabled: true, dim_strength_pct: 40, dim_delay_s: 180, dim_ramp_s: 300, dim_recover_ms: 500,
+    dim_large_enabled: false, dim_large_delay_s: 1200, dim_large_strength_pct: 20, dim_bright_threshold_pct: 25,
+    dim_large_fraction_pct: 40, dim_exclude: ['photoshop.exe'],
   },
+  dimWatch: false, dimT: 0, highlightUntil: 0,
   offset: [0, 0], trail: [[0, 0]], paused: false, manual: false, testing: false, next: 6000,
   cells: Array.from({ length: 49 }, (_, i) => { const x = i % 7 - 3, y = Math.floor(i / 7) - 3; return Math.abs(x) <= 2 && Math.abs(y) <= 2 ? 3e6 + Math.random() * 1.2e6 : 0; }),
   windows: [
@@ -430,6 +576,22 @@ const Mock = {
     this.sendStats();
     setInterval(() => this.step(), 250);
     setInterval(() => this.sendStats(), 5000);
+    setInterval(() => this.sendDim(), 1000);
+  },
+  // Mappa finta: barra in basso che si scurisce piano e qualche icona sparsa.
+  sendDim() {
+    if (!this.dimWatch) return;
+    this.dimT += 1;
+    const cols = 120, rows = 68, cells = new Array(cols * rows).fill('0');
+    const bar = Math.min(15, Math.floor(this.dimT / 2) + 4);
+    for (let y = rows - 3; y < rows; y++) for (let x = 0; x < cols; x++) cells[y * cols + x] = bar.toString(16);
+    for (const [x, y] of [[3, 4], [3, 9], [3, 14], [3, 19], [110, 6], [60, 30]]) {
+      for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) cells[(y + dy) * cols + x + dx] = 'c';
+    }
+    const on = this.config.dim_enabled;
+    receive({ type: 'dim', status: on ? 'active' : 'off', suspended_by: '', cols, rows, cells: on ? cells.join('') : '',
+      dimmed_pct: on ? 4.6 : 0, max_level: on ? bar / 15 * 0.8 : 0, sdr_white_nits: 240, hdr: true,
+      highlight_left_ms: Math.max(0, this.highlightUntil - Date.now()) });
   },
   step() {
     this.next -= 250;
@@ -468,6 +630,8 @@ const Mock = {
     if (c.cmd === 'windowsApply') { const w = this.windows.find((x) => x[0] === c.id); if (w) { w[4] = true; w[2] = w[3].toLowerCase(); } this.sendWindows(); }
     if (c.cmd === 'windowsApplyAll') { this.windows.forEach((w) => { w[4] = true; }); this.sendWindows(); }
     if (c.cmd === 'displayOff') toast('Anteprima: qui lo schermo si spegnerebbe.');
+    if (c.cmd === 'dimWatch') { this.dimWatch = c.on; if (c.on) this.sendDim(); }
+    if (c.cmd === 'dimHighlight') { this.highlightUntil = Date.now() + 15000; this.sendDim(); }
     if (c.cmd === 'window') toast(`Anteprima: comando finestra "${c.action}".`);
   },
 };

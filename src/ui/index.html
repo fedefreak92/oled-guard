@@ -21,6 +21,7 @@
   <button class="on" data-tab="stato">Stato</button>
   <button data-tab="spostamento">Spostamento</button>
   <button data-tab="app">Giochi e app</button>
+  <button data-tab="oscuramento">Oscuramento</button>
   <button data-tab="windows">Windows per OLED</button>
 </nav>
 
@@ -110,6 +111,69 @@
     <div class="sec gap">Pausa automatica</div>
     <div class="row"><span class="k">Giochi DirectX a schermo intero, presentazioni, schermo assente</span><button class="toggle" data-toggle="pause_on_notification_state">ON</button></div>
     <div class="row"><span class="k">Qualsiasi finestra a tutto schermo (borderless, video)</span><button class="toggle" data-toggle="pause_on_fullscreen_window">ON</button></div>
+  </section>
+
+  <!-- OSCURAMENTO -->
+  <section class="tab" id="tab-oscuramento">
+    <div class="stato">
+      <div class="radar-wrap">
+        <canvas id="dimMap" width="480" height="270" aria-label="Zone oscurate"></canvas>
+        <div class="radar-caption">zone oscurate · ambra piu' intensa = piu' scura</div>
+      </div>
+      <div>
+        <div class="rows">
+          <div class="row hl"><span class="k">Stato</span><span class="v" id="vDimStatus">-</span></div>
+          <div class="row"><span class="k">Zone oscurate</span><span class="v" id="vDimArea">-</span></div>
+          <div class="row"><span class="k">Oscuramento piu' forte</span><span class="v" id="vDimMax">-</span></div>
+          <div class="row"><span class="k">Bianco di Windows</span><span class="v" id="vDimWhite">-</span></div>
+        </div>
+        <div class="actions">
+          <button class="btn" id="btnHighlight">Evidenzia sullo schermo · 15 s</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="cols gap">
+      <div>
+        <div class="sec">Elementi piccoli</div>
+        <div class="row"><span class="k">Oscuramento attivo</span><button class="toggle" data-toggle="dim_enabled">ON</button></div>
+        <div class="row col">
+          <div class="row-head"><span class="k">Intensita' massima</span><span class="v" id="vDimStrength">-</span></div>
+          <input type="range" class="single" id="rangeDimStrength" min="10" max="80" step="1">
+        </div>
+        <div class="row col">
+          <div class="row-head"><span class="k">Inizia quando e' fermo da</span><span class="v" id="vDimDelay">-</span></div>
+          <input type="range" class="single" id="rangeDimDelay" min="0.5" max="60" step="0.5">
+        </div>
+        <div class="row col">
+          <div class="row-head"><span class="k">Durata della discesa</span><span class="v" id="vDimRamp">-</span></div>
+          <input type="range" class="single" id="rangeDimRamp" min="0.5" max="60" step="0.5">
+        </div>
+      </div>
+      <div>
+        <div class="sec">Grandi aree</div>
+        <div class="row"><span class="k">Oscura anche le grandi aree ferme</span><button class="toggle" data-toggle="dim_large_enabled">OFF</button></div>
+        <div class="row col">
+          <div class="row-head"><span class="k">Inizia quando e' ferma da</span><span class="v" id="vDimLargeDelay">-</span></div>
+          <input type="range" class="single" id="rangeDimLargeDelay" min="5" max="240" step="5">
+        </div>
+        <div class="row col">
+          <div class="row-head"><span class="k">Intensita' massima</span><span class="v" id="vDimLargeStrength">-</span></div>
+          <input type="range" class="single" id="rangeDimLargeStrength" min="5" max="80" step="1">
+        </div>
+
+        <div class="sec gap">Sospendi con queste app</div>
+        <div id="dimExList"></div>
+        <div class="empty" id="dimExEmpty">Nessuna app: l'oscuramento resta sempre attivo.</div>
+        <div class="add">
+          <input id="dimExe" placeholder="nome dell'app, es. photoshop.exe" maxlength="260" spellcheck="false">
+          <button class="btn ghost" id="btnDimProcesses">App aperte</button>
+          <button class="btn" id="btnDimAdd">Aggiungi</button>
+        </div>
+        <div class="proc" id="dimProcList" hidden></div>
+      </div>
+    </div>
+    <div class="hint">Si scuriscono solo gli elementi piccoli fermi e luminosi (barra, icone, loghi): documenti e pagine ferme restano intatti. Una zona torna normale appena il suo contenuto cambia; il puntatore del mouse da solo non conta.</div>
   </section>
 
   <!-- WINDOWS PER OLED -->
