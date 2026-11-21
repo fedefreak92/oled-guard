@@ -278,3 +278,68 @@ TEST(config_dim_window_mode_and_activate_validated) {
   CHECK(AnyContains(bad.warnings, "dim_window_mode"));
   CHECK(AnyContains(bad.warnings, "dim_activate"));
 }
+
+TEST(config_new_fields_defaults) {
+  auto r = ConfigFromJson("{}");
+  CHECK(r.warnings.empty());
+  const Config& c = r.config;
+  CHECK_EQ(c.brightness_pct, 100);
+  CHECK(!c.vignette_enabled);
+  CHECK_EQ(c.vignette_strength_pct, 50);
+  CHECK_EQ(c.vignette_left_pct, 8);
+  CHECK_EQ(c.vignette_right_pct, 8);
+  CHECK_EQ(c.vignette_top_pct, 0);
+  CHECK_EQ(c.vignette_bottom_pct, 12);
+  CHECK(!c.away_enabled);
+  CHECK_EQ(c.away_after_min, 10);
+  CHECK_EQ(c.away_brightness_pct, 30);
+  CHECK_EQ(c.ui_accent, std::string("teal"));
+  CHECK_EQ(c.ui_text_size, std::string("normal"));
+  CHECK(c.app_list.empty());
+}
+
+TEST(config_new_fields_read_and_roundtrip) {
+  auto r = ConfigFromJson(R"({"brightness_pct": 60, "vignette_enabled": true, "vignette_left_pct": 40,
+    "vignette_strength_pct": 80, "away_enabled": true, "away_after_min": 1, "away_brightness_pct": 10,
+    "ui_accent": "violet", "ui_text_size": "xl", "app_list": ["Game.EXE"]})");
+  CHECK(r.warnings.empty());
+  const Config& c = r.config;
+  CHECK_EQ(c.brightness_pct, 60);
+  CHECK(c.vignette_enabled);
+  CHECK_EQ(c.vignette_left_pct, 40);
+  CHECK_EQ(c.vignette_strength_pct, 80);
+  CHECK(c.away_enabled);
+  CHECK_EQ(c.away_after_min, 1);
+  CHECK_EQ(c.away_brightness_pct, 10);
+  CHECK_EQ(c.ui_accent, std::string("violet"));
+  CHECK_EQ(c.ui_text_size, std::string("xl"));
+  CHECK_EQ(c.app_list.size(), size_t{1});
+  CHECK_EQ(c.app_list[0], std::string("game.exe"));
+  CHECK(ConfigFromJson(ConfigToJson(c)).config == c);
+}
+
+TEST(config_new_fields_out_of_range) {
+  auto r = ConfigFromJson(R"({"brightness_pct": 19, "vignette_strength_pct": 81, "vignette_top_pct": 41,
+    "away_after_min": 0, "away_brightness_pct": 81, "ui_accent": "pink", "ui_text_size": "huge"})");
+  CHECK(r.config == Config{});
+  for (const char* name : {"brightness_pct", "vignette_strength_pct", "vignette_top_pct", "away_after_min",
+                           "away_brightness_pct", "ui_accent", "ui_text_size"}) {
+    CHECK(AnyContains(r.warnings, name));
+  }
+}
+
+TEST(config_app_list_normalized) {
+  const std::string long_name(261, 'x');
+  auto r = ConfigFromJson(R"({"app_list": ["A.exe", "a.exe", "", 5, ")" + long_name + R"("]})");
+  CHECK_EQ(r.config.app_list.size(), size_t{1});
+  CHECK_EQ(r.config.app_list[0], std::string("a.exe"));
+  CHECK(AnyContains(r.warnings, "app_list"));
+
+  std::string many = R"({"app_list": [)";
+  for (int i = 0; i < 201; ++i) many += (i ? "," : "") + std::string("\"app") + std::to_string(i) + ".exe\"";
+  many += "]}";
+  auto m = ConfigFromJson(many);
+  CHECK_EQ(m.config.app_list.size(), size_t{200});
+  CHECK_EQ(m.config.app_list[199], std::string("app199.exe"));
+  CHECK(AnyContains(m.warnings, "app_list"));
+}

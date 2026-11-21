@@ -41,5 +41,11 @@ class AppHistory {
 AppRule RuleFor(const Config& config, std::string_view exe);
 // Toglie l'exe da entrambe le liste e lo aggiunge (minuscolo) a quella della regola.
 Config WithRule(Config config, std::string_view exe, AppRule rule);
+// Aggiunge l'exe (minuscolo) ad app_list se manca; nessun cambio di regola.
+Config WithListedApp(Config config, std::string_view exe);
+// Toglie l'exe da app_list, denylist, allowlist e dim_exclude.
+Config WithoutApp(Config config, std::string_view exe);
+// Aggiunge o toglie l'exe (minuscolo) da dim_exclude.
+Config WithDimExclude(Config config, std::string_view exe, bool on);
 
 }  // namespace oled

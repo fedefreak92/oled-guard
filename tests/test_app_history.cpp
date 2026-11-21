@@ -78,3 +78,29 @@ TEST(app_history_json_roundtrip) {
   }
   CHECK(AppHistory::FromJson(oled::JsonValue(3)).Entries().empty());
 }
+
+TEST(app_rules_listed_and_removed) {
+  oled::Config c;
+  c = oled::WithListedApp(c, "Foo.exe");
+  c = oled::WithListedApp(c, "foo.exe");
+  CHECK_EQ(c.app_list.size(), size_t{1});
+  CHECK_EQ(c.app_list[0], std::string("foo.exe"));
+
+  oled::Config all;
+  all.app_list = {"foo.exe"};
+  all.denylist = {"foo.exe", "bar.exe"};
+  all.allowlist = {"foo.exe"};
+  all.dim_exclude = {"foo.exe"};
+  const oled::Config cleaned = oled::WithoutApp(all, "FOO.exe");
+  CHECK(cleaned.app_list.empty());
+  CHECK_EQ(cleaned.denylist.size(), size_t{1});
+  CHECK(cleaned.allowlist.empty());
+  CHECK(cleaned.dim_exclude.empty());
+
+  const oled::Config start;
+  const oled::Config on = oled::WithDimExclude(start, "Foo.exe", true);
+  CHECK_EQ(on.dim_exclude.size(), size_t{1});
+  CHECK_EQ(on.dim_exclude[0], std::string("foo.exe"));
+  CHECK(oled::WithDimExclude(on, "foo.exe", true) == on);
+  CHECK(oled::WithDimExclude(on, "foo.exe", false) == start);
+}

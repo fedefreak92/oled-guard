@@ -1,5 +1,6 @@
 #include "config.h"
 
+#include <algorithm>
 #include <cmath>
 
 #include "ascii.h"
@@ -131,6 +132,27 @@ void FixHotkeys(Reader& reader, Config& c) {
 
 }  // namespace
 
+// Toglie duplicati e nomi troppo lunghi, limita a kMaxAppList voci.
+void CleanAppList(Reader& reader, std::vector<std::string>& list) {
+  constexpr size_t kMaxAppList = 200;
+  constexpr size_t kMaxExe = 260;
+  std::vector<std::string> clean;
+  bool dropped = false;
+  for (auto& exe : list) {
+    if (exe.size() > kMaxExe || std::find(clean.begin(), clean.end(), exe) != clean.end()) {
+      dropped |= exe.size() > kMaxExe;
+      continue;
+    }
+    clean.push_back(std::move(exe));
+  }
+  if (dropped) reader.Warn("app_list: nomi piu' lunghi di 260 caratteri ignorati");
+  if (clean.size() > kMaxAppList) {
+    clean.resize(kMaxAppList);
+    reader.Warn("app_list: al massimo 200 app, le altre sono ignorate");
+  }
+  list = std::move(clean);
+}
+
 ConfigLoadResult ConfigFromJson(std::string_view raw) {
   ConfigLoadResult result;
   // Blocco note puo' salvare in UTF-16 (LE o BE, con BOM): si converte in UTF-8.
@@ -194,6 +216,22 @@ ConfigLoadResult ConfigFromJson(std::string_view raw) {
     else if (key == "dim_exclude") r.List(key, v, c.dim_exclude);
     else if (key == "dim_window_mode") r.Choice(key, v, {"desktop", "video"}, c.dim_window_mode);
     else if (key == "dim_activate") r.Choice(key, v, {"hover", "click", "both", "never"}, c.dim_activate);
+    else if (key == "brightness_pct") r.Int(key, v, 20, 100, c.brightness_pct);
+    else if (key == "vignette_enabled") r.Bool(key, v, c.vignette_enabled);
+    else if (key == "vignette_strength_pct") r.Int(key, v, 0, 80, c.vignette_strength_pct);
+    else if (key == "vignette_left_pct") r.Int(key, v, 0, 40, c.vignette_left_pct);
+    else if (key == "vignette_right_pct") r.Int(key, v, 0, 40, c.vignette_right_pct);
+    else if (key == "vignette_top_pct") r.Int(key, v, 0, 40, c.vignette_top_pct);
+    else if (key == "vignette_bottom_pct") r.Int(key, v, 0, 40, c.vignette_bottom_pct);
+    else if (key == "away_enabled") r.Bool(key, v, c.away_enabled);
+    else if (key == "away_after_min") r.Int(key, v, 1, 60, c.away_after_min);
+    else if (key == "away_brightness_pct") r.Int(key, v, 10, 80, c.away_brightness_pct);
+    else if (key == "ui_accent") r.Choice(key, v, {"teal", "indigo", "coral", "green", "amber", "violet"}, c.ui_accent);
+    else if (key == "ui_text_size") r.Choice(key, v, {"small", "normal", "large", "xl"}, c.ui_text_size);
+    else if (key == "app_list") {
+      r.List(key, v, c.app_list);
+      CleanAppList(r, c.app_list);
+    }
     else if (key == "log_level") {
       std::string level = c.log_level;
       r.String(key, v, level);
@@ -259,6 +297,19 @@ std::string ConfigToJson(const Config& c) {
   o.Set("dim_exclude", list(c.dim_exclude));
   o.Set("dim_window_mode", JsonValue(c.dim_window_mode));
   o.Set("dim_activate", JsonValue(c.dim_activate));
+  o.Set("brightness_pct", JsonValue(c.brightness_pct));
+  o.Set("vignette_enabled", JsonValue(c.vignette_enabled));
+  o.Set("vignette_strength_pct", JsonValue(c.vignette_strength_pct));
+  o.Set("vignette_left_pct", JsonValue(c.vignette_left_pct));
+  o.Set("vignette_right_pct", JsonValue(c.vignette_right_pct));
+  o.Set("vignette_top_pct", JsonValue(c.vignette_top_pct));
+  o.Set("vignette_bottom_pct", JsonValue(c.vignette_bottom_pct));
+  o.Set("away_enabled", JsonValue(c.away_enabled));
+  o.Set("away_after_min", JsonValue(c.away_after_min));
+  o.Set("away_brightness_pct", JsonValue(c.away_brightness_pct));
+  o.Set("ui_accent", JsonValue(c.ui_accent));
+  o.Set("ui_text_size", JsonValue(c.ui_text_size));
+  o.Set("app_list", list(c.app_list));
   return SerializeJson(o) + "\n";
 }
 

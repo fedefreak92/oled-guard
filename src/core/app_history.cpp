@@ -89,4 +89,23 @@ Config WithRule(Config config, std::string_view exe, AppRule rule) {
   return config;
 }
 
+Config WithListedApp(Config config, std::string_view exe) {
+  if (!Contains(config.app_list, exe)) config.app_list.push_back(ToLowerAscii(exe));
+  return config;
+}
+
+Config WithoutApp(Config config, std::string_view exe) {
+  Erase(config.app_list, exe);
+  Erase(config.denylist, exe);
+  Erase(config.allowlist, exe);
+  Erase(config.dim_exclude, exe);
+  return config;
+}
+
+Config WithDimExclude(Config config, std::string_view exe, bool on) {
+  Erase(config.dim_exclude, exe);
+  if (on) config.dim_exclude.push_back(ToLowerAscii(exe));
+  return config;
+}
+
 }  // namespace oled

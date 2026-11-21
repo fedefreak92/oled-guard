@@ -45,6 +45,27 @@ struct Config {
   std::string dim_window_mode = "desktop";  // "desktop" (come il desktop) | "video" (solo loghi su video)
   std::string dim_activate = "both";        // finestra che torna normale: "hover" | "click" | "both" | "never"
 
+  // Luminosita' via software e bordi scuriti (applicati dall'overlay).
+  int brightness_pct = 100;         // 20-100
+  bool vignette_enabled = false;
+  int vignette_strength_pct = 50;   // 0-80
+  int vignette_left_pct = 8;        // 0-40, % del lato dello schermo
+  int vignette_right_pct = 8;       // 0-40
+  int vignette_top_pct = 0;         // 0-40
+  int vignette_bottom_pct = 12;     // 0-40
+
+  // Modalita' assente: schermo scurito dopo un po' senza input e senza movimento.
+  bool away_enabled = false;
+  int away_after_min = 10;          // 1-60
+  int away_brightness_pct = 30;     // 10-80
+
+  // Aspetto dell'interfaccia.
+  std::string ui_accent = "teal";      // teal | indigo | coral | green | amber | violet
+  std::string ui_text_size = "normal"; // small | normal | large | xl
+
+  // App aggiunte a mano nella pagina Profili app (restano in elenco anche con regola automatica).
+  std::vector<std::string> app_list;   // .exe minuscoli, max 200
+
   bool operator==(const Config&) const = default;
 };
 
