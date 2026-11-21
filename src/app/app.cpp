@@ -1012,9 +1012,13 @@ void App::OnUiMessage(const std::string& json) {
     case UiCommandType::BrowseExe:
       BrowseExe();
       break;
-    case UiCommandType::SetMonitor:
-      SelectMonitorSetting(command->id);
+    case UiCommandType::SetMonitor: {
+      // Si salva il nome amichevole: il numero DISPLAYn puo' cambiare dopo un riavvio della TV.
+      std::vector<MonitorDesc> descs;
+      for (const auto& m : EnumerateMonitors()) descs.push_back({Narrow(m.device_name), Narrow(m.friendly_name), m.primary});
+      SelectMonitorSetting(MonitorSettingForDevice(descs, command->id));
       break;
+    }
     case UiCommandType::Window:
       // Mai chiudere WebView2 dentro un suo evento: si rimanda al ciclo dei messaggi.
       if (command->action == "close") PostMessageW(main_, WM_APP_UI_CLOSE, 0, 0);

@@ -55,3 +55,14 @@ TEST(monitor_setting_uses_device_name_for_duplicates) {
 TEST(monitor_none_connected) {
   CHECK(!SelectMonitor({}, "auto").has_value());
 }
+
+// La pagina Monitor manda il device name: si salva il nome amichevole (stabile anche se
+// Windows rinumera gli schermi), il device name solo fra due schermi con lo stesso nome.
+TEST(monitor_setting_for_device) {
+  const std::vector<oled::MonitorDesc> two = {{"DISPLAY1", "DELL U2723QE", true}, {"DISPLAY2", "LG TV SSCR2", false}};
+  CHECK_EQ(oled::MonitorSettingForDevice(two, "display2"), std::string("LG TV SSCR2"));
+  CHECK_EQ(oled::MonitorSettingForDevice(two, "auto"), std::string("auto"));
+  CHECK_EQ(oled::MonitorSettingForDevice(two, "DISPLAY9"), std::string("DISPLAY9"));  // sconosciuto: invariato
+  const std::vector<oled::MonitorDesc> twins = {{"DISPLAY1", "LG TV SSCR2", true}, {"DISPLAY2", "LG TV SSCR2", false}};
+  CHECK_EQ(oled::MonitorSettingForDevice(twins, "DISPLAY2"), std::string("DISPLAY2"));
+}

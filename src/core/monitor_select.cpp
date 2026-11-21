@@ -32,4 +32,11 @@ std::string MonitorSettingFor(std::span<const MonitorDesc> monitors, size_t inde
   return chosen.friendly_name;
 }
 
+std::string MonitorSettingForDevice(std::span<const MonitorDesc> monitors, std::string_view device) {
+  for (size_t i = 0; i < monitors.size(); ++i) {
+    if (EqualsIgnoreCase(monitors[i].device_name, device)) return MonitorSettingFor(monitors, i);
+  }
+  return std::string(device);
+}
+
 }  // namespace oled

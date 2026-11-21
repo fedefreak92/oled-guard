@@ -23,4 +23,8 @@ std::optional<size_t> SelectMonitor(std::span<const MonitorDesc> monitors, std::
 // e' unico, altrimenti il device name.
 std::string MonitorSettingFor(std::span<const MonitorDesc> monitors, size_t index);
 
+// Come MonitorSettingFor, partendo dal device name scelto nella pagina Monitor.
+// "auto" e device sconosciuti restano invariati.
+std::string MonitorSettingForDevice(std::span<const MonitorDesc> monitors, std::string_view device);
+
 }  // namespace oled
