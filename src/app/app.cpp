@@ -282,6 +282,7 @@ void App::ApplyConfig(const Config& next) {
   if (previous.hotkey_emergency_exit != config_.hotkey_emergency_exit) StartEmergencyGuard();
   if (previous.hotkey_display_off != config_.hotkey_display_off) RegisterDisplayOffHotkey();
   SyncAutostart();
+  PushDimInputs();
   if (previous.monitor != config_.monitor || previous.allow_tearing != config_.allow_tearing) {
     // Serve un overlay nuovo: altro monitor o altra swap chain. Lo stato "ruotato"
     // riguardava il monitor precedente: RefreshMonitor lo rivaluta.
@@ -435,6 +436,8 @@ void App::Tick() {
   const PauseReason reason = hysteresis_.Reason();
 
   last_foreground_ = in.foreground_process;
+  if (monitor_ && now - sdr_white_checked_ms_ >= 5000) RefreshSdrWhite(now);
+  PushDimInputs();
   const bool entered_pause = !first_tick_ && paused && !last_paused_;
   if (first_tick_ || paused != last_paused_ || (paused && reason != last_reason_)) {
     if (paused) {
@@ -532,6 +535,33 @@ void App::PushAllToUi() {
   last_stats_push_ms_ = now;
 }
 
+void App::RefreshSdrWhite(double now) {
+  sdr_white_checked_ms_ = now;
+  if (!monitor_) return;
+  const auto white = QuerySdrWhiteLevel(*monitor_);
+  if (white) {
+    if (*white != sdr_white_) LogDebug("Bianco SDR: {:.0f} nit", *white * 80.0f);
+    sdr_white_ = *white;
+    sdr_white_warned_ = false;
+  } else if (!sdr_white_warned_) {
+    LogWarn("Bianco SDR non leggibile, uso 200 nit");
+    sdr_white_ = 2.5f;
+    sdr_white_warned_ = true;
+  }
+}
+
+void App::PushDimInputs() {
+  DimInputs in;
+  in.params = ToDimParams(config_);
+  in.suspended = !last_foreground_.empty() &&
+                 std::find(config_.dim_exclude.begin(), config_.dim_exclude.end(), last_foreground_) !=
+                     config_.dim_exclude.end();
+  in.sdr_white_scrgb = sdr_white_;
+  in.highlight_until_ms = dim_highlight_until_ms_;
+  in.watch = dim_watch_;
+  dim_.Set(in);
+}
+
 bool App::StartOverlay() {
   if (overlay_running_) return true;
   if (!monitor_) return false;
@@ -543,6 +573,10 @@ bool App::StartOverlay() {
   params.monitor = *monitor_;
   params.allow_tearing = config_.allow_tearing;
   params.shift = shift_.get();
+  params.dim = &dim_;
+  params.frame_period_ms = latency_ms_ > 0 ? latency_ms_ : 7.0;
+  RefreshSdrWhite(NowMs());
+  PushDimInputs();
   params.guard = &guard_;
   params.generation = ++render_generation_;
   // Si riparte dall'ultima posizione mostrata, con una sosta nuova.
@@ -577,6 +611,7 @@ void App::OnRenderEvent(RenderEvent event) {
     case RenderEvent::FirstFrameShown:
       LogInfo("Overlay a schermo");
       overlay_shown_ = true;
+      overlay_shown_since_ms_ = NowMs();
       guard_.SetOverlayActive(true);
       break;
     case RenderEvent::CaptureLost:

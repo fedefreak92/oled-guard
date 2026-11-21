@@ -40,7 +40,8 @@ void DesktopCapture::Stop() {
   height_ = 0;
 }
 
-DesktopCapture::Status DesktopCapture::Acquire(UINT timeout_ms, ID3D11Texture2D* cache) {
+DesktopCapture::Status DesktopCapture::Acquire(UINT timeout_ms, ID3D11Texture2D* cache,
+                                              const std::function<void(ID3D11Texture2D* frame)>& before_copy) {
   if (!duplication_) return Status::Failed;
   DXGI_OUTDUPL_FRAME_INFO info{};
   ComPtr<IDXGIResource> resource;
@@ -76,6 +77,7 @@ DesktopCapture::Status DesktopCapture::Acquire(UINT timeout_ms, ID3D11Texture2D*
         height_ = src.Height;
         status = Status::FormatChanged;
       } else {
+        if (before_copy) before_copy(texture.Get());
         context_->CopyResource(cache, texture.Get());
         status = Status::NewFrame;
         first_frame_ = false;

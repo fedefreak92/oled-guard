@@ -56,6 +56,47 @@ target_include_directories(oled-guard-tests PRIVATE tests)
 target_link_libraries(oled-guard-tests PRIVATE oled_core)
 add_test(NAME oled-guard-tests COMMAND oled-guard-tests)
 
+# Shader compilati in build con fxc: bytecode incluso come header.
+find_program(FXC_EXE fxc REQUIRED)
+set(SHADER_OUT ${CMAKE_BINARY_DIR}/generated)
+file(MAKE_DIRECTORY ${SHADER_OUT})
+
+# Parte GPU condivisa fra l'app e i test con device WARP (oscuramento e shader).
+add_library(oled_gpu STATIC
+  src/app/dimmer.cpp
+  src/app/shared_dim.cpp
+)
+target_include_directories(oled_gpu PUBLIC src/app ${SHADER_OUT})
+target_link_libraries(oled_gpu PUBLIC oled_core d3d11 dxgi)
+
+# var: nome dell'header e della variabile g_<var>; entry: funzione dello shader.
+function(add_shader_entry var file entry profile)
+  set(src ${CMAKE_SOURCE_DIR}/src/app/shaders/${file}.hlsl)
+  set(out ${SHADER_OUT}/${var}.h)
+  add_custom_command(OUTPUT ${out}
+    COMMAND ${FXC_EXE} /nologo /T ${profile} /E ${entry} /O3 /WX /Fh ${out} /Vn g_${var} ${src}
+    DEPENDS ${src} VERBATIM)
+  target_sources(oled_gpu PRIVATE ${out})
+endfunction()
+add_shader_entry(fullscreen_vs fullscreen_vs main vs_5_0)
+add_shader_entry(shift_ps shift_ps main ps_5_0)
+add_shader_entry(dim_detect dim_cs CSDetect cs_5_0)
+add_shader_entry(dim_density_h dim_cs CSDensityH cs_5_0)
+add_shader_entry(dim_density_v dim_cs CSDensityV cs_5_0)
+add_shader_entry(dim_max_h dim_cs CSMaxH cs_5_0)
+add_shader_entry(dim_max_v dim_cs CSMaxV cs_5_0)
+add_shader_entry(dim_level dim_cs CSLevel cs_5_0)
+
+# Test degli shader su device WARP (nessuna GPU necessaria).
+add_executable(oled-guard-gpu-tests
+  tests/test_main.cpp
+  tests_gpu/test_dimmer_gpu.cpp
+  tests_gpu/test_shift_ps_gpu.cpp
+)
+target_include_directories(oled-guard-gpu-tests PRIVATE tests tests_gpu)
+target_link_libraries(oled-guard-gpu-tests PRIVATE oled_gpu)
+add_test(NAME oled-guard-gpu-tests COMMAND oled-guard-gpu-tests)
+
 # Applicazione Win32 / D3D11 / DXGI / DirectComposition.
 add_executable(oled-guard WIN32
   src/app/main.cpp
@@ -81,22 +122,6 @@ add_executable(oled-guard WIN32
   src/app/oled-guard.manifest
 )
 
-# Shader compilati in build con fxc: bytecode incluso come header.
-find_program(FXC_EXE fxc REQUIRED)
-set(SHADER_OUT ${CMAKE_BINARY_DIR}/generated)
-file(MAKE_DIRECTORY ${SHADER_OUT})
-function(add_shader name profile)
-  set(src ${CMAKE_SOURCE_DIR}/src/app/shaders/${name}.hlsl)
-  set(out ${SHADER_OUT}/${name}.h)
-  add_custom_command(OUTPUT ${out}
-    COMMAND ${FXC_EXE} /nologo /T ${profile} /E main /O3 /WX /Fh ${out} /Vn g_${name} ${src}
-    DEPENDS ${src} VERBATIM)
-  target_sources(oled-guard PRIVATE ${out})
-endfunction()
-add_shader(fullscreen_vs vs_5_0)
-add_shader(shift_ps ps_5_0)
-
-target_include_directories(oled-guard PRIVATE src/app ${SHADER_OUT})
 
 # WebView2 SDK (unica dipendenza esterna, scelta dall'utente): header di sistema
 # (niente warning) e loader statico, nessuna DLL da distribuire.
@@ -107,5 +132,5 @@ target_link_libraries(oled-guard PRIVATE ${CMAKE_SOURCE_DIR}/third_party/webview
 add_custom_command(TARGET oled-guard POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/src/ui $<TARGET_FILE_DIR:oled-guard>/ui
   VERBATIM)
-target_link_libraries(oled-guard PRIVATE oled_core
+target_link_libraries(oled-guard PRIVATE oled_core oled_gpu
   d3d11 dxgi dcomp dwmapi wtsapi32 shell32 user32 advapi32 shlwapi ole32 powrprof)

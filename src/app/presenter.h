@@ -11,6 +11,15 @@
 
 namespace oled {
 
+// Ingressi dell'oscuramento per un disegno; levels == nullptr: nessun oscuramento.
+struct DimDrawInputs {
+  ID3D11ShaderResourceView* levels = nullptr;
+  UINT cols = 0;
+  UINT rows = 0;
+  float sdr_white = 1;  // valore del bianco nel formato di uscita (1 in SDR)
+  bool highlight = false;
+};
+
 class Presenter {
  public:
   ~Presenter() { Shutdown(); }
@@ -23,7 +32,7 @@ class Presenter {
   DXGI_FORMAT Format() const { return format_; }
 
   HANDLE FrameWaitable() const { return waitable_; }
-  HRESULT Draw(ID3D11Texture2D* source, Offset offset);
+  HRESULT Draw(ID3D11Texture2D* source, Offset offset, const DimDrawInputs& dim = {});
   // Attacca/stacca la swap chain dal visual: staccata, la finestra non mostra nulla.
   void SetVisible(bool visible);
 
@@ -38,6 +47,7 @@ class Presenter {
   ComPtr<ID3D11VertexShader> vs_;
   ComPtr<ID3D11PixelShader> ps_;
   ComPtr<ID3D11Buffer> constants_;
+  ComPtr<ID3D11SamplerState> sampler_;
   ComPtr<ID3D11ShaderResourceView> srv_;
   ID3D11Texture2D* srv_source_ = nullptr;
   ComPtr<IDCompositionDevice> dcomp_;

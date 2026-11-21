@@ -6,6 +6,8 @@
 #include "capture.h"
 #include "clock.h"
 #include "d3d_device.h"
+#include "dim_schedule.h"
+#include "dimmer.h"
 #include "logger.h"
 #include "presenter.h"
 #include "text.h"
@@ -106,6 +108,11 @@ RenderThread::SessionEnd RenderThread::RunSession() {
 
   DesktopCapture capture;
   Presenter presenter;
+  Dimmer dimmer;
+  DimRedrawSchedule dim_schedule;
+  bool dim_ok = false;
+  uint64_t dim_version = 0;
+  bool highlight_on = false;
   ComPtr<ID3D11Texture2D> cache;
   DWORD backoff_ms = 100;
   double unavailable_since = -1;  // inizio degli errori "transitori" consecutivi
@@ -180,17 +187,44 @@ RenderThread::SessionEnd RenderThread::RunSession() {
                                  presenter.Height() != capture.Height() || presenter.Format() != capture.Format();
       if (needs_reshape && !reshape()) return SessionEnd::Failed;
       have_frame = false;
+      // La mappa dell'oscuramento riparte da zero a ogni (ri)avvio della cattura.
+      dim_ok = false;
+      if (params_.dim) {
+        hr = dimmer.Init(device.Get(), capture.Width(), capture.Height(), capture.Format(), NowMs());
+        dim_ok = SUCCEEDED(hr);
+        if (!dim_ok) LogWarn("Render: oscuramento non disponibile ({}), continuo senza", Hr(hr));
+      }
       LogInfo("Cattura avviata: {}x{} {}", capture.Width(), capture.Height(), FormatName(capture.Format()));
     }
 
     double now = NowMs();
-    UINT timeout = kMaxAcquireTimeoutMs;
-    if (params_.shift) {
-      const double next = params_.shift->NextChangeAt(now);
-      timeout = static_cast<UINT>(std::clamp(next - now, 0.0, static_cast<double>(kMaxAcquireTimeoutMs)));
+    const DimInputs dim_in = params_.dim ? params_.dim->Get() : DimInputs{};
+    const bool hdr = capture.Format() == DXGI_FORMAT_R16G16B16A16_FLOAT;
+    const float white = hdr ? dim_in.sdr_white_scrgb : 1.0f;
+    const bool highlight = dim_in.highlight_until_ms > now;
+    if (dim_in.version != dim_version || highlight != highlight_on) {
+      dim_schedule.Poke(now);
+      dim_version = dim_in.version;
+      highlight_on = highlight;
     }
+    double next = now + kMaxAcquireTimeoutMs;
+    if (params_.shift) next = std::min(next, params_.shift->NextChangeAt(now));
+    if (dim_ok) {
+      next = std::min(next, dim_schedule.NextRedrawAt(now, dim_in.params, params_.frame_period_ms));
+      if (highlight) next = std::min(next, dim_in.highlight_until_ms);
+    }
+    const UINT timeout = static_cast<UINT>(std::clamp(next - now, 0.0, static_cast<double>(kMaxAcquireTimeoutMs)));
 
-    const auto status = capture.Acquire(timeout, cache.Get());
+    const auto status = capture.Acquire(timeout, cache.Get(), [&](ID3D11Texture2D* frame) {
+      if (!dim_ok) return;
+      const double t = NowMs();
+      if (FAILED(dimmer.Detect(frame, cache.Get(), t, dim_in.params, white))) {
+        LogWarn("Render: confronto dell'oscuramento fallito, continuo senza");
+        dim_ok = false;
+        return;
+      }
+      dim_schedule.OnNewFrame(t);
+    });
     if (status == DesktopCapture::Status::AccessLost) {
       // Nessuna immagine vecchia a schermo: si nasconde subito l'overlay.
       hide();
@@ -218,10 +252,18 @@ RenderThread::SessionEnd RenderThread::RunSession() {
 
     now = NowMs();
     const Offset offset = params_.shift ? params_.shift->OffsetAt(now) : Offset{};
+    const bool dim_due = dim_ok && now >= dim_schedule.NextRedrawAt(now, dim_in.params, params_.frame_period_ms);
     // Si presenta solo se c'e' qualcosa di nuovo da mostrare.
-    if (new_frame || !(offset == last_drawn)) {
+    if (new_frame || !(offset == last_drawn) || dim_due) {
       WaitForSingleObjectEx(presenter.FrameWaitable(), 100, TRUE);
-      hr = presenter.Draw(cache.Get(), offset);
+      DimDrawInputs dim_draw;
+      if (dim_ok) {
+        now = NowMs();
+        dimmer.Update(now, dim_in.params, dim_in.suspended);
+        dim_schedule.OnRedraw(now);
+        dim_draw = DimDrawInputs{dimmer.LevelsSrv(), dimmer.Cols(), dimmer.Rows(), white, highlight};
+      }
+      hr = presenter.Draw(cache.Get(), offset, dim_draw);
       if (FAILED(hr)) {
         LogWarn("Render: Present fallito: {}", Hr(hr));
         hide();

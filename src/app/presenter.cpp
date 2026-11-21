@@ -2,18 +2,10 @@
 
 #include "fullscreen_vs.h"
 #include "logger.h"
+#include "shift_constants.h"
 #include "shift_ps.h"
 
 namespace oled {
-namespace {
-
-struct ShiftConstants {
-  int offset[2];
-  unsigned size_minus_one[2];
-};
-static_assert(sizeof(ShiftConstants) == 16);
-
-}  // namespace
 
 HRESULT Presenter::Init(ID3D11Device* device, HWND hwnd, UINT width, UINT height, DXGI_FORMAT format,
                         bool allow_tearing) {
@@ -98,6 +90,13 @@ HRESULT Presenter::Init(ID3D11Device* device, HWND hwnd, UINT width, UINT height
   cb.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
   hr = device_->CreateBuffer(&cb, nullptr, &constants_);
   if (FAILED(hr)) return hr;
+  // Livelli dell'oscuramento letti con interpolazione bilineare: bordi sfumati.
+  D3D11_SAMPLER_DESC sd{};
+  sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+  sd.AddressU = sd.AddressV = sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+  sd.MaxLOD = D3D11_FLOAT32_MAX;
+  hr = device_->CreateSamplerState(&sd, &sampler_);
+  if (FAILED(hr)) return hr;
 
   hr = DCompositionCreateDevice(dxgi_device.Get(), IID_PPV_ARGS(&dcomp_));
   if (FAILED(hr)) {
@@ -127,6 +126,7 @@ void Presenter::Shutdown() {
   srv_.Reset();
   srv_source_ = nullptr;
   constants_.Reset();
+  sampler_.Reset();
   ps_.Reset();
   vs_.Reset();
   rtv_.Reset();
@@ -142,7 +142,7 @@ void Presenter::Shutdown() {
   visible_ = false;
 }
 
-HRESULT Presenter::Draw(ID3D11Texture2D* source, Offset offset) {
+HRESULT Presenter::Draw(ID3D11Texture2D* source, Offset offset, const DimDrawInputs& dim) {
   if (!swap_chain_) return E_UNEXPECTED;
   if (source != srv_source_) {
     srv_.Reset();
@@ -151,20 +151,29 @@ HRESULT Presenter::Draw(ID3D11Texture2D* source, Offset offset) {
     srv_source_ = source;
   }
 
-  const ShiftConstants constants{{offset.x, offset.y}, {width_ - 1, height_ - 1}};
+  const bool sdr = format_ != DXGI_FORMAT_R16G16B16A16_FLOAT;
+  unsigned flags = sdr ? kShiftFlagSdr : 0;
+  if (dim.levels) flags |= kShiftFlagDim | (dim.highlight ? kShiftFlagHighlight : 0);
+  const ShiftConstants constants{{offset.x, offset.y},
+                                 {width_ - 1, height_ - 1},
+                                 {static_cast<float>(dim.cols * 16), static_cast<float>(dim.rows * 16)},
+                                 dim.sdr_white,
+                                 flags};
   context_->UpdateSubresource(constants_.Get(), 0, nullptr, &constants, 0, 0);
 
   const D3D11_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(width_), static_cast<float>(height_), 0.0f, 1.0f};
   ID3D11RenderTargetView* rtv = rtv_.Get();
-  ID3D11ShaderResourceView* srv = srv_.Get();
+  ID3D11ShaderResourceView* srvs[2] = {srv_.Get(), dim.levels};
   ID3D11Buffer* cbuf = constants_.Get();
+  ID3D11SamplerState* sampler = sampler_.Get();
   context_->OMSetRenderTargets(1, &rtv, nullptr);
   context_->RSSetViewports(1, &viewport);
   context_->IASetInputLayout(nullptr);
   context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
   context_->VSSetShader(vs_.Get(), nullptr, 0);
   context_->PSSetShader(ps_.Get(), nullptr, 0);
-  context_->PSSetShaderResources(0, 1, &srv);
+  context_->PSSetShaderResources(0, 2, srvs);
+  context_->PSSetSamplers(0, 1, &sampler);
   context_->PSSetConstantBuffers(0, 1, &cbuf);
   context_->Draw(3, 0);
 

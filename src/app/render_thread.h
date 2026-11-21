@@ -9,6 +9,7 @@
 
 #include "emergency.h"
 #include "monitors.h"
+#include "shared_dim.h"
 #include "shift_scheduler.h"
 
 namespace oled {
@@ -28,6 +29,8 @@ struct RenderParams {
   MonitorInfo monitor;
   bool allow_tearing = false;
   SharedShift* shift = nullptr;  // nullptr: offset sempre (0,0)
+  SharedDim* dim = nullptr;      // nullptr: nessun oscuramento
+  double frame_period_ms = 7;    // periodo di refresh del monitor
   EmergencyGuard* guard = nullptr;
   unsigned generation = 0;  // inviata negli eventi (lParam) per scartare quelli vecchi
 };

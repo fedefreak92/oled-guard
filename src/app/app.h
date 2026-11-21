@@ -26,6 +26,7 @@
 #include "pause_monitor.h"
 #include "pause_rules.h"
 #include "render_thread.h"
+#include "shared_dim.h"
 #include "single_instance.h"
 #include "stats_file.h"
 #include "tray.h"
@@ -72,6 +73,9 @@ class App {
   bool StartOverlay();
   void StopOverlay();
   void RefreshMonitor();
+  // Oscuramento: config, app in primo piano, bianco SDR -> thread di render.
+  void PushDimInputs();
+  void RefreshSdrWhite(double now);
   void OnRenderEvent(RenderEvent event);
 
   // Interfaccia.
@@ -137,6 +141,15 @@ class App {
   std::string last_foreground_;
   // Stato dello shift: appartiene all'App e sopravvive alle pause dell'overlay.
   std::unique_ptr<SharedShift> shift_;
+  // Oscuramento delle aree statiche.
+  SharedDim dim_;
+  float sdr_white_ = 2.5f;
+  double sdr_white_checked_ms_ = -1e9;
+  bool sdr_white_warned_ = false;
+  bool dim_watch_ = false;
+  double dim_highlight_until_ms_ = 0;
+  double overlay_shown_since_ms_ = 0;
+  double last_dim_push_ms_ = 0;
 
   PauseMonitor pause_monitor_;
   PauseHysteresis hysteresis_{300, 2500};

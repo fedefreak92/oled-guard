@@ -25,6 +25,9 @@ struct MonitorInfo {
 std::vector<MonitorInfo> EnumerateMonitors();
 std::optional<MonitorInfo> FindMonitor(std::string_view setting);
 
+// Bianco SDR del monitor in scRGB (1 = 80 nit), dal cursore "luminosita' contenuto SDR".
+std::optional<float> QuerySdrWhiteLevel(const MonitorInfo& monitor);
+
 HRESULT OpenOutput(const MonitorInfo& monitor, IDXGIAdapter1** adapter, IDXGIOutput5** output);
 
 }  // namespace oled

@@ -89,6 +89,37 @@ std::optional<MonitorInfo> FindMonitor(std::string_view setting) {
   return monitors[*index];
 }
 
+std::optional<float> QuerySdrWhiteLevel(const MonitorInfo& monitor) {
+  UINT32 path_count = 0;
+  UINT32 mode_count = 0;
+  if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &path_count, &mode_count) != ERROR_SUCCESS) return std::nullopt;
+  std::vector<DISPLAYCONFIG_PATH_INFO> paths(path_count);
+  std::vector<DISPLAYCONFIG_MODE_INFO> modes(mode_count);
+  if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &path_count, paths.data(), &mode_count, modes.data(), nullptr) !=
+      ERROR_SUCCESS) {
+    return std::nullopt;
+  }
+  paths.resize(path_count);
+  for (const auto& path : paths) {
+    DISPLAYCONFIG_SOURCE_DEVICE_NAME source{};
+    source.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+    source.header.size = sizeof(source);
+    source.header.adapterId = path.sourceInfo.adapterId;
+    source.header.id = path.sourceInfo.id;
+    if (DisplayConfigGetDeviceInfo(&source.header) != ERROR_SUCCESS) continue;
+    if (monitor.device_name != source.viewGdiDeviceName) continue;
+
+    DISPLAYCONFIG_SDR_WHITE_LEVEL white{};
+    white.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SDR_WHITE_LEVEL;
+    white.header.size = sizeof(white);
+    white.header.adapterId = path.targetInfo.adapterId;
+    white.header.id = path.targetInfo.id;
+    if (DisplayConfigGetDeviceInfo(&white.header) != ERROR_SUCCESS || white.SDRWhiteLevel == 0) return std::nullopt;
+    return static_cast<float>(white.SDRWhiteLevel) / 1000.0f;
+  }
+  return std::nullopt;
+}
+
 HRESULT OpenOutput(const MonitorInfo& monitor, IDXGIAdapter1** adapter_out, IDXGIOutput5** output_out) {
   ComPtr<IDXGIFactory1> factory;
   HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(&factory));

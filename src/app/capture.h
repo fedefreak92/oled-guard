@@ -6,6 +6,8 @@
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 
+#include <functional>
+
 namespace oled {
 
 class DesktopCapture {
@@ -24,8 +26,10 @@ class DesktopCapture {
   DXGI_MODE_ROTATION Rotation() const { return desc_.Rotation; }
 
   // Attende un frame fino a timeout_ms; se nuovo lo copia in `cache` (stesso formato
-  // e dimensioni) e rilascia subito il frame.
-  Status Acquire(UINT timeout_ms, ID3D11Texture2D* cache);
+  // e dimensioni) e rilascia subito il frame. `before_copy` riceve il frame nuovo
+  // mentre la cache contiene ancora il precedente (confronto dell'oscuramento).
+  Status Acquire(UINT timeout_ms, ID3D11Texture2D* cache,
+                 const std::function<void(ID3D11Texture2D* frame)>& before_copy = {});
 
   // Contatori per la diagnostica.
   unsigned frames_copied = 0;
