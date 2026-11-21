@@ -387,3 +387,55 @@ finale indipendente alla fine.
 - Ridisegni a 2 Hz durante la discesa.
 - Test degli shader con WARP in un eseguibile di test separato.
 - Miniatura ridotta al massimo a 120×68 celle.
+
+## 9. Revisione dopo la prova reale (2026-11-21)
+
+### 9.1 Cosa ha mostrato la prova sul desktop dell'utente
+Misure con `--dim-diagnostics` (statistiche delle celle, mappa delle classi, istantanee
+catturato/uscita confrontate pixel per pixel):
+- L'oscuramento arriva a schermo (rapporto mediano 0,83 in sRGB = 40% lineare), ma sulle
+  zone sbagliate: le icone del desktop (griglia fitta con etichette) risultavano "grande
+  area", mentre le scritte sparse di un'interfaccia scura (la finestra di OLED Guard)
+  risultavano "elementi piccoli" e venivano scurite.
+- Il mouse da solo non azzera nulla (puntatore mosso 20 s: livelli saliti normalmente).
+- Ogni pausa, anche Alt+Tab o la Visualizzazione attivita' (finestre explorer a tutto
+  schermo), distruggeva l'overlay e con lui la mappa: tutto ripartiva da zero.
+
+La regola della §5.2 (densita' di celle ferme con contenuto) non distingue un desktop
+pieno di icone da una finestra scura con poco testo. Sostituita come segue.
+
+### 9.2 Zone: scelta dell'utente "desktop/barra + loghi su video"
+- Il thread UI calcola ogni 250 ms una **mappa delle zone** per cella dalle finestre
+  visibili: **shell** (desktop e barra delle applicazioni) oppure **app** (coperta da una
+  finestra di un'applicazione, compresa quella di OLED Guard). Escluse dal calcolo:
+  finestre nascoste, ridotte a icona, "cloaked", click-through (`WS_EX_TRANSPARENT`) e le
+  finestre a tutto schermo del selettore di Windows (Alt+Tab, Visualizzazione attivita').
+  La barra delle applicazioni vince sulle finestre che le stanno sotto. Senza mappa (avvio)
+  tutto conta come app (prudente).
+- **Shell**: ogni cella ferma e luminosa e' un elemento da oscurare (intensita' degli
+  elementi piccoli), senza criterio di densita': icone, etichette, sfondo chiaro, barra.
+- **App**: una cella ferma e luminosa si oscura solo se **intorno c'e' movimento**: almeno
+  il 25% delle celle nella finestra di 33×33 celle e' cambiato negli ultimi 10 s (es.
+  logo sopra un video). Senza movimento e' una "grande area" (documenti, pagine,
+  interfacce ferme, chiare o scure): non si tocca, salvo l'opzione grandi aree (§5.1).
+- Il criterio "contenuto" (escursione di luminanza) e `dim_large_fraction_pct` spariscono;
+  nuovo campo solo in config `dim_motion_fraction_pct` (10–90, default 25).
+- Le regole dei ritorni (§5.2.3, con l'indicatore persistente "ritorno lento") restano.
+
+### 9.3 Pause
+- Le finestre del selettore di Windows (Alt+Tab, Visualizzazione attivita') non contano
+  come "finestra a tutto schermo".
+- **La mappa sopravvive alle pause** (e ai riavvii della cattura): prima di distruggere il
+  dimmer si leggono, una volta, l'eta' di ogni cella e una firma (hash) dei suoi pixel. Al
+  ritorno, al primo frame, una cella con la stessa firma riprende la sua eta' (il tempo
+  di pausa non conta, il pannello non la mostrava); le altre ripartono da zero. I livelli
+  ripartono da 0 e risalgono con la discesa lenta normale (nessuno scatto visibile).
+  Vale solo se dimensioni e formato della cattura sono gli stessi.
+- Eccezione al "niente readback" per questo salvataggio: due griglie (~260 KB) lette una
+  volta per pausa, mai pixel del desktop.
+
+### 9.4 Test
+Scene realistiche nel modello e nei test WARP: griglia di icone con etichette sul desktop,
+interfaccia scura con testo sparso in una finestra, logo fermo sopra un video, logo in
+una finestra ferma (con e senza grandi aree), barra sotto una finestra, ripresa dopo una
+pausa con contenuto uguale e diverso. Verifica dal vivo con `--dim-diagnostics`.
