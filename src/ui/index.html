@@ -8,196 +8,54 @@
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<header class="cap">
-  <span class="cap-title" id="capTitle">OLED GUARD</span>
-  <span class="st" id="statusPill">...</span>
-  <span class="cap-fill"></span>
-  <button class="wb" data-win="minimize" title="Riduci a icona">&#8212;</button>
-  <button class="wb" data-win="maximize" title="Ingrandisci">&#9633;</button>
-  <button class="wb close" data-win="close" title="Chiudi">&#10005;</button>
-</header>
-
-<nav class="tabs" id="tabs">
-  <button class="on" data-tab="stato">Stato</button>
-  <button data-tab="spostamento">Spostamento</button>
-  <button data-tab="app">Giochi e app</button>
-  <button data-tab="oscuramento">Oscuramento</button>
-  <button data-tab="windows">Windows per OLED</button>
-</nav>
-
-<main>
-  <!-- STATO -->
-  <section class="tab on" id="tab-stato">
-    <div class="stato">
-      <div class="radar-wrap">
-        <svg id="radar" viewBox="0 0 300 300" aria-label="Posizioni dello spostamento"></svg>
-        <div class="radar-caption">tempo su ogni posizione · totale</div>
-      </div>
-      <div>
-        <div class="countdown"><span id="countdown">--:--</span><small id="countdownLabel">PROSSIMA MOSSA</small></div>
-        <div class="rows">
-          <div class="row"><span class="k">Offset</span><span class="v" id="vOffset">-</span></div>
-          <div class="row"><span class="k">Protetta oggi</span><span class="v" id="vToday">-</span></div>
-          <div class="row"><span class="k">Protetta in totale</span><span class="v" id="vTotal">-</span></div>
-          <div class="row hl"><span class="k">Uniformita'</span><span class="v" id="vUniform">-</span></div>
-          <div class="row"><span class="k">Pause oggi</span><span class="v" id="vPauses">-</span></div>
-          <div class="row"><span class="k">In primo piano</span><span class="v" id="vForeground">-</span></div>
-          <div class="row"><span class="k">Latenza aggiunta</span><span class="v" id="vLatency">-</span></div>
-        </div>
-        <div class="actions">
-          <button class="btn" id="btnPause">Pausa manuale</button>
-          <button class="btn ghost" id="btnTestFromStato">Prova lo spostamento</button>
-        </div>
-      </div>
+<div class="shell">
+  <aside class="side">
+    <div class="brand">
+      <span id="brandLogo"></span>
+      <div><b>OLED Guard</b><small id="brandVersion">v-</small></div>
     </div>
+    <nav class="nav" id="nav"></nav>
+    <div class="side-foot">
+      <button id="btnNews" title="Novità e informazioni"><span id="newsIcon"></span>Novità</button>
+      <span class="version" id="footVersion">v-</span>
+    </div>
+  </aside>
+
+  <section class="main">
+    <header class="top">
+      <button class="iconbtn" id="btnTopPause" title="Pausa manuale"></button>
+      <span class="status" id="topStatus"><i class="dot"></i><span>...</span></span>
+      <span class="session">Sessione · <b id="topSession">-</b></span>
+      <span class="fill"></span>
+      <button class="ghost-icon" id="btnTopStats" title="Statistiche"></button>
+      <button class="ghost-icon" id="btnTopSettings" title="Impostazioni"></button>
+      <span class="version" id="topVersion">v-</span>
+      <button class="wb" data-win="minimize" title="Riduci a icona"></button>
+      <button class="wb" data-win="maximize" title="Ingrandisci"></button>
+      <button class="wb close" data-win="close" title="Chiudi"></button>
+    </header>
+
+    <div class="content" id="content"></div>
+
+    <footer class="strip">
+      <div class="strip-head">
+        <h6><i class="dot"></i>OGGI</h6>
+        <button class="link" id="btnOpenStats">Apri statistiche ›</button>
+      </div>
+      <div class="tiles">
+        <div class="tile"><small>Sessione</small><b class="accent" id="sSession">-</b><span>da quando l'app è aperta</span></div>
+        <div class="tile"><small>Protetto oggi</small><b id="sToday">-</b><span>overlay a schermo</span></div>
+        <div class="tile"><small>Totale</small><b id="sTotal">-</b><span>da sempre</span></div>
+        <div class="tile"><small>Uniformità</small><b id="sUniform">-</b><span>usura fra le posizioni</span></div>
+        <div class="tile"><small>Pause oggi</small><b id="sPauses">-</b><span id="sPausesSub">giochi, video, blocchi</span></div>
+      </div>
+    </footer>
   </section>
-
-  <!-- SPOSTAMENTO -->
-  <section class="tab" id="tab-spostamento">
-    <div class="cols">
-      <div>
-        <div class="sec">Ampiezza</div>
-        <div class="row"><span class="k">Massimo spostamento (px)</span>
-          <span class="seg" id="ampSeg"><button data-amp="1">1</button><button data-amp="2">2</button><button data-amp="3">3</button></span></div>
-        <div class="row"><span class="k">Posizioni usate</span><span class="mini" id="ampMini"></span></div>
-        <div class="row"><span class="k">Sfasamento medio dei clic</span><span class="v" id="vClick">-</span></div>
-
-        <div class="sec gap">Tempi</div>
-        <div class="row col">
-          <div class="row-head"><span class="k">Sosta fra una mossa e l'altra</span><span class="v" id="vDwell">-</span></div>
-          <div class="dual" id="dualDwell"><input type="range" min="5" max="180" step="1"><input type="range" min="5" max="180" step="1"></div>
-        </div>
-        <div class="row col">
-          <div class="row-head"><span class="k">Durata della transizione</span><span class="v" id="vTrans">-</span></div>
-          <div class="dual" id="dualTrans"><input type="range" min="0.5" max="15" step="0.5"><input type="range" min="0.5" max="15" step="0.5"></div>
-        </div>
-      </div>
-      <div>
-        <div class="sec">Prova</div>
-        <div class="row"><span class="k">Spostamento accelerato per 30 s</span><button class="btn solid" id="btnTest">Prova ora</button></div>
-
-        <div class="sec gap">Tasti rapidi</div>
-        <div class="row"><span class="k">Pausa / riprendi</span><button class="key" data-hotkey="hotkey_toggle">-</button></div>
-        <div class="row"><span class="k">Spegni schermo ora</span><button class="key" data-hotkey="hotkey_display_off">-</button></div>
-        <div class="row"><span class="k">Uscita di emergenza</span><button class="key" data-hotkey="hotkey_emergency_exit">-</button></div>
-        <div class="hint" id="hotkeyHint">Clicca un tasto rapido e premi la nuova combinazione (Esc per annullare).</div>
-
-        <div class="sec gap">Avanzate</div>
-        <div class="row col">
-          <div class="row-head"><span class="k">Ritardo della ripresa dopo un gioco</span><span class="v" id="vResume">-</span></div>
-          <input type="range" class="single" id="rangeResume" min="0" max="10000" step="250">
-        </div>
-        <div class="row"><span class="k">Tearing (solo con VRR attivo)</span><button class="toggle" data-toggle="allow_tearing">OFF</button></div>
-        <div class="row"><span class="k">Avvio automatico con Windows</span><button class="toggle" data-toggle="autostart">OFF</button></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- GIOCHI E APP -->
-  <section class="tab" id="tab-app">
-    <div class="sec">Rilevate di recente</div>
-    <table class="apps">
-      <thead><tr><th>App</th><th>Motivo</th><th>Ultima volta</th><th>Volte</th><th>Regola</th></tr></thead>
-      <tbody id="appsBody"></tbody>
-    </table>
-    <div class="empty" id="appsEmpty">Nessuna app ha ancora messo in pausa la protezione.</div>
-    <div class="add">
-      <input id="addExe" placeholder="nome dell'app, es. gioco.exe" maxlength="260" spellcheck="false">
-      <button class="btn ghost" id="btnProcesses">App aperte</button>
-      <button class="btn" id="btnAdd">Metti sempre in pausa</button>
-    </div>
-    <div class="proc" id="procList" hidden></div>
-
-    <div class="sec gap">Pausa automatica</div>
-    <div class="row"><span class="k">Giochi DirectX a schermo intero, presentazioni, schermo assente</span><button class="toggle" data-toggle="pause_on_notification_state">ON</button></div>
-    <div class="row"><span class="k">Qualsiasi finestra a tutto schermo (borderless, video)</span><button class="toggle" data-toggle="pause_on_fullscreen_window">ON</button></div>
-  </section>
-
-  <!-- OSCURAMENTO -->
-  <section class="tab" id="tab-oscuramento">
-    <div class="stato">
-      <div class="radar-wrap">
-        <canvas id="dimMap" width="480" height="270" aria-label="Zone oscurate"></canvas>
-        <div class="radar-caption">zone oscurate · ambra piu' intensa = piu' scura</div>
-      </div>
-      <div>
-        <div class="rows">
-          <div class="row hl"><span class="k">Stato</span><span class="v" id="vDimStatus">-</span></div>
-          <div class="row"><span class="k">Zone oscurate</span><span class="v" id="vDimArea">-</span></div>
-          <div class="row"><span class="k">Oscuramento piu' forte</span><span class="v" id="vDimMax">-</span></div>
-          <div class="row"><span class="k">Bianco di Windows</span><span class="v" id="vDimWhite">-</span></div>
-        </div>
-        <div class="actions">
-          <button class="btn" id="btnHighlight">Evidenzia sullo schermo · 15 s</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="cols gap">
-      <div>
-        <div class="sec">Desktop, barra e loghi</div>
-        <div class="row"><span class="k">Oscuramento attivo</span><button class="toggle" data-toggle="dim_enabled">ON</button></div>
-        <div class="row col">
-          <div class="row-head"><span class="k">Intensita' massima</span><span class="v" id="vDimStrength">-</span></div>
-          <input type="range" class="single" id="rangeDimStrength" min="10" max="80" step="1">
-        </div>
-        <div class="row col">
-          <div class="row-head"><span class="k">Inizia quando e' fermo da</span><span class="v" id="vDimDelay">-</span></div>
-          <input type="range" class="single" id="rangeDimDelay" min="0.5" max="60" step="0.5">
-        </div>
-        <div class="row col">
-          <div class="row-head"><span class="k">Durata della discesa</span><span class="v" id="vDimRamp">-</span></div>
-          <input type="range" class="single" id="rangeDimRamp" min="0.5" max="60" step="0.5">
-        </div>
-      </div>
-      <div>
-        <div class="sec">Finestre delle app</div>
-        <div class="row"><span class="k">Cosa si scurisce</span>
-          <span class="seg wide" id="dimWinMode"><button data-mode="desktop">Come il desktop</button><button data-mode="video">Solo loghi su video</button></span></div>
-        <div class="row"><span class="k">Torna normale la finestra</span>
-          <span class="seg wide" id="dimActivate"><button data-act="hover">Sotto il mouse</button><button data-act="click">Cliccata</button><button data-act="both">Entrambe</button><button data-act="never">Mai</button></span></div>
-        <div class="hint" id="dimActivateHint">La finestra che usi resta normale; quando la lasci, il conteggio riparte da zero.</div>
-
-        <div class="sec gap" id="dimLargeSec">Finestre ferme (solo con "Solo loghi su video")</div>
-        <div class="row dim-large"><span class="k">Oscura anche le finestre ferme (documenti, pagine)</span><button class="toggle" data-toggle="dim_large_enabled">OFF</button></div>
-        <div class="row col dim-large">
-          <div class="row-head"><span class="k">Inizia quando e' ferma da</span><span class="v" id="vDimLargeDelay">-</span></div>
-          <input type="range" class="single" id="rangeDimLargeDelay" min="5" max="240" step="5">
-        </div>
-        <div class="row col dim-large">
-          <div class="row-head"><span class="k">Intensita' massima</span><span class="v" id="vDimLargeStrength">-</span></div>
-          <input type="range" class="single" id="rangeDimLargeStrength" min="5" max="80" step="1">
-        </div>
-
-        <div class="sec gap">Sospendi con queste app</div>
-        <div id="dimExList"></div>
-        <div class="empty" id="dimExEmpty">Nessuna app: l'oscuramento resta sempre attivo.</div>
-        <div class="add">
-          <input id="dimExe" placeholder="nome dell'app, es. photoshop.exe" maxlength="260" spellcheck="false">
-          <button class="btn ghost" id="btnDimProcesses">App aperte</button>
-          <button class="btn" id="btnDimAdd">Aggiungi</button>
-        </div>
-        <div class="proc" id="dimProcList" hidden></div>
-      </div>
-    </div>
-    <div class="hint">Sul desktop e sulla barra si scurisce tutto cio' che e' fermo e luminoso (icone, etichette, sfondo chiaro). Nelle finestre, a scelta, lo stesso oppure solo gli elementi fermi sopra contenuti in movimento (il logo su un video). Una zona torna normale appena il suo contenuto cambia; la mappa sopravvive alle pause.</div>
-  </section>
-
-  <!-- WINDOWS PER OLED -->
-  <section class="tab" id="tab-windows">
-    <div class="score">
-      <b id="winScore">-/-</b><span>IMPOSTAZIONI CONSIGLIATE ATTIVE</span>
-      <span class="cap-fill"></span>
-      <button class="btn solid" id="btnApplyAll">Applica tutti i consigli</button>
-      <button class="btn ghost" id="btnRestoreAll">Ripristina come prima</button>
-    </div>
-    <div id="winList"></div>
-    <div class="row gap"><span class="k">Spegni lo schermo adesso (la TV va in standby, si riaccende muovendo il mouse)</span><button class="btn" id="btnDisplayOff">Spegni schermo</button></div>
-    <div class="hint">Ogni modifica parte solo da un tuo clic. Il valore originale viene salvato e "Ripristina come prima" lo rimette.</div>
-  </section>
-</main>
-
+</div>
 <div class="toast" id="toast" hidden></div>
 <script src="app.js"></script>
+<script src="pages.js"></script>
+<script src="mock.js"></script>
+<script src="main.js"></script>
 </body>
 </html>
