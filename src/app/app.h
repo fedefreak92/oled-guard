@@ -71,6 +71,8 @@ class App {
   SingleInstance single_instance_;
   ConfigFile config_file_{ConfigPath()};
   Config config_;
+  bool initial_config_failed_ = false;
+  unsigned render_generation_ = 0;
   bool fast_shift_ = false;
   bool debug_ = false;
   bool toggle_hotkey_registered_ = false;

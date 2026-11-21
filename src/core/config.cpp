@@ -99,7 +99,8 @@ void FixHotkeys(Reader& reader, Config& c) {
                 defaults.hotkey_emergency_exit);
     c.hotkey_emergency_exit = defaults.hotkey_emergency_exit;
   }
-  if (toggle && exit && *toggle == *exit) {
+  // Il confronto avviene dopo le sostituzioni: un default puo' coincidere con l'altra.
+  if (ParseHotkey(c.hotkey_toggle) == ParseHotkey(c.hotkey_emergency_exit)) {
     reader.Warn("hotkey_toggle e hotkey_emergency_exit sono uguali, uso i valori predefiniti");
     c.hotkey_toggle = defaults.hotkey_toggle;
     c.hotkey_emergency_exit = defaults.hotkey_emergency_exit;

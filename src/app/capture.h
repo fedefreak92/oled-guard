@@ -10,15 +10,17 @@ namespace oled {
 
 class DesktopCapture {
  public:
-  enum class Status { NewFrame, NoChange, AccessLost, Failed };
+  // FormatChanged: il frame reale ha formato/dimensioni diversi dalla cache; Format(),
+  // Width() e Height() riportano ora quelli reali.
+  enum class Status { NewFrame, NoChange, AccessLost, FormatChanged, Failed };
 
   HRESULT Start(ID3D11Device* device, IDXGIOutput5* output);
   void Stop();
   bool Running() const { return duplication_ != nullptr; }
 
-  DXGI_FORMAT Format() const { return desc_.ModeDesc.Format; }
-  UINT Width() const { return desc_.ModeDesc.Width; }
-  UINT Height() const { return desc_.ModeDesc.Height; }
+  DXGI_FORMAT Format() const { return format_; }
+  UINT Width() const { return width_; }
+  UINT Height() const { return height_; }
   DXGI_MODE_ROTATION Rotation() const { return desc_.Rotation; }
 
   // Attende un frame fino a timeout_ms; se nuovo lo copia in `cache` (stesso formato
@@ -33,6 +35,9 @@ class DesktopCapture {
   Microsoft::WRL::ComPtr<ID3D11DeviceContext> context_;
   Microsoft::WRL::ComPtr<IDXGIOutputDuplication> duplication_;
   DXGI_OUTDUPL_DESC desc_{};
+  DXGI_FORMAT format_ = DXGI_FORMAT_UNKNOWN;
+  UINT width_ = 0;
+  UINT height_ = 0;
   bool first_frame_ = true;
 };
 

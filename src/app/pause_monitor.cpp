@@ -94,9 +94,10 @@ PauseInputs PauseMonitor::Collect(const MonitorInfo* monitor) const {
     RECT bounds{};
     if (monitor && SUCCEEDED(DwmGetWindowAttribute(fg, DWMWA_EXTENDED_FRAME_BOUNDS, &bounds, sizeof(bounds)))) {
       const RECT& m = monitor->rect;
-      // Copre l'intero monitor (barra compresa): fullscreen o borderless.
+      const bool has_caption = (GetWindowLongW(fg, GWL_STYLE) & WS_CAPTION) == WS_CAPTION;
       in.foreground_covers_monitor =
-          bounds.left <= m.left && bounds.top <= m.top && bounds.right >= m.right && bounds.bottom >= m.bottom;
+          IsFullscreenWindow({bounds.left, bounds.top, bounds.right, bounds.bottom}, {m.left, m.top, m.right, m.bottom},
+                             IsZoomed(fg) != FALSE, has_caption);
     }
   }
   return in;

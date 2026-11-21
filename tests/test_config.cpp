@@ -1,6 +1,7 @@
 #include <string>
 
 #include "config.h"
+#include "hotkey_parse.h"
 #include "test_framework.h"
 
 using oled::Config;
@@ -87,6 +88,17 @@ TEST(config_rejects_equal_hotkeys) {
   CHECK_EQ(r.config.hotkey_toggle, std::string("Ctrl+Alt+Shift+P"));
   CHECK_EQ(r.config.hotkey_emergency_exit, std::string("Ctrl+Alt+Shift+F12"));
   CHECK(!r.warnings.empty());
+}
+
+TEST(config_invalid_hotkey_default_does_not_collide) {
+  // Toggle impostata uguale al default di emergenza + emergenza scritta male:
+  // il default dell'emergenza non deve finire uguale alla toggle.
+  auto r = ConfigFromJson(R"({"hotkey_toggle": "Ctrl+Alt+Shift+F12", "hotkey_emergency_exit": "Ctrl+Pippo"})");
+  CHECK(!(oled::ParseHotkey(r.config.hotkey_toggle) == oled::ParseHotkey(r.config.hotkey_emergency_exit)));
+  CHECK_EQ(r.config.hotkey_toggle, std::string("Ctrl+Alt+Shift+P"));
+  CHECK_EQ(r.config.hotkey_emergency_exit, std::string("Ctrl+Alt+Shift+F12"));
+  auto r2 = ConfigFromJson(R"({"hotkey_toggle": "boh", "hotkey_emergency_exit": "Ctrl+Alt+Shift+P"})");
+  CHECK(!(oled::ParseHotkey(r2.config.hotkey_toggle) == oled::ParseHotkey(r2.config.hotkey_emergency_exit)));
 }
 
 TEST(config_rejects_unparsable_hotkey) {

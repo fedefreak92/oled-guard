@@ -54,6 +54,18 @@ struct PauseRulesConfig {
 
 PauseReason EvaluatePause(const PauseInputs& inputs, const PauseRulesConfig& config);
 
+struct ScreenRect {
+  long left = 0;
+  long top = 0;
+  long right = 0;
+  long bottom = 0;
+};
+
+// La finestra in primo piano conta come fullscreen/borderless se copre l'intero
+// monitor e non e' una normale finestra massimizzata con barra del titolo (caso della
+// barra delle applicazioni a scomparsa).
+bool IsFullscreenWindow(ScreenRect window, ScreenRect monitor, bool maximized, bool has_caption);
+
 // Motivi per cui la pausa scatta subito, senza ritardo di entrata.
 bool IsImmediate(PauseReason reason);
 

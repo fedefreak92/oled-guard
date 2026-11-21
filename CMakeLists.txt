@@ -23,6 +23,7 @@ add_library(oled_core STATIC
   src/core/config.cpp
   src/core/hotkey_parse.cpp
   src/core/monitor_select.cpp
+  src/core/watchdog.cpp
 )
 target_include_directories(oled_core PUBLIC src/core)
 
@@ -38,6 +39,7 @@ add_executable(oled-guard-tests
   tests/test_config.cpp
   tests/test_hotkey.cpp
   tests/test_monitor_select.cpp
+  tests/test_watchdog.cpp
 )
 target_include_directories(oled-guard-tests PRIVATE tests)
 target_link_libraries(oled-guard-tests PRIVATE oled_core)

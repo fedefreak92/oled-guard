@@ -122,6 +122,30 @@ TEST(fullscreen_rule_and_option) {
   CHECK(EvaluatePause(in, c) == PauseReason::None);
 }
 
+namespace {
+const ScreenRect kMonitor{0, 0, 3840, 2160};
+}
+
+TEST(fullscreen_borderless_window_counts) {
+  CHECK(IsFullscreenWindow({0, 0, 3840, 2160}, kMonitor, false, false));
+  CHECK(IsFullscreenWindow({-8, -8, 3848, 2168}, kMonitor, false, false));
+}
+
+TEST(maximized_window_with_caption_is_not_fullscreen) {
+  // Barra delle applicazioni a scomparsa: una finestra massimizzata copre tutto il
+  // monitor ma resta una finestra normale.
+  CHECK(!IsFullscreenWindow({0, 0, 3840, 2160}, kMonitor, true, true));
+}
+
+TEST(maximized_window_without_caption_counts) {
+  CHECK(IsFullscreenWindow({0, 0, 3840, 2160}, kMonitor, true, false));
+}
+
+TEST(window_not_covering_monitor_is_not_fullscreen) {
+  CHECK(!IsFullscreenWindow({0, 0, 3840, 2100}, kMonitor, false, false));
+  CHECK(!IsFullscreenWindow({100, 0, 3840, 2160}, kMonitor, false, false));
+}
+
 TEST(immediate_reasons) {
   for (auto r : {PauseReason::Manual, PauseReason::SessionLocked, PauseReason::SessionInactive,
                  PauseReason::SecureDesktop, PauseReason::CaptureFailed, PauseReason::DisplayRotated,

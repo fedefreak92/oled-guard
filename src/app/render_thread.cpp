@@ -53,7 +53,10 @@ void RenderThread::Stop() {
   }
 }
 
-void RenderThread::Post(RenderEvent event) { PostMessageW(params_.main, WM_APP_RENDER_EVENT, static_cast<WPARAM>(event), 0); }
+void RenderThread::Post(RenderEvent event) {
+  // La generazione permette all'App di scartare eventi di un thread gia' fermato.
+  PostMessageW(params_.main, WM_APP_RENDER_EVENT, static_cast<WPARAM>(event), static_cast<LPARAM>(params_.generation));
+}
 
 void RenderThread::Beat() {
   if (params_.guard) params_.guard->BeatRender();
@@ -109,6 +112,37 @@ RenderThread::SessionEnd RenderThread::RunSession() {
   Offset last_drawn{INT_MIN, INT_MIN};
   double stats_since = NowMs();
 
+  // Nasconde l'overlay e disarma subito il watchdog: le operazioni che seguono
+  // (ricreazione di device o duplicazione) possono durare piu' del limite.
+  const auto hide = [&] {
+    presenter.SetVisible(false);
+    if (shown) {
+      if (params_.guard) params_.guard->SetOverlayActive(false);
+      Post(RenderEvent::CaptureLost);
+    }
+    shown = false;
+  };
+
+  // Cache e swap chain con il formato e le dimensioni reali della cattura.
+  const auto reshape = [&]() -> bool {
+    hide();
+    presenter.Shutdown();
+    cache.Reset();
+    hr = CreateCacheTexture(device.Get(), capture.Width(), capture.Height(), capture.Format(), &cache);
+    if (FAILED(hr)) {
+      LogWarn("Render: texture di appoggio non creata: {}", Hr(hr));
+      return false;
+    }
+    hr = presenter.Init(device.Get(), params_.overlay, capture.Width(), capture.Height(), capture.Format(),
+                        params_.allow_tearing);
+    if (FAILED(hr)) {
+      LogWarn("Render: presenter non inizializzato: {}", Hr(hr));
+      return false;
+    }
+    have_frame = false;
+    return true;
+  };
+
   while (!stop_) {
     Beat();
 
@@ -130,24 +164,9 @@ RenderThread::SessionEnd RenderThread::RunSession() {
         Post(RenderEvent::DisplayRotated);
         return SessionEnd::Stop;
       }
-      const bool reshape = !presenter.Ready() || presenter.Width() != capture.Width() ||
-                           presenter.Height() != capture.Height() || presenter.Format() != capture.Format();
-      if (reshape) {
-        presenter.Shutdown();
-        cache.Reset();
-        hr = CreateCacheTexture(device.Get(), capture.Width(), capture.Height(), capture.Format(), &cache);
-        if (FAILED(hr)) {
-          LogWarn("Render: texture di appoggio non creata: {}", Hr(hr));
-          return SessionEnd::Failed;
-        }
-        hr = presenter.Init(device.Get(), params_.overlay, capture.Width(), capture.Height(), capture.Format(),
-                            params_.allow_tearing);
-        if (FAILED(hr)) {
-          LogWarn("Render: presenter non inizializzato: {}", Hr(hr));
-          return SessionEnd::Failed;
-        }
-        shown = false;
-      }
+      const bool needs_reshape = !presenter.Ready() || presenter.Width() != capture.Width() ||
+                                 presenter.Height() != capture.Height() || presenter.Format() != capture.Format();
+      if (needs_reshape && !reshape()) return SessionEnd::Failed;
       have_frame = false;
       LogInfo("Cattura avviata: {}x{} {}", capture.Width(), capture.Height(), FormatName(capture.Format()));
     }
@@ -162,15 +181,23 @@ RenderThread::SessionEnd RenderThread::RunSession() {
     const auto status = capture.Acquire(timeout, cache.Get());
     if (status == DesktopCapture::Status::AccessLost) {
       // Nessuna immagine vecchia a schermo: si nasconde subito l'overlay.
-      presenter.SetVisible(false);
-      if (shown) Post(RenderEvent::CaptureLost);
-      shown = false;
+      hide();
       capture.Stop();
       LogInfo("Render: accesso alla cattura perso, ricreo la duplicazione");
       continue;
     }
+    if (status == DesktopCapture::Status::FormatChanged) {
+      // Il frame reale non corrisponde a quanto dichiarato: si riallinea tutto.
+      LogInfo("Render: frame {}x{} formato {} diverso dalla cache, riallineo", capture.Width(), capture.Height(),
+              static_cast<int>(capture.Format()));
+      if (!reshape()) {
+        hide();
+        return SessionEnd::Failed;
+      }
+      continue;
+    }
     if (status == DesktopCapture::Status::Failed) {
-      presenter.SetVisible(false);
+      hide();
       return SessionEnd::Failed;
     }
     const bool new_frame = status == DesktopCapture::Status::NewFrame;
@@ -185,7 +212,7 @@ RenderThread::SessionEnd RenderThread::RunSession() {
       hr = presenter.Draw(cache.Get(), offset);
       if (FAILED(hr)) {
         LogWarn("Render: Present fallito: {}", Hr(hr));
-        presenter.SetVisible(false);
+        hide();
         return SessionEnd::Failed;
       }
       if (!(offset == last_drawn)) LogDebug("Offset disegnato ({},{})", offset.x, offset.y);

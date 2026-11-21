@@ -24,6 +24,9 @@ HRESULT DesktopCapture::Start(ID3D11Device* device, IDXGIOutput5* output) {
     return hr;
   }
   duplication_->GetDesc(&desc_);
+  format_ = desc_.ModeDesc.Format;
+  width_ = desc_.ModeDesc.Width;
+  height_ = desc_.ModeDesc.Height;
   first_frame_ = true;
   return S_OK;
 }
@@ -32,6 +35,9 @@ void DesktopCapture::Stop() {
   duplication_.Reset();
   context_.Reset();
   desc_ = {};
+  format_ = DXGI_FORMAT_UNKNOWN;
+  width_ = 0;
+  height_ = 0;
 }
 
 DesktopCapture::Status DesktopCapture::Acquire(UINT timeout_ms, ID3D11Texture2D* cache) {
@@ -58,10 +64,23 @@ DesktopCapture::Status DesktopCapture::Acquire(UINT timeout_ms, ID3D11Texture2D*
   if (image_changed) {
     ComPtr<ID3D11Texture2D> texture;
     if (SUCCEEDED(resource.As(&texture))) {
-      context_->CopyResource(cache, texture.Get());
-      status = Status::NewFrame;
-      first_frame_ = false;
-      ++frames_copied;
+      // CopyResource non segnala errori: con formati diversi copierebbe nulla e si
+      // vedrebbe una cache vuota. Si controlla quindi ogni frame.
+      D3D11_TEXTURE2D_DESC src{};
+      D3D11_TEXTURE2D_DESC dst{};
+      texture->GetDesc(&src);
+      cache->GetDesc(&dst);
+      if (src.Format != dst.Format || src.Width != dst.Width || src.Height != dst.Height) {
+        format_ = src.Format;
+        width_ = src.Width;
+        height_ = src.Height;
+        status = Status::FormatChanged;
+      } else {
+        context_->CopyResource(cache, texture.Get());
+        status = Status::NewFrame;
+        first_frame_ = false;
+        ++frames_copied;
+      }
     }
   } else {
     ++frames_skipped;

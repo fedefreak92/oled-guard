@@ -2,6 +2,7 @@
 
 #include "clock.h"
 #include "logger.h"
+#include "watchdog.h"
 
 namespace oled {
 namespace {
@@ -54,6 +55,7 @@ void EmergencyGuard::SetOverlayActive(bool active) {
 }
 
 void EmergencyGuard::Run(Hotkey) {
+  int64_t last_check = NowMsInt();
   for (;;) {
     const DWORD wait = MsgWaitForMultipleObjects(1, &stop_event_, FALSE, kCheckIntervalMs, QS_ALLINPUT);
     if (wait == WAIT_OBJECT_0) break;
@@ -66,15 +68,25 @@ void EmergencyGuard::Run(Hotkey) {
       }
     }
 
-    if (overlay_active_) {
-      const int64_t now = NowMsInt();
-      const int64_t main_age = now - main_beat_.load();
-      const int64_t render_age = now - render_beat_.load();
-      if (main_age > kStallLimitMs || render_age > kStallLimitMs) {
-        LogError("Watchdog: thread bloccato (UI {} ms, render {} ms), chiusura forzata", main_age, render_age);
+    const int64_t now = NowMsInt();
+    const int64_t main_beat = main_beat_.load();
+    const int64_t render_beat = render_beat_.load();
+    switch (CheckWatchdog(now, last_check, main_beat, render_beat, overlay_active_, kStallLimitMs, kCheckIntervalMs)) {
+      case WatchdogVerdict::ClockJump:
+        // Ripresa da sospensione: si riparte da battiti freschi.
+        LogInfo("Watchdog: salto dell'orologio di {} ms (sospensione?), battiti azzerati", now - last_check);
+        main_beat_ = now;
+        render_beat_ = now;
+        break;
+      case WatchdogVerdict::Stalled:
+        LogError("Watchdog: thread bloccato (UI {} ms, render {} ms), chiusura forzata", now - main_beat,
+                 now - render_beat);
         TerminateProcess(GetCurrentProcess(), 4);
-      }
+        break;
+      case WatchdogVerdict::Ok:
+        break;
     }
+    last_check = now;
   }
   if (hotkey_ok_) UnregisterHotKey(nullptr, kHotkeyId);
 }

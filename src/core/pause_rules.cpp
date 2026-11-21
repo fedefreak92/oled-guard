@@ -48,6 +48,12 @@ PauseReason EvaluatePause(const PauseInputs& in, const PauseRulesConfig& config)
   return PauseReason::None;
 }
 
+bool IsFullscreenWindow(ScreenRect window, ScreenRect monitor, bool maximized, bool has_caption) {
+  const bool covers = window.left <= monitor.left && window.top <= monitor.top && window.right >= monitor.right &&
+                      window.bottom >= monitor.bottom;
+  return covers && !(maximized && has_caption);
+}
+
 bool IsImmediate(PauseReason reason) {
   switch (reason) {
     case PauseReason::Manual:

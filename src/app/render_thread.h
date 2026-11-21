@@ -29,6 +29,7 @@ struct RenderParams {
   bool allow_tearing = false;
   SharedShift* shift = nullptr;  // nullptr: offset sempre (0,0)
   EmergencyGuard* guard = nullptr;
+  unsigned generation = 0;  // inviata negli eventi (lParam) per scartare quelli vecchi
 };
 
 class RenderThread {

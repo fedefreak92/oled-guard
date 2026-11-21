@@ -43,6 +43,9 @@ bool OverlayWindow::Create(HINSTANCE instance, const RECT& r) {
     return false;
   }
   SetLayeredWindowAttributes(hwnd_, 0, 255, LWA_ALPHA);
+  // Senza questa proprieta' la shell considera l'overlay un'app a schermo intero
+  // (QUNS_BUSY) e Windows puo' sospendere le notifiche mentre e' attivo.
+  SetPropW(hwnd_, L"NonRudeHWND", reinterpret_cast<HANDLE>(TRUE));
   if (!SetWindowDisplayAffinity(hwnd_, WDA_EXCLUDEFROMCAPTURE)) {
     LogError("SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE) fallito: {}", GetLastError());
     Destroy();
@@ -54,7 +57,10 @@ bool OverlayWindow::Create(HINSTANCE instance, const RECT& r) {
 }
 
 void OverlayWindow::Destroy() {
-  if (hwnd_) DestroyWindow(hwnd_);
+  if (hwnd_) {
+    RemovePropW(hwnd_, L"NonRudeHWND");
+    DestroyWindow(hwnd_);
+  }
   hwnd_ = nullptr;
 }
 

@@ -116,7 +116,9 @@ int App::Run(HINSTANCE instance) {
   icon_ = CreateAppIcon(GetSystemMetrics(SM_CXSMICON));
   tray_.Create(main_, WM_APP_TRAY, icon_);
   RegisterToggleHotkey();
-  if (config_.autostart != IsAutostartEnabled()) SetAutostart(config_.autostart);
+  // Con una config illeggibile i valori sono quelli predefiniti: non si tocca il
+  // registro, altrimenti un errore di battitura toglierebbe l'avvio automatico.
+  if (!initial_config_failed_ && config_.autostart != IsAutostartEnabled()) SetAutostart(config_.autostart);
   config_file_.StartWatching(main_, WM_APP_CONFIG_CHANGED);
 
   Tick();
@@ -160,6 +162,7 @@ bool App::CreateMainWindow() {
 
 void App::LoadInitialConfig() {
   const ConfigLoadResult result = config_file_.Load();
+  initial_config_failed_ = result.parse_failed;
   if (!result.parse_failed) config_ = result.config;
   LogSetLevel(debug_ ? LogLevel::Debug : ParseLogLevel(config_.log_level));
   for (const auto& warning : result.warnings) LogWarn("Configurazione: {}", warning);
@@ -298,6 +301,7 @@ bool App::StartOverlay() {
   params.allow_tearing = config_.allow_tearing;
   params.shift = shift_.get();
   params.guard = &guard_;
+  params.generation = ++render_generation_;
   // Si riparte dall'ultima posizione mostrata, con una sosta nuova.
   shift_->Resume(NowMs());
   if (!render_.Start(params)) {
@@ -316,6 +320,8 @@ void App::StopOverlay() {
   overlay_shown_ = false;
   // Prima il thread (rilascia device, duplicazione, swap chain), poi la finestra.
   render_.Stop();
+  // Di nuovo dopo il join: il thread potrebbe averlo riarmato mentre usciva.
+  guard_.SetOverlayActive(false);
   overlay_.Destroy();
   overlay_running_ = false;
   LogInfo("Overlay fermato");
@@ -486,6 +492,12 @@ LRESULT App::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
       OnTrayEvent(LOWORD(lp));
       return 0;
     case WM_APP_RENDER_EVENT:
+      // Eventi di un thread di render gia' fermato: arrivano dopo StopOverlay e
+      // riarmerebbero il watchdog senza nessun thread a battere.
+      if (!overlay_running_ || static_cast<unsigned>(lp) != render_generation_) {
+        LogDebug("Evento di render {} ignorato (generazione {} invece di {})", wp, lp, render_generation_);
+        return 0;
+      }
       OnRenderEvent(static_cast<RenderEvent>(wp));
       return 0;
     case WM_APP_CONFIG_CHANGED:
