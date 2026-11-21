@@ -205,3 +205,77 @@ TEST(history_sessions_week) {
   h.Clear();
   CHECK_EQ(h.SessionsTotal(), 0);
 }
+
+namespace {
+History Rich() {
+  History h;
+  FrameSummary s;
+  s.risk = 0.25;
+  s.light_still_before = 1;
+  s.light_still_removed = 0.4;
+  s.zone_light.fill(0.1);
+  s.zone_light[40] = 2;
+  for (int d = 0; d < 3; ++d) {
+    const int keys[3] = {20261123, 20261124, 20261125};
+    h.CountSession(keys[d]);
+    for (int i = 0; i < 1900; ++i) {
+      SecondSample x = Sec(kMonday + d * kDay + i, keys[d], &s);
+      x.app = i % 2 ? "code.exe" : "chrome.exe";
+      x.content = i % 3 ? ContentKind::StillWork : ContentKind::Video;
+      h.AddSecond(x);
+    }
+  }
+  return h;
+}
+}  // namespace
+
+TEST(history_json_roundtrip) {
+  const History a = Rich();
+  const History b = History::FromJson(a.ToJson());
+  const int64_t now = kMonday + 2 * kDay + 1899;
+  CHECK(a.Timeline(now, oled::kTimelineBuckets) == b.Timeline(now, oled::kTimelineBuckets));
+  const auto wa = a.Wear("LG TV SSCR2"), wb = b.Wear("LG TV SSCR2");
+  CHECK_EQ(wb.hottest, 40);
+  CHECK_NEAR(wb.hottest_hours, wa.hottest_hours, 1e-9);
+  CHECK_EQ(wb.since_local_s, wa.since_local_s);
+  CHECK_NEAR(wb.measured_hours, wa.measured_hours, 1e-9);
+  CHECK_EQ(b.TopApps(20261125, 8).size(), size_t{2});
+  CHECK(a.ContentShares(20261125) == b.ContentShares(20261125));
+  CHECK(b.Streak(20261125) == std::make_pair(3, 3));
+  CHECK_NEAR(b.WearAvoidedTotal().value_or(0), 0.4, 1e-9);
+  CHECK_NEAR(b.WearAvoidedToday(20261125).value_or(0), 0.4, 1e-9);
+  CHECK_EQ(b.SessionsTotal(), 3);
+  CHECK_EQ(b.SessionsThisWeek(20261125), 3);
+  CHECK_NEAR(b.ProtectedThisWeekS(20261125), 3 * 1900, 1e-9);
+}
+
+TEST(history_json_bad_input_is_empty) {
+  for (const char* text : {"{}", "[]", "5", R"({"version": 99, "sessions_total": 4})",
+                           R"({"version": 1, "sessions_total": -3, "timeline": "x", "days": [5, {"day": "a"}],
+                               "wear": [{"monitor": 3}], "streak_days": [-1, "z"], "light_before_total": -2})"}) {
+    const auto parsed = oled::ParseJson(text);
+    CHECK(parsed.value.has_value());
+    if (!parsed.value) continue;
+    const History h = History::FromJson(*parsed.value);
+    CHECK_EQ(h.SessionsTotal(), 0);
+    CHECK(h.TopApps(20261125, 8).empty());
+    CHECK(!h.WearAvoidedTotal().has_value());
+    CHECK_EQ(h.Wear("LG TV SSCR2").hottest, -1);
+  }
+}
+
+TEST(history_json_keeps_top_apps_per_day) {
+  History h;
+  for (int a = 0; a < 60; ++a) {
+    for (int i = 0; i <= a; ++i) {
+      SecondSample x = Sec(kMonday + a * 100 + i, 20261123);
+      x.app = "app" + std::to_string(a) + ".exe";
+      h.AddSecond(x);
+    }
+  }
+  const History b = History::FromJson(h.ToJson());
+  const auto top = b.TopApps(20261123, 100);
+  CHECK_EQ(top.size(), size_t{50});
+  CHECK_EQ(top.front().exe, std::string("app59.exe"));
+  CHECK_EQ(top.back().exe, std::string("app10.exe"));
+}

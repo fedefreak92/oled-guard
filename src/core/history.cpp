@@ -32,6 +32,31 @@ int CivilFromDays(int64_t z) {
 int64_t DayNumber(int day_key) { return DaysFromCivil(day_key / 10000, day_key / 100 % 100, day_key % 100); }
 
 // Zona 32x18 descritta a parole (griglia 3x3).
+// Numero >= 0 oppure nullopt (tipo sbagliato o negativo).
+std::optional<double> NonNegative(const JsonValue* v) {
+  if (!v || v->type() != JsonValue::Type::Number || !(v->AsNumber() >= 0)) return std::nullopt;
+  return v->AsNumber();
+}
+std::optional<double> NumberAt(const JsonValue& arr, size_t i) {
+  if (arr.type() != JsonValue::Type::Array || i >= arr.AsArray().size()) return std::nullopt;
+  return NonNegative(&arr.AsArray()[i]);
+}
+const JsonValue* ArrayField(const JsonValue& o, std::string_view key) {
+  const JsonValue* v = o.Find(key);
+  return v && v->type() == JsonValue::Type::Array ? v : nullptr;
+}
+JsonValue Numbers(std::initializer_list<double> values) {
+  JsonValue a = JsonValue::MakeArray();
+  for (double v : values) a.Push(JsonValue(v));
+  return a;
+}
+// Chiave di giorno AAAAMMGG plausibile.
+bool ValidDayKey(double v) {
+  const int k = static_cast<int>(v);
+  return k == v && k >= 19700101 && k <= 99991231 && k / 100 % 100 >= 1 && k / 100 % 100 <= 12 && k % 100 >= 1 &&
+         k % 100 <= 31;
+}
+
 std::string ZoneLabel(int zone) {
   const int zx = zone % kZoneCols, zy = zone / kZoneCols;
   const int col = zx * 3 / kZoneCols, row = zy * 3 / kZoneRows;
@@ -233,6 +258,151 @@ double History::ProtectedThisWeekS(int today_key) const {
     if (key >= monday && key <= today_key) s += day.protected_s;
   }
   return s;
+}
+
+JsonValue History::ToJson() const {
+  JsonValue o = JsonValue::MakeObject();
+  o.Set("version", JsonValue(1));
+  JsonValue timeline = JsonValue::MakeArray();
+  for (const Bucket& b : timeline_) {
+    timeline.Push(Numbers({static_cast<double>(b.index), b.sum, static_cast<double>(b.count)}));
+  }
+  o.Set("timeline", timeline);
+  JsonValue wear = JsonValue::MakeArray();
+  for (const auto& [monitor, m] : wear_) {
+    JsonValue w = JsonValue::MakeObject();
+    w.Set("monitor", JsonValue(monitor));
+    w.Set("since", JsonValue(static_cast<double>(m.since_local_s)));
+    w.Set("measured_s", JsonValue(m.measured_s));
+    JsonValue hours = JsonValue::MakeArray();
+    for (double v : m.hours) hours.Push(JsonValue(v));
+    w.Set("hours", hours);
+    wear.Push(w);
+  }
+  o.Set("wear", wear);
+  JsonValue days = JsonValue::MakeArray();
+  for (const auto& [key, day] : days_) {
+    JsonValue d = JsonValue::MakeObject();
+    d.Set("day", JsonValue(key));
+    d.Set("protected_s", JsonValue(day.protected_s));
+    JsonValue content = JsonValue::MakeArray();
+    for (double v : day.content_s) content.Push(JsonValue(v));
+    d.Set("content", content);
+    d.Set("light_before", JsonValue(day.light_before));
+    d.Set("light_removed", JsonValue(day.light_removed));
+    // Solo le app piu' usate del giorno.
+    std::vector<std::pair<std::string, AppTime>> apps(day.apps.begin(), day.apps.end());
+    std::sort(apps.begin(), apps.end(), [](const auto& a, const auto& b) {
+      return a.second.protected_s + a.second.paused_s > b.second.protected_s + b.second.paused_s;
+    });
+    if (apps.size() > static_cast<size_t>(kAppsPerDay)) apps.resize(kAppsPerDay);
+    JsonValue list = JsonValue::MakeArray();
+    for (const auto& [exe, t] : apps) {
+      JsonValue a = JsonValue::MakeArray();
+      a.Push(JsonValue(exe));
+      a.Push(JsonValue(t.protected_s));
+      a.Push(JsonValue(t.paused_s));
+      list.Push(a);
+    }
+    d.Set("apps", list);
+    days.Push(d);
+  }
+  o.Set("days", days);
+  o.Set("sessions_total", JsonValue(sessions_total_));
+  JsonValue sessions = JsonValue::MakeArray();
+  for (const auto& [key, count] : sessions_by_day_) {
+    sessions.Push(Numbers({static_cast<double>(key), static_cast<double>(count)}));
+  }
+  o.Set("sessions", sessions);
+  JsonValue streak = JsonValue::MakeArray();
+  for (int d : streak_days_) streak.Push(JsonValue(d));
+  o.Set("streak_days", streak);
+  o.Set("best_streak", JsonValue(best_streak_));
+  o.Set("light_before_total", JsonValue(light_before_total_));
+  o.Set("light_removed_total", JsonValue(light_removed_total_));
+  return o;
+}
+
+History History::FromJson(const JsonValue& v) {
+  History h;
+  if (v.type() != JsonValue::Type::Object) return h;
+  const auto version = NonNegative(v.Find("version"));
+  if (!version || *version != 1) return h;
+  if (const JsonValue* t = ArrayField(v, "timeline")) {
+    for (const JsonValue& b : t->AsArray()) {
+      const auto index = NumberAt(b, 0), sum = NumberAt(b, 1), count = NumberAt(b, 2);
+      if (!index || !sum || !count || *count < 1) continue;
+      if (!h.timeline_.empty() && h.timeline_.back().index >= static_cast<int64_t>(*index)) continue;
+      h.timeline_.push_back(Bucket{static_cast<int64_t>(*index), *sum, static_cast<int>(*count)});
+    }
+  }
+  if (const JsonValue* w = ArrayField(v, "wear")) {
+    for (const JsonValue& m : w->AsArray()) {
+      if (m.type() != JsonValue::Type::Object) continue;
+      const JsonValue* name = m.Find("monitor");
+      const JsonValue* hours = ArrayField(m, "hours");
+      const auto since = NonNegative(m.Find("since")), measured = NonNegative(m.Find("measured_s"));
+      if (!name || name->type() != JsonValue::Type::String || !hours || hours->AsArray().size() != kZones || !since ||
+          !measured) {
+        continue;
+      }
+      WearMap map;
+      map.since_local_s = static_cast<int64_t>(*since);
+      map.measured_s = *measured;
+      bool ok = true;
+      for (int z = 0; z < kZones && ok; ++z) {
+        const auto x = NumberAt(*hours, z);
+        ok = x.has_value();
+        if (ok) map.hours[z] = *x;
+      }
+      if (ok) h.wear_[name->AsString()] = map;
+    }
+  }
+  if (const JsonValue* days = ArrayField(v, "days")) {
+    for (const JsonValue& d : days->AsArray()) {
+      if (d.type() != JsonValue::Type::Object) continue;
+      const auto key = NonNegative(d.Find("day"));
+      if (!key || !ValidDayKey(*key)) continue;
+      DayUsage day;
+      day.protected_s = NonNegative(d.Find("protected_s")).value_or(0);
+      day.light_before = NonNegative(d.Find("light_before")).value_or(0);
+      day.light_removed = std::min(day.light_before, NonNegative(d.Find("light_removed")).value_or(0));
+      if (const JsonValue* c = ArrayField(d, "content"); c && c->AsArray().size() == kContentKinds) {
+        for (int k = 0; k < kContentKinds; ++k) day.content_s[k] = NumberAt(*c, k).value_or(0);
+      }
+      if (const JsonValue* apps = ArrayField(d, "apps")) {
+        for (const JsonValue& a : apps->AsArray()) {
+          if (a.type() != JsonValue::Type::Array || a.AsArray().size() != 3 ||
+              a.AsArray()[0].type() != JsonValue::Type::String || a.AsArray()[0].AsString().empty()) {
+            continue;
+          }
+          const auto p = NumberAt(a, 1), q = NumberAt(a, 2);
+          if (p && q) day.apps[a.AsArray()[0].AsString()] = AppTime{*p, *q};
+        }
+      }
+      h.days_[static_cast<int>(*key)] = day;
+    }
+    while (h.days_.size() > static_cast<size_t>(kDaysKept)) h.days_.erase(h.days_.begin());
+  }
+  h.sessions_total_ = static_cast<int>(NonNegative(v.Find("sessions_total")).value_or(0));
+  if (const JsonValue* s = ArrayField(v, "sessions")) {
+    for (const JsonValue& e : s->AsArray()) {
+      const auto key = NumberAt(e, 0), count = NumberAt(e, 1);
+      if (key && count && ValidDayKey(*key)) h.sessions_by_day_[static_cast<int>(*key)] = static_cast<int>(*count);
+    }
+  }
+  if (const JsonValue* s = ArrayField(v, "streak_days")) {
+    for (const JsonValue& e : s->AsArray()) {
+      const auto key = NonNegative(&e);
+      if (key && ValidDayKey(*key)) h.streak_days_.push_back(static_cast<int>(*key));
+    }
+    std::sort(h.streak_days_.begin(), h.streak_days_.end());
+    h.streak_days_.erase(std::unique(h.streak_days_.begin(), h.streak_days_.end()), h.streak_days_.end());
+  }
+  h.best_streak_ = static_cast<int>(NonNegative(v.Find("best_streak")).value_or(0));
+  h.light_before_total_ = NonNegative(v.Find("light_before_total")).value_or(0);
+  h.light_removed_total_ = std::min(h.light_before_total_, NonNegative(v.Find("light_removed_total")).value_or(0));
+  return h;
 }
 
 }  // namespace oled
