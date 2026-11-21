@@ -72,8 +72,8 @@ TEST(allow_is_case_insensitive) {
 }
 
 TEST(notification_states_that_pause) {
-  for (auto s : {NotificationState::NotPresent, NotificationState::Busy,
-                 NotificationState::RunningD3DFullScreen, NotificationState::PresentationMode}) {
+  for (auto s : {NotificationState::NotPresent, NotificationState::RunningD3DFullScreen,
+                 NotificationState::PresentationMode}) {
     PauseInputs in;
     in.notification_state = s;
     CHECK(EvaluatePause(in, {}) == PauseReason::NotificationState);
@@ -86,9 +86,28 @@ TEST(notification_states_that_pause) {
   }
 }
 
-TEST(notification_rule_can_be_disabled) {
+TEST(busy_alone_does_not_pause) {
+  // L'overlay stesso (topmost, grande quanto il monitor) fa riportare QUNS_BUSY a
+  // Windows: da solo non deve mettere in pausa, altrimenti l'app si spegne da sola.
   PauseInputs in;
   in.notification_state = NotificationState::Busy;
+  in.foreground_process = "claude.exe";
+  CHECK(EvaluatePause(in, {}) == PauseReason::None);
+}
+
+TEST(busy_with_fullscreen_window_pauses_via_fullscreen_rule) {
+  PauseInputs in;
+  in.notification_state = NotificationState::Busy;
+  in.foreground_covers_monitor = true;
+  CHECK(EvaluatePause(in, {}) == PauseReason::FullscreenWindow);
+  PauseRulesConfig c;
+  c.pause_on_fullscreen_window = false;  // l'utente vuole lo shift anche in borderless
+  CHECK(EvaluatePause(in, c) == PauseReason::None);
+}
+
+TEST(notification_rule_can_be_disabled) {
+  PauseInputs in;
+  in.notification_state = NotificationState::RunningD3DFullScreen;
   PauseRulesConfig c;
   c.pause_on_notification_state = false;
   CHECK(EvaluatePause(in, c) == PauseReason::None);

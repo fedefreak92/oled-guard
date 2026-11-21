@@ -13,10 +13,12 @@ bool InList(const std::vector<std::string>& list, std::string_view process) {
                      [&](const std::string& item) { return EqualsIgnoreCase(item, process); });
 }
 
+// QUNS_BUSY non e' fra questi: l'overlay stesso (topmost, grande quanto il monitor)
+// lo fa riportare a Windows. Le app fullscreen/borderless che lo causano sono gia'
+// coperte dalla regola "finestra in primo piano a tutto schermo".
 bool NotificationStatePauses(NotificationState state) {
   switch (state) {
     case NotificationState::NotPresent:
-    case NotificationState::Busy:
     case NotificationState::RunningD3DFullScreen:
     case NotificationState::PresentationMode:
       return true;
