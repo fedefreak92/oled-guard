@@ -21,6 +21,7 @@
 #include "render_thread.h"
 #include "single_instance.h"
 #include "tray.h"
+#include "ui_window.h"
 
 namespace oled {
 
@@ -56,6 +57,10 @@ class App {
   void RefreshMonitor();
   void OnRenderEvent(RenderEvent event);
 
+  // Interfaccia.
+  void OpenUi();
+  void OnUiMessage(const std::string& json);
+
   // Tray.
   void OnTrayEvent(UINT event);
   void ShowTrayMenu();
@@ -87,6 +92,8 @@ class App {
   Tray tray_;
   OverlayWindow overlay_;
   RenderThread render_;
+  UiWindow ui_;
+  std::optional<RECT> ui_rect_;
   // Stato dello shift: appartiene all'App e sopravvive alle pause dell'overlay.
   std::unique_ptr<SharedShift> shift_;
 

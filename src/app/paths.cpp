@@ -22,6 +22,21 @@ std::filesystem::path AppDataDir() {
   return dir;
 }
 
+std::filesystem::path LocalAppDataDir() {
+  std::filesystem::path base;
+  PWSTR raw = nullptr;
+  if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_CREATE, nullptr, &raw))) {
+    base = raw;
+  } else {
+    base = std::filesystem::temp_directory_path();
+  }
+  CoTaskMemFree(raw);
+  std::filesystem::path dir = base / L"oled-guard";
+  std::error_code ec;
+  std::filesystem::create_directories(dir, ec);
+  return dir;
+}
+
 std::filesystem::path LogDir() {
   std::filesystem::path dir = AppDataDir() / L"logs";
   std::error_code ec;

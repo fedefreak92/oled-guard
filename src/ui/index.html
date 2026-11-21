@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>OLED Guard</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; color: #ddd; font-family: "Cascadia Mono", Consolas, monospace; }
+  .cap { display: flex; align-items: center; height: 40px; padding: 0 0 0 20px; font-size: 11px; letter-spacing: 2px; color: #999; app-region: drag; }
+  .cap button { app-region: no-drag; background: none; border: 0; color: #777; width: 46px; height: 40px; font-size: 14px; }
+  .cap button:hover { background: #1a1a1a; color: #fff; }
+  .cap .sp { flex: 1; }
+  #out { padding: 20px; font-size: 12px; white-space: pre-wrap; color: #888; }
+</style>
+</head>
+<body>
+<div class="cap">OLED GUARD<span class="sp"></span>
+  <button onclick="send({cmd:'window',action:'minimize'})">&#8212;</button>
+  <button onclick="send({cmd:'window',action:'maximize'})">&#9633;</button>
+  <button onclick="send({cmd:'window',action:'close'})">&#10005;</button>
+</div>
+<div id="out">in attesa dell'app...</div>
+<script>
+  const wv = window.chrome && window.chrome.webview;
+  function send(o) { if (wv) wv.postMessage(JSON.stringify(o)); }
+  if (wv) wv.addEventListener('message', e => { document.getElementById('out').textContent = JSON.stringify(e.data, null, 2); });
+  send({cmd: 'ready'});
+</script>
+</body>
+</html>

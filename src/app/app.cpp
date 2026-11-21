@@ -16,6 +16,7 @@
 #include "monitor_select.h"
 #include "paths.h"
 #include "text.h"
+#include "ui_protocol.h"
 
 namespace oled {
 namespace {
@@ -32,9 +33,11 @@ constexpr int kToggleHotkeyId = 1;
 constexpr UINT WM_APP_TRAY = WM_APP + 2;
 constexpr UINT WM_APP_CONFIG_CHANGED = WM_APP + 3;
 constexpr UINT WM_APP_SECOND_INSTANCE = WM_APP + 4;
+constexpr UINT WM_APP_UI_CLOSE = WM_APP + 5;
 
 constexpr UINT kCmdExit = 100;
 constexpr UINT kCmdToggle = 101;
+constexpr UINT kCmdOpenUi = 105;
 constexpr UINT kCmdOpenConfig = 102;
 constexpr UINT kCmdOpenLogs = 103;
 constexpr UINT kCmdAutostart = 104;
@@ -80,6 +83,8 @@ int App::Run(HINSTANCE instance) {
   g_app = this;
   SetUnhandledExceptionFilter(CrashFilter);
   LogInit(LogDir(), LogLevel::Info);
+  // WebView2 richiede un thread STA con coda dei messaggi: il thread UI.
+  const HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 
   int argc = 0;
   LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
@@ -139,6 +144,7 @@ int App::Run(HINSTANCE instance) {
   config_file_.StartWatching(main_, WM_APP_CONFIG_CHANGED);
 
   Tick();
+  if (HasArg(L"--open-ui")) OpenUi();
 
   MSG msg;
   while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
@@ -147,12 +153,14 @@ int App::Run(HINSTANCE instance) {
   }
 
   config_file_.StopWatching();
+  ui_.Close();
   StopOverlay();
   if (foreground_hook_) UnhookWinEvent(foreground_hook_);
   tray_.Destroy();
   if (icon_) DestroyIcon(icon_);
   guard_.Stop();
   g_app = nullptr;
+  if (SUCCEEDED(com)) CoUninitialize();
   LogInfo("OLED Guard chiuso");
   LogShutdown();
   return 0;
@@ -423,7 +431,52 @@ void App::UpdateTrayTooltip() {
 }
 
 void App::OnTrayEvent(UINT event) {
-  if (event == WM_CONTEXTMENU || event == NIN_SELECT || event == NIN_KEYSELECT) ShowTrayMenu();
+  // Clic sinistro (o Invio da tastiera): apre l'interfaccia. Clic destro: menu.
+  if (event == NIN_SELECT || event == NIN_KEYSELECT) OpenUi();
+  if (event == WM_CONTEXTMENU) ShowTrayMenu();
+}
+
+void App::OpenUi() {
+  if (ui_.IsOpen()) {
+    ui_.Open(instance_, nullptr, nullptr, false, std::nullopt);  // porta in primo piano
+    return;
+  }
+  const bool ok = ui_.Open(
+      instance_, [this](const std::string& json) { OnUiMessage(json); },
+      [this](const RECT& last) {
+        ui_rect_ = last;
+        LogInfo("Interfaccia chiusa");
+      },
+      debug_, ui_rect_);
+  if (ok) {
+    SendMessageW(ui_.Hwnd(), WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(icon_));
+    SendMessageW(ui_.Hwnd(), WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(icon_));
+    LogInfo("Interfaccia aperta");
+  }
+}
+
+void App::OnUiMessage(const std::string& json) {
+  const auto command = ParseUiCommand(json);
+  if (!command) {
+    LogWarn("Interfaccia: comando non valido ignorato");
+    return;
+  }
+  switch (command->type) {
+    case UiCommandType::Ready:
+      ui_.MarkReady();
+      LogInfo("Interfaccia pronta");
+      ui_.Post(ConfigMessage(config_));
+      break;
+    case UiCommandType::Window:
+      // Mai chiudere WebView2 dentro un suo evento: si rimanda al ciclo dei messaggi.
+      if (command->action == "close") PostMessageW(main_, WM_APP_UI_CLOSE, 0, 0);
+      else if (command->action == "minimize") ui_.Minimize();
+      else if (command->action == "maximize") ui_.ToggleMaximize();
+      break;
+    default:
+      LogDebug("Interfaccia: comando {} non ancora gestito", static_cast<int>(command->type));
+      break;
+  }
 }
 
 void App::ShowTrayMenu() {
@@ -447,6 +500,9 @@ void App::ShowTrayMenu() {
   // Riga di sola informazione: lo stato reale, con il motivo della pausa automatica.
   const std::wstring state = last_paused_ ? L"Stato: in pausa (" + Widen(PauseReasonText(last_reason_)) + L")"
                                           : std::wstring(L"Stato: attivo");
+  AppendMenuW(menu, MF_STRING, kCmdOpenUi, L"Apri OLED Guard");
+  SetMenuDefaultItem(menu, kCmdOpenUi, FALSE);
+  AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
   AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, state.c_str());
   // La pausa manuale e' una voce a parte: cliccare durante una pausa automatica non
   // lascia una pausa manuale attiva dopo la fine del gioco.
@@ -468,7 +524,8 @@ void App::ShowTrayMenu() {
   PostMessageW(main_, WM_NULL, 0, 0);
   DestroyMenu(menu);  // distrugge anche il sottomenu
 
-  if (cmd == kCmdToggle) SetManualPause(!manual_pause_);
+  if (cmd == kCmdOpenUi) OpenUi();
+  else if (cmd == kCmdToggle) SetManualPause(!manual_pause_);
   else if (cmd == kCmdOpenConfig) OpenConfig();
   else if (cmd == kCmdOpenLogs) OpenLogFolder();
   else if (cmd == kCmdAutostart) ToggleAutostart();
@@ -516,6 +573,7 @@ void App::OpenLogFolder() {
 }
 
 void App::Quit() {
+  ui_.Close();
   StopOverlay();
   if (toggle_hotkey_registered_) UnregisterHotKey(main_, kToggleHotkeyId);
   WTSUnRegisterSessionNotification(main_);
@@ -572,6 +630,9 @@ LRESULT App::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
     case WM_APP_CONFIG_CHANGED:
       // Gli editor scrivono piu' volte: si ricarica dopo un attimo di quiete.
       SetTimer(main_, kTimerConfigReload, kConfigQuietMs, nullptr);
+      return 0;
+    case WM_APP_UI_CLOSE:
+      ui_.Close();
       return 0;
     case WM_APP_SECOND_INSTANCE:
       LogInfo("Avvio di una seconda istanza ignorato");

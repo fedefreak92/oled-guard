@@ -70,6 +70,7 @@ add_executable(oled-guard WIN32
   src/app/config_file.cpp
   src/app/autostart.cpp
   src/app/single_instance.cpp
+  src/app/ui_window.cpp
   src/app/oled-guard.manifest
 )
 
@@ -89,5 +90,15 @@ add_shader(fullscreen_vs vs_5_0)
 add_shader(shift_ps ps_5_0)
 
 target_include_directories(oled-guard PRIVATE src/app ${SHADER_OUT})
+
+# WebView2 SDK (unica dipendenza esterna, scelta dall'utente): header di sistema
+# (niente warning) e loader statico, nessuna DLL da distribuire.
+target_include_directories(oled-guard SYSTEM PRIVATE third_party/webview2/include)
+target_link_libraries(oled-guard PRIVATE ${CMAKE_SOURCE_DIR}/third_party/webview2/x64/WebView2LoaderStatic.lib shcore)
+
+# Interfaccia HTML/CSS/JS copiata accanto all'eseguibile.
+add_custom_command(TARGET oled-guard POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/src/ui $<TARGET_FILE_DIR:oled-guard>/ui
+  VERBATIM)
 target_link_libraries(oled-guard PRIVATE oled_core
   d3d11 dxgi dcomp dwmapi wtsapi32 shell32 user32 advapi32 shlwapi ole32)
