@@ -1,0 +1,207 @@
+// Storico delle statistiche: grafico del rischio, mappa di usura, app, contenuti,
+// sessioni, giorni di fila, usura evitata e salvataggio.
+#include <string>
+
+#include "history.h"
+#include "json.h"
+#include "summary_model.h"
+#include "test_framework.h"
+
+using oled::ContentKind;
+using oled::FrameSummary;
+using oled::History;
+using oled::SecondSample;
+
+namespace {
+
+constexpr int64_t kDay = 86400;
+// 2026-11-23 (lunedi') 00:00 ora locale, in secondi "locali" dall'epoca.
+constexpr int64_t kMonday = 20780 * kDay;
+
+FrameSummary Risk(double r) {
+  FrameSummary s;
+  s.risk = r;
+  return s;
+}
+
+SecondSample Sec(int64_t local_s, int day_key, const FrameSummary* summary = nullptr) {
+  SecondSample s;
+  s.local_s = local_s;
+  s.day_key = day_key;
+  s.summary = summary;
+  s.overlay_shown = summary != nullptr;
+  s.monitor = "LG TV SSCR2";
+  return s;
+}
+
+}  // namespace
+
+TEST(history_weekday_and_add_days) {
+  CHECK_EQ(oled::Weekday(20261123), 0);  // lunedi'
+  CHECK_EQ(oled::Weekday(20261129), 6);  // domenica
+  CHECK_EQ(oled::DayKeyAddDays(20261231, 1), 20270101);
+  CHECK_EQ(oled::DayKeyAddDays(20240228, 1), 20240229);
+  CHECK_EQ(oled::DayKeyAddDays(20260301, -1), 20260228);
+  CHECK_EQ(oled::DayKeyAddDays(20261123, -7), 20261116);
+}
+
+TEST(history_timeline_buckets_average) {
+  History h;
+  const FrameSummary a = Risk(0.2), b = Risk(0.4);
+  for (int i = 0; i < 300; ++i) h.AddSecond(Sec(kMonday + i, 20261123, &a));
+  for (int i = 300; i < 600; ++i) h.AddSecond(Sec(kMonday + i, 20261123, &b));
+  const auto t = h.Timeline(kMonday + 599, 2);
+  CHECK_EQ(t.size(), size_t{2});
+  CHECK(t[0].has_value() && t[1].has_value());
+  if (t[0] && t[1]) {
+    CHECK_NEAR(*t[0], 0.2, 1e-9);
+    CHECK_NEAR(*t[1], 0.4, 1e-9);
+  }
+  CHECK_NEAR(h.RiskPeak(kMonday + 599, 2), 0.4, 1e-9);
+}
+
+TEST(history_timeline_gaps_are_empty) {
+  History h;
+  const FrameSummary a = Risk(0.3);
+  h.AddSecond(Sec(kMonday, 20261123, &a));
+  h.AddSecond(Sec(kMonday + 300, 20261123));  // nessuna misura
+  h.AddSecond(Sec(kMonday + 600, 20261123, &a));
+  const auto t = h.Timeline(kMonday + 600, 3);
+  CHECK(t[0].has_value());
+  CHECK(!t[1].has_value());
+  CHECK(t[2].has_value());
+  // Dopo 8 giorni i secchi vecchi spariscono, quelli intermedi sono vuoti.
+  const int64_t later = kMonday + 8 * kDay;
+  h.AddSecond(Sec(later, 20261201, &a));
+  const auto week = h.Timeline(later, oled::kTimelineBuckets);
+  CHECK_EQ(week.size(), size_t{oled::kTimelineBuckets});
+  int filled = 0;
+  for (const auto& v : week) filled += v.has_value() ? 1 : 0;
+  CHECK_EQ(filled, 1);
+}
+
+TEST(history_wear_map_hotspot) {
+  History h;
+  FrameSummary s;
+  s.zone_light.fill(0.25);
+  s.zone_light[0] = 1.0;
+  for (int i = 0; i < 3600; ++i) h.AddSecond(Sec(kMonday + i, 20261123, &s));
+  const auto w = h.Wear("LG TV SSCR2");
+  CHECK_EQ(w.hottest, 0);
+  CHECK_NEAR(w.hottest_hours, 1.0, 1e-9);
+  CHECK_EQ(w.hottest_label, std::string("in alto a sinistra"));
+  const double mean = (1.0 + 0.25 * (oled::kZones - 1)) / oled::kZones;
+  CHECK_NEAR(w.concentration, 1.0 / mean, 1e-9);
+  CHECK_EQ(w.over_double, 1);
+  CHECK_NEAR(w.normalized[0], 1.0, 1e-9);
+  CHECK_NEAR(w.normalized[1], 0.25, 1e-9);
+  CHECK_NEAR(w.measured_hours, 1.0, 1e-9);
+  CHECK_EQ(w.since_local_s, kMonday);
+  s.zone_light.fill(0);
+  s.zone_light[oled::kZones - 1] = 9;
+  History c;
+  c.AddSecond(Sec(kMonday, 20261123, &s));
+  CHECK_EQ(c.Wear("LG TV SSCR2").hottest_label, std::string("in basso a destra"));
+}
+
+TEST(history_wear_map_per_monitor) {
+  History h;
+  FrameSummary s;
+  s.zone_light.fill(1);
+  SecondSample a = Sec(kMonday, 20261123, &s);
+  SecondSample b = Sec(kMonday + 1, 20261123, &s);
+  b.monitor = "DELL";
+  h.AddSecond(a);
+  h.AddSecond(b);
+  h.AddSecond(b);
+  CHECK_NEAR(h.Wear("LG TV SSCR2").measured_hours, 1.0 / 3600, 1e-12);
+  CHECK_NEAR(h.Wear("DELL").measured_hours, 2.0 / 3600, 1e-12);
+  CHECK_EQ(h.Wear("nessuno").hottest, -1);
+}
+
+TEST(history_top_apps_and_content) {
+  History h;
+  const FrameSummary m = Risk(0.1);
+  auto add = [&](int64_t t, int day, const char* app, bool paused, ContentKind kind, int n) {
+    for (int i = 0; i < n; ++i) {
+      SecondSample s = Sec(t + i, day, paused ? nullptr : &m);
+      s.app = app;
+      s.app_paused = paused;
+      s.content = kind;
+      h.AddSecond(s);
+    }
+  };
+  add(kMonday - 8 * kDay, 20261115, "vecchio.exe", false, ContentKind::StillWork, 1000);  // fuori dai 7 giorni
+  add(kMonday - 2 * kDay, 20261121, "code.exe", false, ContentKind::StillWork, 300);
+  add(kMonday - kDay, 20261122, "game.exe", true, ContentKind::Games, 500);
+  add(kMonday, 20261123, "code.exe", false, ContentKind::Video, 100);
+  const auto top = h.TopApps(20261123, 8);
+  CHECK_EQ(top.size(), size_t{2});
+  if (top.size() == 2) {
+    CHECK_EQ(top[0].exe, std::string("game.exe"));
+    CHECK_NEAR(top[0].paused_s, 500, 1e-9);
+    CHECK_EQ(top[1].exe, std::string("code.exe"));
+    CHECK_NEAR(top[1].protected_s, 400, 1e-9);
+  }
+  const auto shares = h.ContentShares(20261123);
+  double sum = 0;
+  for (double v : shares) sum += v;
+  CHECK_NEAR(sum, 1.0, 1e-9);
+  CHECK_NEAR(shares[static_cast<int>(ContentKind::Games)], 500.0 / 900, 1e-9);
+  CHECK_NEAR(shares[static_cast<int>(ContentKind::StillWork)], 300.0 / 900, 1e-9);
+  CHECK_NEAR(History().ContentShares(20261123)[0], 0.0, 1e-9);
+}
+
+TEST(history_streak_counts_consecutive_days) {
+  History h;
+  const FrameSummary m = Risk(0);
+  auto protect = [&](int64_t day_start, int day_key) {
+    for (int i = 0; i < 1800; ++i) h.AddSecond(Sec(day_start + i, day_key, &m));
+  };
+  protect(kMonday + 8 * kDay, 20261201);
+  protect(kMonday + 9 * kDay, 20261202);
+  protect(kMonday + 10 * kDay, 20261203);
+  protect(kMonday + 12 * kDay, 20261205);
+  CHECK(h.Streak(20261205) == std::make_pair(1, 3));
+  CHECK(h.Streak(20261206) == std::make_pair(1, 3));  // vale fino a ieri
+  CHECK(h.Streak(20261207) == std::make_pair(0, 3));
+  // Un giorno con meno di 30 minuti non conta.
+  for (int i = 0; i < 1799; ++i) h.AddSecond(Sec(kMonday + 13 * kDay + i, 20261206, &m));
+  CHECK(h.Streak(20261206) == std::make_pair(1, 3));
+  // Fine anno.
+  History y;
+  for (int d = 0; d < 3; ++d) {
+    const int keys[3] = {20261230, 20261231, 20270101};
+    for (int i = 0; i < 1800; ++i) y.AddSecond(Sec(kMonday + (37 + d) * kDay + i, keys[d], &m));
+  }
+  CHECK(y.Streak(20270101) == std::make_pair(3, 3));
+}
+
+TEST(history_wear_avoided) {
+  History h;
+  CHECK(!h.WearAvoidedToday(20261123).has_value());
+  CHECK(!h.WearAvoidedTotal().has_value());
+  FrameSummary s;
+  s.light_still_before = 1.0;
+  s.light_still_removed = 0.3;
+  h.AddSecond(Sec(kMonday, 20261123, &s));
+  CHECK(h.WearAvoidedToday(20261123).has_value());
+  CHECK_NEAR(h.WearAvoidedToday(20261123).value_or(0), 0.3, 1e-9);
+  CHECK_NEAR(h.WearAvoidedTotal().value_or(0), 0.3, 1e-9);
+  CHECK(!h.WearAvoidedToday(20261124).has_value());
+}
+
+TEST(history_sessions_week) {
+  History h;
+  h.CountSession(20261122);  // domenica della settimana prima
+  h.CountSession(20261123);  // lunedi'
+  h.CountSession(20261125);  // mercoledi'
+  CHECK_EQ(h.SessionsTotal(), 3);
+  CHECK_EQ(h.SessionsThisWeek(20261125), 2);
+  const FrameSummary m = Risk(0);
+  for (int i = 0; i < 100; ++i) h.AddSecond(Sec(kMonday - kDay + i, 20261122, &m));
+  for (int i = 0; i < 50; ++i) h.AddSecond(Sec(kMonday + i, 20261123, &m));
+  CHECK_NEAR(h.ProtectedThisWeekS(20261125), 50, 1e-9);
+  h.Clear();
+  CHECK_EQ(h.SessionsTotal(), 0);
+}
