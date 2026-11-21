@@ -25,6 +25,7 @@ add_library(oled_core STATIC
   src/core/monitor_select.cpp
   src/core/watchdog.cpp
   src/core/wear_stats.cpp
+  src/core/app_history.cpp
 )
 target_include_directories(oled_core PUBLIC src/core)
 
@@ -42,6 +43,7 @@ add_executable(oled-guard-tests
   tests/test_monitor_select.cpp
   tests/test_watchdog.cpp
   tests/test_wear_stats.cpp
+  tests/test_app_history.cpp
 )
 target_include_directories(oled-guard-tests PRIVATE tests)
 target_link_libraries(oled-guard-tests PRIVATE oled_core)
