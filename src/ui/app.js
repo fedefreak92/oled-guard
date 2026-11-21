@@ -547,7 +547,7 @@ const Mock = {
     hotkey_display_off: 'Ctrl+Alt+Shift+O', allow_tearing: false, autostart: true, log_level: 'info',
     dim_enabled: true, dim_strength_pct: 40, dim_delay_s: 180, dim_ramp_s: 300, dim_recover_ms: 500,
     dim_large_enabled: false, dim_large_delay_s: 1200, dim_large_strength_pct: 20, dim_bright_threshold_pct: 25,
-    dim_large_fraction_pct: 40, dim_exclude: ['photoshop.exe'],
+    dim_motion_fraction_pct: 25, dim_exclude: ['photoshop.exe'],
   },
   dimWatch: false, dimT: 0, highlightUntil: 0,
   offset: [0, 0], trail: [[0, 0]], paused: false, manual: false, testing: false, next: 6000,

@@ -3,12 +3,10 @@
 #include <algorithm>
 #include <cstring>
 
-#include "dim_density_h.h"
-#include "dim_density_v.h"
 #include "dim_detect.h"
 #include "dim_level.h"
-#include "dim_max_h.h"
-#include "dim_max_v.h"
+#include "dim_motion_h.h"
+#include "dim_motion_v.h"
 
 namespace oled {
 namespace {
@@ -24,7 +22,7 @@ struct DimConstants {
   float large_delay_s;
   float large_strength;
   float bright_threshold;
-  float large_fraction;
+  float motion_fraction;
   float sdr_white;
   unsigned flags;
   unsigned cols;
@@ -39,6 +37,7 @@ constexpr unsigned kFlagSuspended = 2;
 constexpr unsigned kFlagEnabled = 4;
 constexpr unsigned kFlagLargeEnabled = 8;
 constexpr unsigned kFlagFirstFrame = 16;
+constexpr unsigned kFlagRestore = 32;
 
 }  // namespace
 
@@ -60,7 +59,8 @@ HRESULT Dimmer::CreateGrid(DXGI_FORMAT format, const void* initial, UINT pixel_b
   return device_->CreateUnorderedAccessView(grid.texture.Get(), nullptr, &grid.uav);
 }
 
-HRESULT Dimmer::Init(ID3D11Device* device, UINT width, UINT height, DXGI_FORMAT format, double now_ms) {
+HRESULT Dimmer::Init(ID3D11Device* device, UINT width, UINT height, DXGI_FORMAT format, double now_ms,
+                     const DimSavedState* restore) {
   Shutdown();
   device_ = device;
   device_->GetImmediateContext(&context_);
@@ -78,10 +78,8 @@ HRESULT Dimmer::Init(ID3D11Device* device, UINT width, UINT height, DXGI_FORMAT 
     if (SUCCEEDED(hr)) hr = device_->CreateComputeShader(code, size, nullptr, &out);
   };
   shader(g_dim_detect, sizeof(g_dim_detect), detect_);
-  shader(g_dim_density_h, sizeof(g_dim_density_h), density_h_);
-  shader(g_dim_density_v, sizeof(g_dim_density_v), density_v_);
-  shader(g_dim_max_h, sizeof(g_dim_max_h), max_h_);
-  shader(g_dim_max_v, sizeof(g_dim_max_v), max_v_);
+  shader(g_dim_motion_h, sizeof(g_dim_motion_h), motion_h_);
+  shader(g_dim_motion_v, sizeof(g_dim_motion_v), motion_v_);
   shader(g_dim_level, sizeof(g_dim_level), level_);
   if (FAILED(hr)) return hr;
 
@@ -92,17 +90,30 @@ HRESULT Dimmer::Init(ID3D11Device* device, UINT width, UINT height, DXGI_FORMAT 
   hr = device_->CreateBuffer(&cb, nullptr, &constants_);
   if (FAILED(hr)) return hr;
 
-  // Tutte le celle "cambiate" all'istante 0 della sessione, livello 0.
-  const std::vector<float> zeros(static_cast<size_t>(cols_) * rows_, 0.0f);
-  const std::vector<unsigned> no_flags(zeros.size(), 0u);
+  // Tutte le celle "cambiate" all'istante 0 della sessione, livello 0, zona "app".
+  const size_t n = static_cast<size_t>(cols_) * rows_;
+  const std::vector<float> zeros(n, 0.0f);
+  const std::vector<uint32_t> no_flags(n, 0u);
+  const std::vector<uint32_t> app_zones(n, kDimZoneApp);
   if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_FLOAT, zeros.data(), 4, last_change_))) return hr;
   if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_UINT, no_flags.data(), 4, flags_))) return hr;
+  if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_UINT, no_flags.data(), 4, hash_))) return hr;
   if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32G32_FLOAT, nullptr, 8, sums_))) return hr;
-  if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_FLOAT, nullptr, 4, density_))) return hr;
-  if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_FLOAT, nullptr, 4, max_tmp_))) return hr;
-  if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_FLOAT, nullptr, 4, large_))) return hr;
+  if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_FLOAT, nullptr, 4, motion_))) return hr;
   if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_FLOAT, zeros.data(), 4, levels_grid_))) return hr;
   if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_UINT, no_flags.data(), 4, class_))) return hr;
+  if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_UINT, app_zones.data(), 4, zones_))) return hr;
+  const std::vector<float> no_excursion(n, -1.0f);
+  if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_UINT, no_flags.data(), 4, anchor_hash_))) return hr;
+  if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_FLOAT, zeros.data(), 4, anchor_time_))) return hr;
+  if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_FLOAT, no_excursion.data(), 4, excursion_))) return hr;
+  // Ripresa dopo una pausa: solo con le stesse dimensioni.
+  restore_ = restore && restore->width == static_cast<int>(width) && restore->height == static_cast<int>(height) &&
+             restore->ages.size() == n && restore->hashes.size() == n;
+  if (restore_) {
+    if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_UINT, restore->hashes.data(), 4, saved_hash_))) return hr;
+    if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_FLOAT, restore->ages.data(), 4, saved_age_))) return hr;
+  }
   levels_srv_ = levels_grid_.srv;
   levels_ = levels_grid_.texture.Get();
   return S_OK;
@@ -111,14 +122,13 @@ HRESULT Dimmer::Init(ID3D11Device* device, UINT width, UINT height, DXGI_FORMAT 
 void Dimmer::Shutdown() {
   levels_ = nullptr;
   levels_srv_.Reset();
-  for (Grid* g : {&last_change_, &flags_, &sums_, &density_, &max_tmp_, &large_, &levels_grid_, &class_}) {
+  for (Grid* g : {&last_change_, &flags_, &hash_, &sums_, &motion_, &levels_grid_, &class_, &zones_, &saved_hash_,
+                  &saved_age_, &anchor_hash_, &anchor_time_, &excursion_}) {
     *g = Grid{};
   }
   detect_.Reset();
-  density_h_.Reset();
-  density_v_.Reset();
-  max_h_.Reset();
-  max_v_.Reset();
+  motion_h_.Reset();
+  motion_v_.Reset();
   level_.Reset();
   constants_.Reset();
   frame_copy_.Reset();
@@ -128,9 +138,16 @@ void Dimmer::Shutdown() {
   readback_pending_ = false;
   for (auto& s : debug_staging_) s.Reset();
   debug_pending_ = false;
+  restore_ = false;
   context_.Reset();
   device_.Reset();
   cols_ = rows_ = width_ = height_ = 0;
+}
+
+void Dimmer::SetZones(const std::vector<uint8_t>& zones) {
+  if (!Ready() || zones.size() != static_cast<size_t>(cols_) * rows_) return;
+  const std::vector<uint32_t> wide(zones.begin(), zones.end());
+  context_->UpdateSubresource(zones_.texture.Get(), 0, nullptr, wide.data(), cols_ * 4, 0);
 }
 
 void Dimmer::SetConstants(double now_s, double dt_s, const DimParams& p, float sdr_white, bool suspended,
@@ -145,10 +162,11 @@ void Dimmer::SetConstants(double now_s, double dt_s, const DimParams& p, float s
   c.large_delay_s = static_cast<float>(p.large_delay_s);
   c.large_strength = static_cast<float>(p.large_strength);
   c.bright_threshold = static_cast<float>(p.bright_threshold);
-  c.large_fraction = static_cast<float>(p.large_fraction);
+  c.motion_fraction = static_cast<float>(p.motion_fraction);
   c.sdr_white = sdr_white > 0 ? sdr_white : 1.0f;
   c.flags = (sdr_ ? kFlagSdr : 0) | (suspended ? kFlagSuspended : 0) | (p.enabled ? kFlagEnabled : 0) |
-            (p.large_enabled ? kFlagLargeEnabled : 0) | (first ? kFlagFirstFrame : 0);
+            (p.large_enabled ? kFlagLargeEnabled : 0) | (first ? kFlagFirstFrame : 0) |
+            (first && restore_ ? kFlagRestore : 0);
   c.cols = cols_;
   c.rows = rows_;
   c.width = width_;
@@ -157,22 +175,24 @@ void Dimmer::SetConstants(double now_s, double dt_s, const DimParams& p, float s
 }
 
 void Dimmer::Run(ID3D11ComputeShader* shader, std::initializer_list<ID3D11ShaderResourceView*> srvs,
-                 ID3D11UnorderedAccessView* uav0, ID3D11UnorderedAccessView* uav1, UINT groups_x, UINT groups_y) {
-  ID3D11ShaderResourceView* srv_list[3] = {};
+                 std::initializer_list<ID3D11UnorderedAccessView*> uavs, UINT groups_x, UINT groups_y) {
+  ID3D11ShaderResourceView* srv_list[4] = {};
+  ID3D11UnorderedAccessView* uav_list[6] = {};
   UINT n = 0;
   for (auto* s : srvs) srv_list[n++] = s;
-  ID3D11UnorderedAccessView* uavs[2] = {uav0, uav1};
+  n = 0;
+  for (auto* u : uavs) uav_list[n++] = u;
   ID3D11Buffer* cb = constants_.Get();
   context_->CSSetShader(shader, nullptr, 0);
   context_->CSSetConstantBuffers(0, 1, &cb);
-  context_->CSSetShaderResources(0, 3, srv_list);
-  context_->CSSetUnorderedAccessViews(0, 2, uavs, nullptr);
+  context_->CSSetShaderResources(0, 4, srv_list);
+  context_->CSSetUnorderedAccessViews(0, 6, uav_list, nullptr);
   context_->Dispatch(groups_x, groups_y, 1);
   // Si staccano subito: la stessa texture fa da uscita e poi da ingresso.
-  ID3D11ShaderResourceView* no_srv[3] = {};
-  ID3D11UnorderedAccessView* no_uav[2] = {};
-  context_->CSSetShaderResources(0, 3, no_srv);
-  context_->CSSetUnorderedAccessViews(0, 2, no_uav, nullptr);
+  ID3D11ShaderResourceView* no_srv[4] = {};
+  ID3D11UnorderedAccessView* no_uav[6] = {};
+  context_->CSSetShaderResources(0, 4, no_srv);
+  context_->CSSetUnorderedAccessViews(0, 6, no_uav, nullptr);
   context_->CSSetShader(nullptr, nullptr, 0);
 }
 
@@ -205,7 +225,15 @@ HRESULT Dimmer::Detect(ID3D11Texture2D* frame, ID3D11Texture2D* previous_cache, 
     previous_srv_source_ = previous_cache;
   }
   SetConstants(Seconds(now_ms), 0, p, sdr_white, false, first_frame_);
-  Run(detect_.Get(), {frame_srv.Get(), previous_srv_.Get()}, last_change_.uav.Get(), flags_.uav.Get(), cols_, rows_);
+  Run(detect_.Get(), {frame_srv.Get(), previous_srv_.Get(), saved_hash_.srv.Get(), saved_age_.srv.Get()},
+      {last_change_.uav.Get(), flags_.uav.Get(), hash_.uav.Get(), anchor_hash_.uav.Get(), anchor_time_.uav.Get(),
+       excursion_.uav.Get()},
+      cols_, rows_);
+  if (first_frame_ && restore_) {
+    saved_hash_ = Grid{};
+    saved_age_ = Grid{};
+    restore_ = false;
+  }
   first_frame_ = false;
   return S_OK;
 }
@@ -217,12 +245,52 @@ void Dimmer::Update(double now_ms, const DimParams& p, bool suspended) {
   last_update_s_ = now_s;
   SetConstants(now_s, dt, p, last_white_, suspended, false);
   const UINT gx = (cols_ + 7) / 8, gy = (rows_ + 7) / 8;
-  Run(density_h_.Get(), {flags_.srv.Get(), last_change_.srv.Get()}, sums_.uav.Get(), nullptr, gx, gy);
-  Run(density_v_.Get(), {sums_.srv.Get()}, density_.uav.Get(), nullptr, gx, gy);
-  Run(max_h_.Get(), {density_.srv.Get()}, max_tmp_.uav.Get(), nullptr, gx, gy);
-  Run(max_v_.Get(), {max_tmp_.srv.Get()}, large_.uav.Get(), nullptr, gx, gy);
-  Run(level_.Get(), {flags_.srv.Get(), last_change_.srv.Get(), large_.srv.Get()}, levels_grid_.uav.Get(),
-      class_.uav.Get(), gx, gy);
+  Run(motion_h_.Get(), {nullptr, last_change_.srv.Get()}, {sums_.uav.Get()}, gx, gy);
+  Run(motion_v_.Get(), {sums_.srv.Get()}, {motion_.uav.Get()}, gx, gy);
+  Run(level_.Get(), {flags_.srv.Get(), last_change_.srv.Get(), motion_.srv.Get(), zones_.srv.Get()},
+      {levels_grid_.uav.Get(), class_.uav.Get()}, gx, gy);
+}
+
+std::vector<uint8_t> Dimmer::ReadGridBlocking(ID3D11Texture2D* texture) {
+  D3D11_TEXTURE2D_DESC desc{};
+  texture->GetDesc(&desc);
+  desc.Usage = D3D11_USAGE_STAGING;
+  desc.BindFlags = 0;
+  desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+  desc.MiscFlags = 0;
+  ComPtr<ID3D11Texture2D> staging;
+  std::vector<uint8_t> out;
+  if (FAILED(device_->CreateTexture2D(&desc, nullptr, &staging))) return out;
+  context_->CopyResource(staging.Get(), texture);
+  D3D11_MAPPED_SUBRESOURCE map{};
+  if (FAILED(context_->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &map))) return out;
+  out.resize(static_cast<size_t>(cols_) * rows_ * 4);
+  for (UINT y = 0; y < rows_; ++y) {
+    std::memcpy(out.data() + static_cast<size_t>(y) * cols_ * 4,
+                static_cast<const uint8_t*>(map.pData) + static_cast<size_t>(y) * map.RowPitch, cols_ * 4);
+  }
+  context_->Unmap(staging.Get(), 0);
+  return out;
+}
+
+bool Dimmer::SaveState(double now_ms, DimSavedState& out) {
+  if (!Ready() || first_frame_) return false;  // senza un frame le firme non valgono
+  const auto last_change = ReadGridBlocking(last_change_.texture.Get());
+  const auto hashes = ReadGridBlocking(hash_.texture.Get());
+  const size_t n = static_cast<size_t>(cols_) * rows_;
+  if (last_change.size() != n * 4 || hashes.size() != n * 4) return false;
+  out.width = static_cast<int>(width_);
+  out.height = static_cast<int>(height_);
+  out.ages.resize(n);
+  out.hashes.resize(n);
+  const float now_s = static_cast<float>(Seconds(now_ms));
+  for (size_t i = 0; i < n; ++i) {
+    float lc = 0;
+    std::memcpy(&lc, last_change.data() + i * 4, 4);
+    out.ages[i] = std::max(0.0f, now_s - lc);
+    std::memcpy(&out.hashes[i], hashes.data() + i * 4, 4);
+  }
+  return true;
 }
 
 void Dimmer::RequestReadback() {

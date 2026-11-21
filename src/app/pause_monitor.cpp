@@ -9,6 +9,8 @@
 #include <string>
 
 #include "ascii.h"
+#include "logger.h"
+#include "dim_zones.h"
 #include "text.h"
 
 namespace oled {
@@ -39,13 +41,13 @@ bool OnSecureDesktop() {
   return !ok || _wcsicmp(name, L"Default") != 0;
 }
 
+// Desktop, barra e selettore di Windows (Alt+Tab, Visualizzazione attivita'): non sono
+// app in primo piano e non mettono in pausa anche se coprono tutto lo schermo.
 bool IsShellWindow(HWND hwnd) {
-  wchar_t cls[64] = {};
+  wchar_t cls[128] = {};
   GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
-  for (const wchar_t* shell : {L"Progman", L"WorkerW", L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd"}) {
-    if (_wcsicmp(cls, shell) == 0) return true;
-  }
-  return false;
+  const std::string name = Narrow(cls);
+  return IsShellWindowClass(name) || IsTaskSwitcherClass(name);
 }
 
 std::string ProcessName(DWORD pid) {
@@ -124,6 +126,11 @@ PauseInputs PauseMonitor::Collect(const MonitorInfo* monitor) const {
       in.foreground_covers_monitor =
           IsFullscreenWindow({bounds.left, bounds.top, bounds.right, bounds.bottom}, {m.left, m.top, m.right, m.bottom},
                              IsZoomed(fg) != FALSE, has_caption);
+      if (in.foreground_covers_monitor) {
+        wchar_t cls[128] = {};
+        GetClassNameW(fg, cls, ARRAYSIZE(cls));
+        LogDebug("Finestra a tutto schermo: classe {} ({})", Narrow(cls), in.foreground_process);
+      }
     }
   }
   return in;

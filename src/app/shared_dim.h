@@ -7,6 +7,7 @@
 #include <optional>
 #include <vector>
 
+#include "dim_model.h"
 #include "dim_params.h"
 
 namespace oled {
@@ -27,8 +28,24 @@ struct DimMap {
   double time_ms = 0;
 };
 
+// Mappa delle zone (0 desktop/barra, 1 app), calcolata dal thread UI.
+struct DimZones {
+  std::vector<uint8_t> cells;
+  int cols = 0;
+  int rows = 0;
+  uint64_t version = 0;
+};
+
 class SharedDim {
  public:
+  // La versione cambia solo se la mappa e' diversa dalla precedente.
+  void SetZones(std::vector<uint8_t> cells, int cols, int rows);
+  DimZones GetZones();
+  uint64_t ZonesVersion();
+  // Stato salvato prima di distruggere il dimmer (pausa), ripreso al riavvio.
+  void SaveState(DimSavedState state);
+  std::optional<DimSavedState> TakeSavedState();
+
   // Incrementa la versione se qualcosa e' cambiato (la versione passata e' ignorata).
   void Set(const DimInputs& in);
   DimInputs Get();
@@ -40,6 +57,8 @@ class SharedDim {
   std::mutex mutex_;
   DimInputs inputs_;
   std::optional<DimMap> map_;
+  DimZones zones_;
+  std::optional<DimSavedState> saved_;
 };
 
 }  // namespace oled

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <climits>
 #include <fstream>
+#include <optional>
 
 #include "capture.h"
 #include "clock.h"
@@ -126,6 +127,16 @@ RenderThread::SessionEnd RenderThread::RunSession() {
   FrameSnapshot snap_in, snap_out;
   std::filesystem::path snap_in_file, snap_out_file;
   DimDebugGrids diag_grids;
+  uint64_t zones_applied = 0;
+  // All'uscita (pausa, errore) si salva lo stato dell'oscuramento per riprenderlo dopo.
+  struct SaveOnExit {
+    Dimmer& dimmer;
+    SharedDim* shared;
+    ~SaveOnExit() {
+      DimSavedState state;
+      if (shared && dimmer.Ready() && dimmer.SaveState(NowMs(), state)) shared->SaveState(std::move(state));
+    }
+  } save_on_exit{dimmer, params_.dim};
   ComPtr<ID3D11Texture2D> cache;
   DWORD backoff_ms = 100;
   double unavailable_since = -1;  // inizio degli errori "transitori" consecutivi
@@ -145,13 +156,21 @@ RenderThread::SessionEnd RenderThread::RunSession() {
     shown = false;
   };
 
-  // La mappa dell'oscuramento riparte da zero, con la griglia e il formato correnti.
+  // Nuova griglia con la dimensione e il formato correnti. Le celle rimaste uguali
+  // (stessa firma dei pixel) riprendono l'eta' che avevano prima della pausa.
   const auto reset_dimmer = [&] {
     dim_ok = false;
     if (!params_.dim) return;
-    const HRESULT dim_hr = dimmer.Init(device.Get(), capture.Width(), capture.Height(), capture.Format(), NowMs());
+    std::optional<DimSavedState> saved;
+    DimSavedState state;
+    if (dimmer.Ready() && dimmer.SaveState(NowMs(), state)) saved = std::move(state);
+    if (!saved) saved = params_.dim->TakeSavedState();
+    const HRESULT dim_hr = dimmer.Init(device.Get(), capture.Width(), capture.Height(), capture.Format(), NowMs(),
+                                       saved ? &*saved : nullptr);
     dim_ok = SUCCEEDED(dim_hr);
+    zones_applied = 0;  // la griglia nuova parte tutta "app": si riapplicano le zone
     if (!dim_ok) LogWarn("Render: oscuramento non disponibile ({}), continuo senza", Hr(dim_hr));
+    else if (saved) LogInfo("Oscuramento: ripresa dello stato precedente ({}x{})", saved->width, saved->height);
   };
 
   // Cache e swap chain con il formato e le dimensioni reali della cattura.
@@ -217,6 +236,13 @@ RenderThread::SessionEnd RenderThread::RunSession() {
 
     double now = NowMs();
     const DimInputs dim_in = params_.dim ? params_.dim->Get() : DimInputs{};
+    if (dim_ok && params_.dim->ZonesVersion() != zones_applied) {
+      const DimZones zones = params_.dim->GetZones();
+      if (zones.cols == static_cast<int>(dimmer.Cols()) && zones.rows == static_cast<int>(dimmer.Rows())) {
+        dimmer.SetZones(zones.cells);
+      }
+      zones_applied = zones.version;
+    }
     const bool hdr = capture.Format() == DXGI_FORMAT_R16G16B16A16_FLOAT;
     const float white = hdr ? dim_in.sdr_white_scrgb : 1.0f;
     const bool highlight = dim_in.highlight_until_ms > now;
@@ -337,8 +363,9 @@ RenderThread::SessionEnd RenderThread::RunSession() {
       std::function<void(ID3D11Texture2D*)> grab;
       if (diag_want_snap) {
         ++diag_snaps;
-        snap_in_file = params_.diagnostics_dir / ("dim-" + std::to_string(diag_snaps) + "-in.bmp");
-        snap_out_file = params_.diagnostics_dir / ("dim-" + std::to_string(diag_snaps) + "-out.bmp");
+        const std::string stamp = std::to_string(static_cast<long long>(GetTickCount64() / 1000));
+        snap_in_file = params_.diagnostics_dir / ("dim-" + stamp + "-in.bmp");
+        snap_out_file = params_.diagnostics_dir / ("dim-" + stamp + "-out.bmp");
         snap_in.Request(device.Get(), cache.Get());
         grab = [&](ID3D11Texture2D* back_buffer) { snap_out.Request(device.Get(), back_buffer); };
         diag_want_snap = false;

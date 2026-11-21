@@ -220,7 +220,7 @@ TEST(config_dim_defaults_and_round_trip) {
   CHECK_EQ(d.dim_large_delay_s, 1200);
   CHECK_EQ(d.dim_large_strength_pct, 20);
   CHECK_EQ(d.dim_bright_threshold_pct, 25);
-  CHECK_EQ(d.dim_large_fraction_pct, 40);
+  CHECK_EQ(d.dim_motion_fraction_pct, 25);
   CHECK(d.dim_exclude.empty());
 
   Config c;
@@ -233,7 +233,7 @@ TEST(config_dim_defaults_and_round_trip) {
   c.dim_large_delay_s = 900;
   c.dim_large_strength_pct = 30;
   c.dim_bright_threshold_pct = 50;
-  c.dim_large_fraction_pct = 60;
+  c.dim_motion_fraction_pct = 60;
   c.dim_exclude = {"photoshop.exe"};
   const auto r = ConfigFromJson(ConfigToJson(c));
   CHECK(r.warnings.empty());
@@ -246,7 +246,7 @@ TEST(config_dim_ranges_validated) {
   CHECK_EQ(strength.warnings.size(), size_t{1});
   CHECK_EQ(ConfigFromJson(R"({"dim_delay_s": 10})").config.dim_delay_s, 180);
   CHECK_EQ(ConfigFromJson(R"({"dim_recover_ms": 6000})").config.dim_recover_ms, 500);
-  CHECK_EQ(ConfigFromJson(R"({"dim_large_fraction_pct": 5})").config.dim_large_fraction_pct, 40);
+  CHECK_EQ(ConfigFromJson(R"({"dim_motion_fraction_pct": 5})").config.dim_motion_fraction_pct, 25);
 }
 
 TEST(config_dim_large_delay_not_before_delay) {

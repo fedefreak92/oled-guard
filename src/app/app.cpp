@@ -18,6 +18,7 @@
 #include "monitor_select.h"
 #include "paths.h"
 #include "text.h"
+#include "window_zones.h"
 #include "ui_protocol.h"
 
 namespace oled {
@@ -102,6 +103,7 @@ int App::Run(HINSTANCE instance) {
   LocalFree(argv);
   debug_ = HasArg(L"--debug");
   fast_shift_ = HasArg(L"--fast-shift");
+  dim_diagnostics_ = HasArg(L"--dim-diagnostics");
 
   if (HasArg(L"--list-monitors")) {
     LoadInitialConfig();
@@ -438,6 +440,7 @@ void App::Tick() {
   last_foreground_ = in.foreground_process;
   if (monitor_ && now - sdr_white_checked_ms_ >= 5000) RefreshSdrWhite(now);
   PushDimInputs();
+  if (overlay_running_) RefreshDimZones(now);
   const bool entered_pause = !first_tick_ && paused && !last_paused_;
   if (first_tick_ || paused != last_paused_ || (paused && reason != last_reason_)) {
     if (paused) {
@@ -557,6 +560,24 @@ bool App::DimSuspended() const {
              config_.dim_exclude.end();
 }
 
+void App::RefreshDimZones(double now) {
+  if (!monitor_) return;
+  const int w = monitor_->rect.right - monitor_->rect.left;
+  const int h = monitor_->rect.bottom - monitor_->rect.top;
+  const int cols = (w + kDimCellPx - 1) / kDimCellPx;
+  const int rows = (h + kDimCellPx - 1) / kDimCellPx;
+  std::vector<std::string> described;
+  const bool log_windows = dim_diagnostics_ && now - dim_windows_logged_ms_ >= 60000;
+  auto zones = CollectDimZones(*monitor_, cols, rows, log_windows ? &described : nullptr);
+  if (log_windows) {
+    dim_windows_logged_ms_ = now;
+    const auto app_cells = std::count(zones.begin(), zones.end(), kDimZoneApp);
+    LogInfo("Oscuramento diag: zone app {} celle su {}; finestre: {}", app_cells, zones.size(), described.size());
+    for (const std::string& d : described) LogInfo("  {}", d);
+  }
+  dim_.SetZones(std::move(zones), cols, rows);
+}
+
 void App::SetDimWatch(bool on) {
   if (dim_watch_ == on) return;
   dim_watch_ = on;
@@ -610,7 +631,7 @@ bool App::StartOverlay() {
   params.shift = shift_.get();
   params.dim = &dim_;
   params.frame_period_ms = latency_ms_ > 0 ? latency_ms_ : 7.0;
-  params.dim_diagnostics = HasArg(L"--dim-diagnostics");
+  params.dim_diagnostics = dim_diagnostics_;
   params.diagnostics_dir = LogDir();
   RefreshSdrWhite(NowMs());
   PushDimInputs();

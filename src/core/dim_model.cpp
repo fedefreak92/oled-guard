@@ -1,6 +1,7 @@
 #include "dim_model.h"
 
 #include <algorithm>
+#include <cstring>
 
 namespace oled {
 
@@ -53,19 +54,31 @@ std::vector<double> WindowMax(const std::vector<double>& grid, int cols, int row
   return out;
 }
 
-DimModel::DimModel(int width, int height, double now_s)
+DimModel::DimModel(int width, int height, double now_s, const DimSavedState* restore)
     : width_(width),
       height_(height),
       cols_((width + kDimCellPx - 1) / kDimCellPx),
       rows_((height + kDimCellPx - 1) / kDimCellPx) {
   const size_t n = static_cast<size_t>(cols_) * rows_;
   last_change_.assign(n, now_s);
+  hashes_.assign(n, 0);
+  anchor_hash_.assign(n, 0);
+  anchor_time_.assign(n, now_s);
+  excursion_.assign(n, -1.0);
+  zones_.assign(n, kDimZoneApp);
   bright_.assign(n, 0);
-  content_.assign(n, 0);
   large_.assign(n, 0);
   class_.assign(n, 0);
   targets_.assign(n, 0.0);
   levels_.assign(n, 0.0f);
+  if (restore && restore->width == width && restore->height == height && restore->ages.size() == n &&
+      restore->hashes.size() == n) {
+    restore_ = *restore;
+  }
+}
+
+void DimModel::SetZones(const std::vector<uint8_t>& zones) {
+  if (zones.size() == zones_.size()) zones_ = zones;
 }
 
 void DimModel::OnFrame(const LumaImage& frame, double now_s) {
@@ -77,40 +90,77 @@ void DimModel::OnFrame(const LumaImage& frame, double now_s) {
       const int y0 = cy * kDimCellPx, y1 = std::min(height_, y0 + kDimCellPx);
       bool changed = first;
       int bright_pixels = 0;
-      float lo = frame.luma[static_cast<size_t>(y0) * width_ + x0];
-      float hi = lo;
+      uint32_t hash = 2166136261u;  // FNV-1a sui bit dei valori
       for (int y = y0; y < y1; ++y) {
         for (int x = x0; x < x1; ++x) {
           const size_t i = static_cast<size_t>(y) * width_ + x;
           const float v = frame.luma[i];
           if (!first && v != previous_[i]) changed = true;
           if (v >= bright_threshold_) ++bright_pixels;
-          lo = std::min(lo, v);
-          hi = std::max(hi, v);
+          uint32_t bits = 0;
+          std::memcpy(&bits, &v, sizeof(bits));
+          hash = (hash ^ bits) * 16777619u;
         }
       }
       const int pixels = (x1 - x0) * (y1 - y0);
       const size_t c = Index(cx, cy);
-      if (changed) last_change_[c] = now_s;
+      if (first) {
+        // Ripresa dopo una pausa: stessa firma, stessa eta' di prima.
+        const bool same = !restore_.ages.empty() && restore_.hashes[c] == hash;
+        last_change_[c] = same ? now_s - restore_.ages[c] : now_s;
+        anchor_hash_[c] = hash;
+        anchor_time_[c] = last_change_[c];
+        excursion_[c] = -1;
+      } else if (hash == anchor_hash_[c]) {
+        if (excursion_[c] >= 0) {
+          // Tornata com'era: dopo una deviazione breve riprende l'eta', altrimenti e' nuova.
+          const bool brief = now_s - excursion_[c] <= kDimBlipS;
+          last_change_[c] = brief ? anchor_time_[c] : now_s;
+          if (!brief) anchor_time_[c] = now_s;
+          excursion_[c] = -1;
+        }
+      } else if (changed) {
+        last_change_[c] = now_s;
+        if (excursion_[c] < 0) {
+          excursion_[c] = now_s;
+        } else if (now_s - excursion_[c] > kDimBlipS) {
+          anchor_hash_[c] = hash;  // contenuto nuovo da troppo tempo: diventa il riferimento
+          anchor_time_[c] = now_s;
+          excursion_[c] = -1;
+        }
+      }
+      hashes_[c] = hash;
       bright_[c] = bright_pixels >= kDimBrightPixelFraction * pixels ? 1 : 0;
-      content_[c] = bright_[c] || hi - lo >= kDimDetailRange ? 1 : 0;
     }
   }
+  restore_ = DimSavedState{};
   previous_ = frame.luma;
+}
+
+DimSavedState DimModel::Save(double now_s) const {
+  DimSavedState s;
+  s.width = width_;
+  s.height = height_;
+  s.hashes = hashes_;
+  s.ages.resize(last_change_.size());
+  for (size_t i = 0; i < last_change_.size(); ++i) s.ages[i] = static_cast<float>(now_s - last_change_[i]);
+  return s;
 }
 
 void DimModel::Update(double now_s, double dt_s, const DimParams& p, bool suspended) {
   bright_threshold_ = p.bright_threshold;
   const size_t n = levels_.size();
-  std::vector<double> c_mask(n);
-  for (size_t i = 0; i < n; ++i) c_mask[i] = content_[i] && now_s - last_change_[i] >= p.delay_s ? 1.0 : 0.0;
-  const auto large_max = WindowMax(WindowMean(c_mask, cols_, rows_, kDimWindowRadius), cols_, rows_, kDimWindowRadius);
+  // Movimento intorno: quota di celle cambiate da poco nella finestra 33x33.
+  std::vector<double> motion(n);
+  for (size_t i = 0; i < n; ++i) motion[i] = now_s - last_change_[i] < kDimMotionWindowS ? 1.0 : 0.0;
+  const auto motion_density = WindowMean(motion, cols_, rows_, kDimWindowRadius);
   const double dt = std::max(0.0, dt_s);
 
   for (size_t i = 0; i < n; ++i) {
     const double age = now_s - last_change_[i];
     const bool m = bright_[i] && age >= p.delay_s;
-    const bool large = large_max[i] >= p.large_fraction;
+    // Desktop e barra: ogni elemento fermo e luminoso. Dentro un'app: solo con movimento intorno.
+    const bool large = zones_[i] == kDimZoneApp && motion_density[i] < p.motion_fraction;
     large_[i] = large ? 1 : 0;
 
     double cap = 0;

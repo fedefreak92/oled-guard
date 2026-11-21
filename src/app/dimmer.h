@@ -8,6 +8,7 @@
 
 #include <vector>
 
+#include "dim_model.h"
 #include "dim_params.h"
 
 namespace oled {
@@ -26,12 +27,18 @@ class Dimmer {
   ~Dimmer() { Shutdown(); }
 
   // Griglia per una cattura width x height nel formato dato. Tutte le celle partono
-  // "cambiate adesso" e con livello 0.
-  HRESULT Init(ID3D11Device* device, UINT width, UINT height, DXGI_FORMAT format, double now_ms);
+  // "cambiate adesso", con livello 0 e in zona "app". Con `restore` (stesse dimensioni)
+  // al primo frame le celle con la stessa firma riprendono l'eta' che avevano.
+  HRESULT Init(ID3D11Device* device, UINT width, UINT height, DXGI_FORMAT format, double now_ms,
+               const DimSavedState* restore = nullptr);
   void Shutdown();
   bool Ready() const { return levels_ != nullptr; }
   UINT Cols() const { return cols_; }
   UINT Rows() const { return rows_; }
+  // Zone per cella (0 desktop/barra, 1 app); di dimensione sbagliata vengono ignorate.
+  void SetZones(const std::vector<uint8_t>& zones);
+  // Eta' e firma di ogni cella, lette subito (bloccante: solo prima di distruggere).
+  bool SaveState(double now_ms, DimSavedState& out);
 
   // Frame nuovo, da chiamare prima che la cache (frame precedente) venga sovrascritta.
   // sdr_white: valore del bianco nel formato della cattura (1 in SDR).
@@ -64,14 +71,17 @@ class Dimmer {
   HRESULT CreateGrid(DXGI_FORMAT format, const void* initial, UINT pixel_bytes, Grid& grid);
   void SetConstants(double now_s, double dt_s, const DimParams& p, float sdr_white, bool suspended, bool first);
   void Run(ID3D11ComputeShader* shader, std::initializer_list<ID3D11ShaderResourceView*> srvs,
-           ID3D11UnorderedAccessView* uav0, ID3D11UnorderedAccessView* uav1, UINT groups_x, UINT groups_y);
+           std::initializer_list<ID3D11UnorderedAccessView*> uavs, UINT groups_x, UINT groups_y);
+  std::vector<uint8_t> ReadGridBlocking(ID3D11Texture2D* texture);
   double Seconds(double now_ms) const { return (now_ms - epoch_ms_) / 1000.0; }
 
   ComPtr<ID3D11Device> device_;
   ComPtr<ID3D11DeviceContext> context_;
   ComPtr<ID3D11Buffer> constants_;
-  ComPtr<ID3D11ComputeShader> detect_, density_h_, density_v_, max_h_, max_v_, level_;
-  Grid last_change_, flags_, sums_, density_, max_tmp_, large_, levels_grid_, class_;
+  ComPtr<ID3D11ComputeShader> detect_, motion_h_, motion_v_, level_;
+  Grid last_change_, flags_, hash_, sums_, motion_, levels_grid_, class_, zones_, saved_hash_, saved_age_;
+  Grid anchor_hash_, anchor_time_, excursion_;
+  bool restore_ = false;
   ID3D11Texture2D* levels_ = nullptr;  // = levels_grid_.texture
   ComPtr<ID3D11ShaderResourceView> levels_srv_;
   ComPtr<ID3D11Texture2D> frame_copy_;  // ripiego se il frame non e' leggibile come SRV

@@ -11,7 +11,7 @@ cbuffer DimConstants : register(b0) {
   float large_delay_s;
   float large_strength;
   float bright_threshold;
-  float large_fraction;
+  float motion_fraction;
   float sdr_white;  // valore del bianco nel formato catturato (1 in SDR)
   uint flags;       // vedi kFlag*
   uint cols;
@@ -25,26 +25,36 @@ static const uint kFlagSuspended = 2;
 static const uint kFlagEnabled = 4;
 static const uint kFlagLargeEnabled = 8;
 static const uint kFlagFirstFrame = 16;
+static const uint kFlagRestore = 32;
 
 static const int kCellPx = 16;
 static const int kRadius = 16;
 static const float kBrightPixelFraction = 0.125;
-static const float kDetailRange = 0.10;
+static const float kMotionWindowS = 10.0;
+static const float kBlipS = 15.0;  // deviazione breve: la cella riprende l'eta' se torna uguale
 static const float kMaxLevel = 0.8;
 static const float kCommandRecoverS = 1.0;
 static const float kLargeRecoverS = 30.0;
+static const uint kZoneApp = 1;
 
 // ------------------------------------------------------------------ rilevamento
 
 Texture2D<float4> frame_tex : register(t0);
 Texture2D<float4> previous_tex : register(t1);
+Texture2D<uint> saved_hash : register(t2);
+Texture2D<float> saved_age : register(t3);
 RWTexture2D<float> last_change_out : register(u0);
 RWTexture2D<uint> flags_out : register(u1);
+RWTexture2D<uint> hash_out : register(u2);
+// Contenuto di riferimento, da quando c'e', inizio della deviazione in corso (-1 nessuna).
+RWTexture2D<uint> anchor_hash_io : register(u3);
+RWTexture2D<float> anchor_time_io : register(u4);
+RWTexture2D<float> excursion_io : register(u5);
 
 groupshared uint g_changed;
 groupshared uint g_bright;
-groupshared uint g_min;
-groupshared uint g_max;
+groupshared uint g_hash_add;
+groupshared uint g_hash_xor;
 
 float SrgbToLinear(float c) {
   return c <= 0.04045 ? c / 12.92 : pow(abs((c + 0.055) / 1.055), 2.4);
@@ -56,13 +66,20 @@ float Luma(float4 c) {
   return max(0.0, dot(rgb, float3(0.2126, 0.7152, 0.0722)) / sdr_white);
 }
 
+// Mescolamento PCG: firma dei pixel di una cella, indipendente dall'ordine dei thread.
+uint Pcg(uint v) {
+  const uint state = v * 747796405u + 2891336453u;
+  const uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+  return (word >> 22u) ^ word;
+}
+
 [numthreads(16, 16, 1)]
 void CSDetect(uint3 cell : SV_GroupID, uint3 tid : SV_GroupThreadID, uint index : SV_GroupIndex) {
   if (index == 0) {
     g_changed = 0;
     g_bright = 0;
-    g_min = 0x7f7fffff;  // FLT_MAX: con valori >= 0 l'ordine dei bit e' quello dei float
-    g_max = 0;
+    g_hash_add = 0;
+    g_hash_xor = 0;
   }
   GroupMemoryBarrierWithGroupSync();
 
@@ -71,10 +88,11 @@ void CSDetect(uint3 cell : SV_GroupID, uint3 tid : SV_GroupThreadID, uint index 
     const float4 now = frame_tex.Load(int3(pixel, 0));
     const float4 before = previous_tex.Load(int3(pixel, 0));
     if (any(now != before)) InterlockedOr(g_changed, 1u);
-    const float l = Luma(now);
-    if (l >= bright_threshold) InterlockedAdd(g_bright, 1u);
-    InterlockedMin(g_min, asuint(l));
-    InterlockedMax(g_max, asuint(l));
+    if (Luma(now) >= bright_threshold) InterlockedAdd(g_bright, 1u);
+    const uint4 bits = asuint(now);
+    const uint h = Pcg(bits.r ^ Pcg(bits.g ^ Pcg(bits.b ^ Pcg(index))));
+    InterlockedAdd(g_hash_add, h);
+    InterlockedXor(g_hash_xor, Pcg(h));
   }
   GroupMemoryBarrierWithGroupSync();
 
@@ -82,68 +100,72 @@ void CSDetect(uint3 cell : SV_GroupID, uint3 tid : SV_GroupThreadID, uint index 
     const uint w = min(width - cell.x * (uint)kCellPx, (uint)kCellPx);
     const uint h = min(height - cell.y * (uint)kCellPx, (uint)kCellPx);
     const bool bright = (float)g_bright >= kBrightPixelFraction * (float)(w * h);
-    const bool content = bright || asfloat(g_max) - asfloat(g_min) >= kDetailRange;
-    if (g_changed != 0 || (flags & kFlagFirstFrame)) last_change_out[cell.xy] = now_s;
-    flags_out[cell.xy] = (bright ? 1u : 0u) | (content ? 2u : 0u);
+    const uint hash = g_hash_add ^ (g_hash_xor * 2654435761u);
+    if (flags & kFlagFirstFrame) {
+      // Ripresa dopo una pausa: stessa firma, stessa eta' di prima.
+      const bool same = (flags & kFlagRestore) != 0 && saved_hash[cell.xy] == hash;
+      const float since = same ? now_s - saved_age[cell.xy] : now_s;
+      last_change_out[cell.xy] = since;
+      anchor_hash_io[cell.xy] = hash;
+      anchor_time_io[cell.xy] = since;
+      excursion_io[cell.xy] = -1.0;
+    } else if (hash == anchor_hash_io[cell.xy]) {
+      const float excursion = excursion_io[cell.xy];
+      if (excursion >= 0) {
+        // Tornata com'era: dopo una deviazione breve riprende l'eta', altrimenti e' nuova.
+        const bool brief = now_s - excursion <= kBlipS;
+        last_change_out[cell.xy] = brief ? anchor_time_io[cell.xy] : now_s;
+        if (!brief) anchor_time_io[cell.xy] = now_s;
+        excursion_io[cell.xy] = -1.0;
+      }
+    } else if (g_changed != 0) {
+      last_change_out[cell.xy] = now_s;
+      const float excursion = excursion_io[cell.xy];
+      if (excursion < 0) {
+        excursion_io[cell.xy] = now_s;
+      } else if (now_s - excursion > kBlipS) {
+        anchor_hash_io[cell.xy] = hash;  // contenuto nuovo da troppo tempo: nuovo riferimento
+        anchor_time_io[cell.xy] = now_s;
+        excursion_io[cell.xy] = -1.0;
+      }
+    }
+    flags_out[cell.xy] = bright ? 1u : 0u;
+    hash_out[cell.xy] = hash;
   }
 }
 
-// ------------------------------------------------------------------ densita' e grandi aree
+// ------------------------------------------------------------------ movimento intorno
 
 Texture2D<uint> flags_in : register(t0);
 Texture2D<float> last_change_in : register(t1);
 Texture2D<float2> sums_in : register(t0);
-Texture2D<float> grid_in : register(t0);
-Texture2D<float> large_in : register(t2);
+Texture2D<float> motion_in : register(t2);
+Texture2D<uint> zones_in : register(t3);
 RWTexture2D<float2> sums_out : register(u0);
-RWTexture2D<float> grid_out : register(u0);
+RWTexture2D<float> motion_out : register(u0);
 RWTexture2D<float> levels_io : register(u0);
-// Bit 0-1: ultima classe (0 nessuna, 1 elemento piccolo, 2 grande area);
+// Bit 0-1: ultima classe (0 nessuna, 1 elemento, 2 da non toccare);
 // bit 2: ritorno lento in corso (classe cambiata con il livello sopra il bersaglio).
 RWTexture2D<uint> class_io : register(u1);
 
-bool ContentStatic(int2 c) {
-  return (flags_in[c] & 2u) != 0 && now_s - last_change_in[c] >= delay_s;
-}
-
 [numthreads(8, 8, 1)]
-void CSDensityH(uint3 id : SV_DispatchThreadID) {
+void CSMotionH(uint3 id : SV_DispatchThreadID) {
   if (id.x >= cols || id.y >= rows) return;
   const int x0 = max(0, (int)id.x - kRadius);
   const int x1 = min((int)cols - 1, (int)id.x + kRadius);
   float sum = 0;
-  for (int x = x0; x <= x1; ++x) sum += ContentStatic(int2(x, id.y)) ? 1.0 : 0.0;
+  for (int x = x0; x <= x1; ++x) sum += now_s - last_change_in[int2(x, id.y)] < kMotionWindowS ? 1.0 : 0.0;
   sums_out[id.xy] = float2(sum, x1 - x0 + 1);
 }
 
 [numthreads(8, 8, 1)]
-void CSDensityV(uint3 id : SV_DispatchThreadID) {
+void CSMotionV(uint3 id : SV_DispatchThreadID) {
   if (id.x >= cols || id.y >= rows) return;
   const int y0 = max(0, (int)id.y - kRadius);
   const int y1 = min((int)rows - 1, (int)id.y + kRadius);
   float2 s = 0;
   for (int y = y0; y <= y1; ++y) s += sums_in[int2(id.x, y)];
-  grid_out[id.xy] = s.x / s.y;
-}
-
-[numthreads(8, 8, 1)]
-void CSMaxH(uint3 id : SV_DispatchThreadID) {
-  if (id.x >= cols || id.y >= rows) return;
-  const int x0 = max(0, (int)id.x - kRadius);
-  const int x1 = min((int)cols - 1, (int)id.x + kRadius);
-  float m = 0;
-  for (int x = x0; x <= x1; ++x) m = max(m, grid_in[int2(x, id.y)]);
-  grid_out[id.xy] = m;
-}
-
-[numthreads(8, 8, 1)]
-void CSMaxV(uint3 id : SV_DispatchThreadID) {
-  if (id.x >= cols || id.y >= rows) return;
-  const int y0 = max(0, (int)id.y - kRadius);
-  const int y1 = min((int)rows - 1, (int)id.y + kRadius);
-  float m = 0;
-  for (int y = y0; y <= y1; ++y) m = max(m, grid_in[int2(id.x, y)]);
-  grid_out[id.xy] = m;
+  motion_out[id.xy] = s.x / s.y;
 }
 
 // ------------------------------------------------------------------ livello
@@ -155,7 +177,8 @@ void CSLevel(uint3 id : SV_DispatchThreadID) {
   const float age = now_s - last_change_in[c];
   const bool bright = (flags_in[c] & 1u) != 0;
   const bool m = bright && age >= delay_s;
-  const bool large = large_in[c] >= large_fraction;
+  // Desktop e barra: ogni elemento fermo e luminoso. Dentro un'app: solo con movimento intorno.
+  const bool large = zones_in[c] == kZoneApp && motion_in[c] < motion_fraction;
   const bool enabled = (flags & kFlagEnabled) != 0;
   const bool suspended = (flags & kFlagSuspended) != 0;
 

@@ -135,7 +135,7 @@
 
     <div class="cols gap">
       <div>
-        <div class="sec">Elementi piccoli</div>
+        <div class="sec">Desktop, barra e loghi</div>
         <div class="row"><span class="k">Oscuramento attivo</span><button class="toggle" data-toggle="dim_enabled">ON</button></div>
         <div class="row col">
           <div class="row-head"><span class="k">Intensita' massima</span><span class="v" id="vDimStrength">-</span></div>
@@ -151,8 +151,8 @@
         </div>
       </div>
       <div>
-        <div class="sec">Grandi aree</div>
-        <div class="row"><span class="k">Oscura anche le grandi aree ferme</span><button class="toggle" data-toggle="dim_large_enabled">OFF</button></div>
+        <div class="sec">Finestre ferme</div>
+        <div class="row"><span class="k">Oscura anche le finestre ferme (documenti, pagine)</span><button class="toggle" data-toggle="dim_large_enabled">OFF</button></div>
         <div class="row col">
           <div class="row-head"><span class="k">Inizia quando e' ferma da</span><span class="v" id="vDimLargeDelay">-</span></div>
           <input type="range" class="single" id="rangeDimLargeDelay" min="5" max="240" step="5">
@@ -173,7 +173,7 @@
         <div class="proc" id="dimProcList" hidden></div>
       </div>
     </div>
-    <div class="hint">Si scuriscono solo gli elementi piccoli fermi e luminosi (barra, icone, loghi): documenti e pagine ferme restano intatti. Una zona torna normale appena il suo contenuto cambia; il puntatore del mouse da solo non conta.</div>
+    <div class="hint">Sul desktop e sulla barra si scurisce tutto cio' che e' fermo e luminoso (icone, etichette, sfondo chiaro). Dentro le finestre delle app solo gli elementi fermi sopra contenuti in movimento, come il logo su un video: documenti e pagine ferme restano intatti. Una zona torna normale appena il suo contenuto cambia; la mappa sopravvive alle pause.</div>
   </section>
 
   <!-- WINDOWS PER OLED -->

@@ -31,6 +31,7 @@ add_library(oled_core STATIC
   src/core/dim_model.cpp
   src/core/dim_schedule.cpp
   src/core/dim_stats.cpp
+  src/core/dim_zones.cpp
 )
 target_include_directories(oled_core PUBLIC src/core)
 
@@ -53,6 +54,7 @@ add_executable(oled-guard-tests
   tests/test_dim_model.cpp
   tests/test_dim_schedule.cpp
   tests/test_dim_stats.cpp
+  tests/test_dim_zones.cpp
 )
 target_include_directories(oled-guard-tests PRIVATE tests)
 target_link_libraries(oled-guard-tests PRIVATE oled_core)
@@ -83,10 +85,8 @@ endfunction()
 add_shader_entry(fullscreen_vs fullscreen_vs main vs_5_0)
 add_shader_entry(shift_ps shift_ps main ps_5_0)
 add_shader_entry(dim_detect dim_cs CSDetect cs_5_0)
-add_shader_entry(dim_density_h dim_cs CSDensityH cs_5_0)
-add_shader_entry(dim_density_v dim_cs CSDensityV cs_5_0)
-add_shader_entry(dim_max_h dim_cs CSMaxH cs_5_0)
-add_shader_entry(dim_max_v dim_cs CSMaxV cs_5_0)
+add_shader_entry(dim_motion_h dim_cs CSMotionH cs_5_0)
+add_shader_entry(dim_motion_v dim_cs CSMotionV cs_5_0)
 add_shader_entry(dim_level dim_cs CSLevel cs_5_0)
 
 # Test degli shader su device WARP (nessuna GPU necessaria).
@@ -122,6 +122,7 @@ add_executable(oled-guard WIN32
   src/app/windows_settings.cpp
   src/app/stats_file.cpp
   src/app/dim_diagnostics.cpp
+  src/app/window_zones.cpp
   src/app/oled-guard.manifest
 )
 

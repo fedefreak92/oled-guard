@@ -17,22 +17,39 @@ struct LumaImage {
   std::vector<float> luma;
 };
 
+// Zone per cella: desktop e barra delle applicazioni, oppure finestra di un'app.
+inline constexpr uint8_t kDimZoneShell = 0;
+inline constexpr uint8_t kDimZoneApp = 1;
+
+// Stato salvato prima di distruggere l'overlay (pausa), per riprendere dopo.
+struct DimSavedState {
+  int width = 0;
+  int height = 0;
+  std::vector<float> ages;       // secondi da cui ogni cella e' ferma
+  std::vector<uint32_t> hashes;  // firma dei pixel della cella nell'ultimo frame
+};
+
 class DimModel {
  public:
-  // Tutte le celle partono "cambiate adesso" e con livello 0.
-  DimModel(int width, int height, double now_s);
+  // Tutte le celle partono "cambiate adesso" e con livello 0. Con `restore` (stesse
+  // dimensioni), al primo frame le celle con la stessa firma riprendono la loro eta'.
+  DimModel(int width, int height, double now_s, const DimSavedState* restore = nullptr);
 
+  // Zone per cella (Cols()*Rows()); di dimensione sbagliata vengono ignorate.
+  // Senza zone tutto conta come finestra di un'app.
+  void SetZones(const std::vector<uint8_t>& zones);
   // Frame nuovo: le celle con almeno un pixel diverso dal frame precedente
-  // risultano cambiate adesso. Il primo frame cambia tutte le celle.
+  // risultano cambiate adesso. Il primo frame cambia tutte le celle (salvo ripresa).
   void OnFrame(const LumaImage& frame, double now_s);
   // Classificazione e avanzamento del livello verso il bersaglio.
   void Update(double now_s, double dt_s, const DimParams& p, bool suspended);
+  DimSavedState Save(double now_s) const;
 
   int Cols() const { return cols_; }
   int Rows() const { return rows_; }
   float Level(int cx, int cy) const { return levels_[Index(cx, cy)]; }
   bool Bright(int cx, int cy) const { return bright_[Index(cx, cy)] != 0; }
-  bool Content(int cx, int cy) const { return content_[Index(cx, cy)] != 0; }
+  // Dentro un'app senza movimento intorno: non e' un elemento da scurire.
   bool Large(int cx, int cy) const { return large_[Index(cx, cy)] != 0; }
   double Target(int cx, int cy) const { return targets_[Index(cx, cy)]; }
   const std::vector<float>& Levels() const { return levels_; }
@@ -47,18 +64,25 @@ class DimModel {
   double bright_threshold_ = 0.25;
   std::vector<float> previous_;
   std::vector<double> last_change_;
+  std::vector<uint32_t> hashes_;
+  // Contenuto "di riferimento" di ogni cella e da quando c'e'; inizio della deviazione
+  // in corso (-1 nessuna): se la cella torna al riferimento entro kDimBlipS, riprende l'eta'.
+  std::vector<uint32_t> anchor_hash_;
+  std::vector<double> anchor_time_;
+  std::vector<double> excursion_;
+  std::vector<uint8_t> zones_;
   std::vector<uint8_t> bright_;
-  std::vector<uint8_t> content_;
   std::vector<uint8_t> large_;
-  // Bit 0-1: ultima classe (0 nessuna, 1 elemento piccolo, 2 grande area);
+  // Bit 0-1: ultima classe (0 nessuna, 1 elemento, 2 da non toccare);
   // bit 2: ritorno lento in corso (la classe e' cambiata con il livello sopra il bersaglio).
   std::vector<uint8_t> class_;
   std::vector<double> targets_;
   std::vector<float> levels_;
+  DimSavedState restore_;
 };
 
-// Somma/media e massimo su finestre (2r+1)x(2r+1) tagliate ai bordi della griglia,
-// con filtri separabili. Usati dal modello e utili ai test.
+// Media e massimo su finestre (2r+1)x(2r+1) tagliate ai bordi della griglia, con filtri
+// separabili.
 std::vector<double> WindowMean(const std::vector<double>& grid, int cols, int rows, int radius);
 std::vector<double> WindowMax(const std::vector<double>& grid, int cols, int rows, int radius);
 

@@ -76,6 +76,8 @@ class App {
   // Oscuramento: config, app in primo piano, bianco SDR -> thread di render.
   void PushDimInputs();
   void RefreshSdrWhite(double now);
+  // Zone dell'oscuramento (desktop/barra o app) dalle finestre visibili.
+  void RefreshDimZones(double now);
   void PushDimToUi(double now);
   void SetDimWatch(bool on);
   bool DimSuspended() const;  // app in primo piano fra le esclusioni
@@ -154,6 +156,8 @@ class App {
   double overlay_shown_since_ms_ = 0;
   double last_dim_push_ms_ = 0;
   DimMap last_dim_map_;
+  bool dim_diagnostics_ = false;
+  double dim_windows_logged_ms_ = -1e9;
 
   PauseMonitor pause_monitor_;
   PauseHysteresis hysteresis_{300, 2500};

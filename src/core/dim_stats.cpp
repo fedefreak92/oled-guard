@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cstdio>
 
+#include "dim_params.h"
+
 namespace oled {
 
 DimGridStats SummarizeDimGrids(const std::vector<float>& levels, const std::vector<uint32_t>& flags,
@@ -14,7 +16,7 @@ DimGridStats SummarizeDimGrids(const std::vector<float>& levels, const std::vect
   s.cells = static_cast<int>(n);
   for (size_t i = 0; i < n; ++i) {
     if (flags[i] & 1u) ++s.bright;
-    if (flags[i] & 2u) ++s.content;
+    if (now_s - last_change[i] < kDimMotionWindowS) ++s.moving;
     if (now_s - last_change[i] >= delay_s) ++s.static_cells;
     const uint32_t cls = classes[i] & 3u;
     if (cls == 1) ++s.small_cells;
@@ -29,9 +31,9 @@ DimGridStats SummarizeDimGrids(const std::vector<float>& levels, const std::vect
 std::string FormatDimGridStats(const DimGridStats& s) {
   char buf[256];
   std::snprintf(buf, sizeof(buf),
-                "celle %d: luminose %d, contenuto %d, ferme %d, piccole %d, grandi %d, scurite %d, max %.0f%%, "
-                "cambiate da 2 s %d",
-                s.cells, s.bright, s.content, s.static_cells, s.small_cells, s.large_cells, s.dimmed, s.max_level * 100,
+                "celle %d: luminose %d, in movimento %d, ferme %d, elementi %d, da non toccare %d, scurite %d, "
+                "max %.0f%%, cambiate da 2 s %d",
+                s.cells, s.bright, s.moving, s.static_cells, s.small_cells, s.large_cells, s.dimmed, s.max_level * 100,
                 s.recent_changes);
   return buf;
 }

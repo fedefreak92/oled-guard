@@ -13,6 +13,37 @@ void SharedDim::Set(const DimInputs& in) {
   inputs_.version = version;
 }
 
+void SharedDim::SetZones(std::vector<uint8_t> cells, int cols, int rows) {
+  std::lock_guard lock(mutex_);
+  if (cells == zones_.cells && cols == zones_.cols && rows == zones_.rows) return;
+  zones_.cells = std::move(cells);
+  zones_.cols = cols;
+  zones_.rows = rows;
+  ++zones_.version;
+}
+
+uint64_t SharedDim::ZonesVersion() {
+  std::lock_guard lock(mutex_);
+  return zones_.version;
+}
+
+DimZones SharedDim::GetZones() {
+  std::lock_guard lock(mutex_);
+  return zones_;
+}
+
+void SharedDim::SaveState(DimSavedState state) {
+  std::lock_guard lock(mutex_);
+  saved_ = std::move(state);
+}
+
+std::optional<DimSavedState> SharedDim::TakeSavedState() {
+  std::lock_guard lock(mutex_);
+  std::optional<DimSavedState> out = std::move(saved_);
+  saved_.reset();
+  return out;
+}
+
 DimInputs SharedDim::Get() {
   std::lock_guard lock(mutex_);
   return inputs_;

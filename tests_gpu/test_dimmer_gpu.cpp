@@ -1,8 +1,11 @@
-// Gli shader dell'oscuramento (Dimmer) confrontati con il modello di riferimento.
+// Gli shader dell'oscuramento (Dimmer) confrontati con il modello di riferimento, sulle
+// stesse scene realistiche dei test del modello.
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <functional>
 
+#include "dim_scenes.h"
 #include "dimmer.h"
 #include "gpu_test_util.h"
 #include "test_framework.h"
@@ -10,43 +13,39 @@
 using oled::DimModel;
 using oled::DimParams;
 using oled::Dimmer;
+using oled::DimSavedState;
 using oled::LumaImage;
 using namespace oled::gpu_test;
+using namespace oled::scenes;
 
 namespace {
 
-LumaImage Black(int w, int h) {
-  LumaImage img;
-  img.width = w;
-  img.height = h;
-  img.luma.assign(static_cast<size_t>(w) * h, 0.0f);
-  return img;
-}
+constexpr DXGI_FORMAT kHdr = DXGI_FORMAT_R16G16B16A16_FLOAT;
+constexpr DXGI_FORMAT kSdr = DXGI_FORMAT_B8G8R8A8_UNORM;
 
-void Fill(LumaImage& img, int x0, int y0, int x1, int y1, float v) {
-  for (int y = y0; y < y1; ++y)
-    for (int x = x0; x < x1; ++x) img.luma[static_cast<size_t>(y) * img.width + x] = v;
-}
-
-// Modello e Dimmer alimentati con gli stessi frame e gli stessi istanti.
+// Modello e Dimmer alimentati con gli stessi frame, zone e istanti.
 class Sim {
  public:
-  Sim(int w, int h, DXGI_FORMAT format, float white) : w_(w), h_(h), format_(format), white_(white), model_(w, h, 0) {
+  Sim(int w, int h, DXGI_FORMAT format, float white, const std::vector<uint8_t>& zones, double start_s = 0,
+      const DimSavedState* model_restore = nullptr, const DimSavedState* gpu_restore = nullptr)
+      : format_(format), white_(white), model_(w, h, start_s, model_restore) {
+    model_.SetZones(zones);
     device_ = WarpDevice();
     if (!device_) return;
     device_->GetImmediateContext(&ctx_);
     cur_ = Texture(device_.Get(), w, h, format, D3D11_BIND_SHADER_RESOURCE);
     prev_ = Texture(device_.Get(), w, h, format, D3D11_BIND_SHADER_RESOURCE);
-    ok_ = SUCCEEDED(dimmer_.Init(device_.Get(), w, h, format, 0));
+    ok_ = SUCCEEDED(dimmer_.Init(device_.Get(), w, h, format, start_s * 1000, gpu_restore));
+    dimmer_.SetZones(zones);
   }
   bool Ok() const { return ok_; }
   Dimmer& dimmer() { return dimmer_; }
   DimModel& model() { return model_; }
 
   void Frame(const LumaImage& img, double t, const DimParams& p = {}) {
-    model_.OnFrame(format_ == DXGI_FORMAT_R16G16B16A16_FLOAT ? img : QuantizeSdr(img), t);
+    model_.OnFrame(Hdr() ? img : QuantizeSdr(img), t);
     Upload(ctx_.Get(), cur_.Get(), img, format_, white_);
-    dimmer_.Detect(cur_.Get(), prev_.Get(), t * 1000, p, format_ == DXGI_FORMAT_R16G16B16A16_FLOAT ? white_ : 1.0f);
+    dimmer_.Detect(cur_.Get(), prev_.Get(), t * 1000, p, Hdr() ? white_ : 1.0f);
     ctx_->CopyResource(prev_.Get(), cur_.Get());  // come la cache della cattura
   }
   void Update(double t, double dt, const DimParams& p = {}, bool suspended = false) {
@@ -67,13 +66,21 @@ class Sim {
     const auto& ref = model_.Levels();
     if (gpu.size() != ref.size()) return 1e9;
     double d = 0;
-    for (size_t i = 0; i < gpu.size(); ++i) d = std::max(d, std::fabs(static_cast<double>(gpu[i]) - ref[i]));
+    size_t worst = 0;
+    for (size_t i = 0; i < gpu.size(); ++i) {
+      const double e = std::fabs(static_cast<double>(gpu[i]) - ref[i]);
+      if (e > d) { d = e; worst = i; }
+    }
+    if (d > 0.002) {
+      std::printf("    diff max %.4f nella cella (%d,%d): gpu %.4f modello %.4f\n", d,
+                  static_cast<int>(worst % model_.Cols()), static_cast<int>(worst / model_.Cols()), gpu[worst], ref[worst]);
+    }
     return d;
   }
   float GpuLevel(int cx, int cy) { return GpuLevels()[static_cast<size_t>(cy) * model_.Cols() + cx]; }
 
  private:
-  int w_, h_;
+  bool Hdr() const { return format_ == kHdr; }
   DXGI_FORMAT format_;
   float white_;
   ComPtr<ID3D11Device> device_;
@@ -84,69 +91,109 @@ class Sim {
   bool ok_ = false;
 };
 
-// Barra bianca in fondo e un blocco che cambia ogni 10 s nella meta' alta.
 LumaImage BarScene() {
-  LumaImage img = Black(1024, 576);
-  Fill(img, 0, 496, 1024, 576, 1.0f);
+  LumaImage img = Black();
+  Fill(img, 0, kH - 80, kW, kH, 1.0f);
   return img;
 }
-bool BlockEvery10s(LumaImage& img, double t) {
-  if (std::fmod(t, 10.0) != 0.0) return false;
-  Fill(img, 480, 64, 544, 128, static_cast<float>(std::fmod(t * 0.013, 1.0)));
+
+bool PlayVideo(LumaImage& img, double t) {
+  VideoFrame(img, t);
   return true;
 }
 
-constexpr DXGI_FORMAT kHdr = DXGI_FORMAT_R16G16B16A16_FLOAT;
-constexpr DXGI_FORMAT kSdr = DXGI_FORMAT_B8G8R8A8_UNORM;
-
 }  // namespace
 
-TEST(gpu_matches_model_bar) {
-  Sim sim(1024, 576, kHdr, 2.5f);
+TEST(gpu_desktop_icons_dim_sdr) {
+  Sim sim(kW, kH, kSdr, 1.0f, Zones(kShell));
+  CHECK(sim.Ok());
+  if (!sim.Ok()) return;
+  LumaImage img = DesktopIcons();
+  sim.Frame(img, 0);
+  sim.Run(img, 0.5, 330);
+  CHECK_NEAR(sim.GpuLevel(2, 2), 0.20, 0.01);
+  CHECK(sim.MaxDiff() <= 0.002);
+  sim.Run(img, 330.5, 480);
+  CHECK_NEAR(sim.GpuLevel(2, 2), 0.40, 0.002);
+  CHECK(sim.MaxDiff() <= 0.002);
+}
+
+TEST(gpu_dark_app_text_not_dimmed_hdr) {
+  Sim sim(kW, kH, kHdr, 3.0f, Zones(kApp));
+  CHECK(sim.Ok());
+  if (!sim.Ok()) return;
+  LumaImage img = DarkAppText();
+  sim.Frame(img, 0);
+  sim.Run(img, 0.5, 600);
+  for (float v : sim.GpuLevels()) CHECK_NEAR(v, 0.0, 1e-6);
+  CHECK(sim.MaxDiff() <= 0.002);
+}
+
+TEST(gpu_logo_over_video_and_pause) {
+  Sim sim(kW, kH, kHdr, 3.0f, Zones(kApp));
+  CHECK(sim.Ok());
+  if (!sim.Ok()) return;
+  LumaImage img = VideoWithLogo(0);
+  sim.Frame(img, 0);
+  sim.Run(img, 0.5, 480, PlayVideo);
+  CHECK_NEAR(sim.GpuLevel(48, 5), 0.40, 0.002);
+  CHECK(sim.MaxDiff() <= 0.002);
+  sim.Run(img, 480.5, 498);  // video in pausa: ritorno lento
+  CHECK_NEAR(sim.GpuLevel(48, 5), 0.40 - 0.40 / 30 * 8.5, 0.01);
+  CHECK(sim.MaxDiff() <= 0.002);
+}
+
+TEST(gpu_taskbar_under_static_window_sdr) {
+  Sim sim(kW, kH, kSdr, 1.0f, TaskbarZones());
+  CHECK(sim.Ok());
+  if (!sim.Ok()) return;
+  LumaImage img = Black();
+  Fill(img, 0, 0, kW, kH, 1.0f);
+  sim.Frame(img, 0);
+  sim.Run(img, 0.5, 480);
+  CHECK_NEAR(sim.GpuLevel(10, 33), 0.40, 0.002);
+  CHECK_NEAR(sim.GpuLevel(10, 10), 0.0, 1e-6);
+  CHECK(sim.MaxDiff() <= 0.002);
+}
+
+TEST(gpu_change_recovers) {
+  Sim sim(kW, kH, kHdr, 2.5f, TaskbarZones());
   CHECK(sim.Ok());
   if (!sim.Ok()) return;
   LumaImage img = BarScene();
   sim.Frame(img, 0);
-  sim.Run(img, 0.5, 330, BlockEvery10s);
-  CHECK_NEAR(sim.GpuLevel(10, 33), 0.20, 0.01);
-  CHECK(sim.MaxDiff() <= 0.002);
-  sim.Run(img, 330.5, 480, BlockEvery10s);
-  CHECK_NEAR(sim.GpuLevel(10, 33), 0.40, 0.002);
-  CHECK(sim.MaxDiff() <= 0.002);
-}
-
-TEST(gpu_matches_model_dark_text) {
-  Sim sim(1024, 576, kSdr, 1.0f);
-  CHECK(sim.Ok());
-  if (!sim.Ok()) return;
-  LumaImage img = Black(1024, 576);
-  for (int k = 0; 24 * k < 496; ++k) {
-    const int h = k % 3 == 0 ? 4 : 3;
-    for (int x = 0; x < 921; x += 16) Fill(img, x, 24 * k, x + 8, 24 * k + h, 0.8f);
-  }
-  for (int x = 0; x + 32 <= 1024; x += 96) Fill(img, x, 512, x + 32, 544, 1.0f);
-  // Icone sparse in un'area libera: queste si devono oscurare anche in SDR.
-  sim.Frame(img, 0);
-  sim.Run(img, 0.5, 600);
-  CHECK(sim.model().Large(5, 4));
-  CHECK_NEAR(sim.GpuLevel(5, 4), 0.0, 1e-6);
-  CHECK(sim.MaxDiff() <= 0.002);
-}
-
-TEST(gpu_icons_dim_in_sdr) {
-  Sim sim(1024, 576, kSdr, 1.0f);
-  CHECK(sim.Ok());
-  if (!sim.Ok()) return;
-  LumaImage img = Black(1024, 576);
-  Fill(img, 200, 200, 232, 232, 1.0f);
-  sim.Frame(img, 0);
   sim.Run(img, 0.5, 480);
-  CHECK_NEAR(sim.GpuLevel(13, 13), 0.40, 0.002);
+  CHECK_NEAR(sim.GpuLevel(10, 33), 0.40, 0.002);
+  img.luma[static_cast<size_t>(33 * 16 + 3) * kW + 10 * 16 + 3] = 0.5f;
+  sim.Frame(img, 480.5);
+  sim.Update(480.5, 0.5);
+  CHECK_NEAR(sim.GpuLevel(10, 33), 0.0, 1e-6);
+  CHECK_NEAR(sim.GpuLevel(40, 33), 0.40, 0.002);
   CHECK(sim.MaxDiff() <= 0.002);
+}
+
+TEST(gpu_suspend_and_large_areas) {
+  Sim sim(kW, kH, kHdr, 2.5f, Zones(kApp));
+  CHECK(sim.Ok());
+  if (!sim.Ok()) return;
+  LumaImage img = Black();
+  Fill(img, 0, 0, kW, kH, 1.0f);
+  DimParams p;
+  p.large_enabled = true;
+  sim.Frame(img, 0, p);
+  sim.Run(img, 0.5, 1350, {}, p);
+  CHECK_NEAR(sim.GpuLevel(32, 18), 0.10, 0.005);
+  CHECK(sim.MaxDiff() <= 0.002);
+  p.large_enabled = false;  // spegnere l'opzione: ritorno in 1 s
+  sim.Update(1350.125, 0.125, p);
+  CHECK(sim.MaxDiff() <= 0.002);
+  sim.Update(1350.5, 0.375, p, true);
+  CHECK(sim.MaxDiff() <= 0.002);
+  CHECK_NEAR(sim.GpuLevel(32, 18), 0.0, 1e-6);
 }
 
 TEST(gpu_matches_model_odd_size) {
-  Sim sim(1000, 600, kHdr, 2.5f);
+  Sim sim(1000, 600, kHdr, 2.5f, Zones(kShell, 63, 38));
   CHECK(sim.Ok());
   if (!sim.Ok()) return;
   LumaImage img = Black(1000, 600);
@@ -159,59 +206,12 @@ TEST(gpu_matches_model_odd_size) {
   CHECK(sim.MaxDiff() <= 0.002);
 }
 
-TEST(gpu_change_recovers) {
-  Sim sim(1024, 576, kHdr, 2.5f);
-  CHECK(sim.Ok());
-  if (!sim.Ok()) return;
-  LumaImage img = BarScene();
-  sim.Frame(img, 0);
-  sim.Run(img, 0.5, 480);
-  CHECK_NEAR(sim.GpuLevel(10, 33), 0.40, 0.002);
-  img.luma[static_cast<size_t>(33 * 16 + 3) * 1024 + 10 * 16 + 3] = 0.5f;
-  sim.Frame(img, 480.5);
-  sim.Update(480.5, 0.5);
-  CHECK_NEAR(sim.GpuLevel(10, 33), 0.0, 1e-6);
-  CHECK_NEAR(sim.GpuLevel(40, 33), 0.40, 0.002);
-  CHECK(sim.MaxDiff() <= 0.002);
-}
-
-TEST(gpu_suspend_and_large_areas) {
-  Sim sim(1024, 576, kHdr, 2.5f);
-  CHECK(sim.Ok());
-  if (!sim.Ok()) return;
-  LumaImage img = Black(1024, 576);
-  Fill(img, 0, 0, 1024, 576, 1.0f);
-  DimParams p;
-  p.large_enabled = true;
-  sim.Frame(img, 0, p);
-  sim.Run(img, 0.5, 1350, {}, p);
-  CHECK_NEAR(sim.GpuLevel(32, 18), 0.10, 0.005);
-  CHECK(sim.MaxDiff() <= 0.002);
-  sim.Update(1350.5, 0.5, p, true);
-  CHECK(sim.MaxDiff() <= 0.002);
-  CHECK_NEAR(sim.GpuLevel(32, 18), 0.0, 1e-6);
-}
-
-TEST(gpu_reset_changes_grid) {
-  ComPtr<ID3D11Device> device = WarpDevice();
-  CHECK(device != nullptr);
-  if (!device) return;
-  Dimmer d;
-  CHECK(SUCCEEDED(d.Init(device.Get(), 1024, 576, kHdr, 0)));
-  CHECK(SUCCEEDED(d.Init(device.Get(), 1920, 1080, kSdr, 5000)));
-  CHECK_EQ(d.Cols(), 120u);
-  CHECK_EQ(d.Rows(), 68u);
-  const auto levels = ReadFloats(device.Get(), d.LevelsSrv());
-  CHECK_EQ(levels.size(), size_t{120 * 68});
-  for (float v : levels) CHECK_NEAR(v, 0.0, 1e-9);
-}
-
 // In SDR la soglia vale in luce lineare: un grigio al 15% (codificato ~42%) non e' luminoso.
 TEST(gpu_sdr_threshold_in_linear_light) {
-  Sim sim(1024, 576, kSdr, 1.0f);
+  Sim sim(kW, kH, kSdr, 1.0f, Zones(kShell));
   CHECK(sim.Ok());
   if (!sim.Ok()) return;
-  LumaImage img = Black(1024, 576);
+  LumaImage img = Black();
   Fill(img, 200, 200, 232, 232, 0.15f);
   sim.Frame(img, 0);
   sim.Run(img, 0.5, 480);
@@ -220,8 +220,48 @@ TEST(gpu_sdr_threshold_in_linear_light) {
   CHECK(sim.MaxDiff() <= 0.002);
 }
 
+// Pausa: stato salvato dalla GPU, nuovo Dimmer con ripresa, confronto col modello.
+TEST(gpu_restore_after_pause) {
+  LumaImage img = DesktopIcons();
+  Sim before(kW, kH, kHdr, 3.0f, Zones(kShell));
+  CHECK(before.Ok());
+  if (!before.Ok()) return;
+  before.Frame(img, 0);
+  before.Run(img, 0.5, 480);
+  DimSavedState gpu_saved;
+  CHECK(before.dimmer().SaveState(480 * 1000, gpu_saved));
+  CHECK_EQ(gpu_saved.ages.size(), size_t{kCols * kRows});
+  const DimSavedState model_saved = before.model().Save(480);
+
+  Fill(img, 16, 16, 80, 80, 0.7f);  // un'icona cambiata durante la pausa
+  Sim after(kW, kH, kHdr, 3.0f, Zones(kShell), 1000, &model_saved, &gpu_saved);
+  CHECK(after.Ok());
+  if (!after.Ok()) return;
+  after.Frame(img, 1000);
+  after.Update(1000, 0);
+  CHECK_NEAR(after.GpuLevel(7, 2), 0.0, 1e-6);
+  after.Run(img, 1000.5, 1150);
+  CHECK_NEAR(after.GpuLevel(7, 2), 0.20, 0.01);  // eta' ripresa: risale lentamente
+  CHECK_NEAR(after.GpuLevel(2, 2), 0.0, 1e-6);   // icona cambiata: da capo
+  CHECK(after.MaxDiff() <= 0.002);
+}
+
+TEST(gpu_restore_ignored_on_size_change) {
+  ComPtr<ID3D11Device> device = WarpDevice();
+  CHECK(device != nullptr);
+  if (!device) return;
+  DimSavedState saved;
+  saved.width = 1920;
+  saved.height = 1080;
+  saved.ages.assign(120 * 68, 1000.0f);
+  saved.hashes.assign(120 * 68, 0u);
+  Dimmer d;
+  CHECK(SUCCEEDED(d.Init(device.Get(), kW, kH, kHdr, 0, &saved)));
+  CHECK_EQ(d.Cols(), 64u);
+}
+
 TEST(gpu_readback_matches_srv) {
-  Sim sim(1024, 576, kHdr, 2.5f);
+  Sim sim(kW, kH, kHdr, 2.5f, TaskbarZones());
   CHECK(sim.Ok());
   if (!sim.Ok()) return;
   LumaImage img = BarScene();
@@ -241,24 +281,46 @@ TEST(gpu_readback_matches_srv) {
   CHECK(!sim.dimmer().TryReadback(levels));  // gia' consegnata
 }
 
-// Ritorni dopo un cambio di classificazione o dell'opzione grandi aree.
-TEST(gpu_matches_model_recovery_rules) {
-  Sim sim(1024, 576, kHdr, 2.5f);
+TEST(gpu_reset_changes_grid) {
+  ComPtr<ID3D11Device> device = WarpDevice();
+  CHECK(device != nullptr);
+  if (!device) return;
+  Dimmer d;
+  CHECK(SUCCEEDED(d.Init(device.Get(), 1024, 576, kHdr, 0)));
+  CHECK(SUCCEEDED(d.Init(device.Get(), 1920, 1080, kSdr, 5000)));
+  CHECK_EQ(d.Cols(), 120u);
+  CHECK_EQ(d.Rows(), 68u);
+  const auto levels = ReadFloats(device.Get(), d.LevelsSrv());
+  CHECK_EQ(levels.size(), size_t{120 * 68});
+  for (float v : levels) CHECK_NEAR(v, 0.0, 1e-9);
+}
+
+// Deviazione breve (icona evidenziata dal mouse per 5 s): stessa logica del modello.
+TEST(gpu_brief_change_keeps_age) {
+  Sim sim(kW, kH, kHdr, 3.0f, Zones(kShell));
   CHECK(sim.Ok());
   if (!sim.Ok()) return;
-  DimParams p;
-  p.large_enabled = true;
-  LumaImage img = BarScene();
-  sim.Frame(img, 0, p);
-  sim.Run(img, 0.5, 480, BlockEvery10s, p);
-  Fill(img, 0, 0, 1024, 288, 1.0f);  // la meta' alta diventa bianca e ferma
-  sim.Frame(img, 480.5, p);
-  sim.Run(img, 480.5, 668, {}, p);
-  CHECK(sim.model().Large(10, 33));
-  CHECK_NEAR(sim.GpuLevel(10, 33), 0.40 - 0.40 / 30 * 8, 0.01);
+  LumaImage img = DesktopIcons();
+  sim.Frame(img, 0);
+  sim.Run(img, 0.5, 480);
+  const LumaImage original = img;
+  Fill(img, 16, 16, 80, 80, 0.9f);
+  sim.Frame(img, 480.5);
+  sim.Update(480.5, 0.5);
+  CHECK_NEAR(sim.GpuLevel(2, 2), 0.0, 1e-6);
+  img = original;
+  sim.Frame(img, 485.5);
+  sim.Update(485.5, 5.0);  // 5 s dall'ultimo aggiornamento, per entrambi
+  sim.Run(img, 486, 635.5);
+  CHECK_NEAR(sim.GpuLevel(2, 2), 0.20, 0.01);
   CHECK(sim.MaxDiff() <= 0.002);
-  sim.Run(img, 668.5, 1700, {}, p);  // la meta' alta e' ora una grande area oscurata
-  p.large_enabled = false;
-  sim.Update(1700.125, 0.125, p);
+  // Deviazione lunga: da capo.
+  Fill(img, 16, 16, 80, 80, 0.9f);
+  sim.Frame(img, 636);
+  sim.Run(img, 636, 660);
+  img = original;
+  sim.Frame(img, 660.5);
+  sim.Update(660.5, 0.5);
+  CHECK_NEAR(sim.GpuLevel(2, 2), 0.0, 1e-6);
   CHECK(sim.MaxDiff() <= 0.002);
 }

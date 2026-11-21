@@ -439,3 +439,14 @@ Scene realistiche nel modello e nei test WARP: griglia di icone con etichette su
 interfaccia scura con testo sparso in una finestra, logo fermo sopra un video, logo in
 una finestra ferma (con e senza grandi aree), barra sotto una finestra, ripresa dopo una
 pausa con contenuto uguale e diverso. Verifica dal vivo con `--dim-diagnostics`.
+
+### 9.5 Aggiunte dopo la seconda prova reale
+- **Deviazioni brevi**: una cella che cambia e torna identica (stessa firma) entro 15 s
+  riprende l'eta' che aveva: icona evidenziata dal passaggio del mouse, Visualizzazione
+  attivita', menu e tooltip. Mentre e' diversa torna normale come sempre; al ritorno si
+  riscurisce con la discesa lenta. Era la causa di "si scurisce solo a mouse fermo".
+- **Overlay invisibili**: le finestre layered con opacita' 0 (es. l'overlay di NVIDIA,
+  classe `CEF-OSC-WIDGET`, a tutto schermo) non contano come app.
+- Verifica dal vivo (desktop mostrato, ritardi 30 s/30 s): 6.386 celle luminose del desktop
+  scurite al 40% (rapporto 0,80 in sRGB fra uscita e cattura), icona sotto il mouse tornata
+  normale e poi riscurita, eta' conservata attraverso Visualizzazione attivita' e pausa.

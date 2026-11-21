@@ -14,7 +14,7 @@ TEST(dim_stats_counts_cells) {
   const oled::DimGridStats s = oled::SummarizeDimGrids(levels, flags, classes, last_change, 100.0, 30.0);
   CHECK_EQ(s.cells, 4);
   CHECK_EQ(s.bright, 2);
-  CHECK_EQ(s.content, 3);
+  CHECK_EQ(s.moving, 1);  // cambiata 5 s fa: meno di 10 s
   CHECK_EQ(s.static_cells, 3);
   CHECK_EQ(s.small_cells, 1);
   CHECK_EQ(s.large_cells, 1);
@@ -22,8 +22,9 @@ TEST(dim_stats_counts_cells) {
   CHECK_EQ(s.recent_changes, 0);  // l'ultima e' cambiata 5 s fa
   CHECK_NEAR(s.max_level, 0.3, 1e-6);
   const std::string text = oled::FormatDimGridStats(s);
-  CHECK(text.find("piccole 1") != std::string::npos);
-  CHECK(text.find("grandi 1") != std::string::npos);
+  CHECK(text.find("elementi 1") != std::string::npos);
+  CHECK(text.find("da non toccare 1") != std::string::npos);
+  CHECK(text.find("in movimento 1") != std::string::npos);
   CHECK(text.find("cambiate da 2 s 0") != std::string::npos);
 }
 

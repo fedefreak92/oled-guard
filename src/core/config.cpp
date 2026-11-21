@@ -173,7 +173,7 @@ ConfigLoadResult ConfigFromJson(std::string_view raw) {
     else if (key == "dim_large_delay_s") r.Int(key, v, 300, 14400, c.dim_large_delay_s);
     else if (key == "dim_large_strength_pct") r.Int(key, v, 5, 80, c.dim_large_strength_pct);
     else if (key == "dim_bright_threshold_pct") r.Int(key, v, 5, 100, c.dim_bright_threshold_pct);
-    else if (key == "dim_large_fraction_pct") r.Int(key, v, 10, 90, c.dim_large_fraction_pct);
+    else if (key == "dim_motion_fraction_pct") r.Int(key, v, 10, 90, c.dim_motion_fraction_pct);
     else if (key == "dim_exclude") r.List(key, v, c.dim_exclude);
     else if (key == "log_level") {
       std::string level = c.log_level;
@@ -236,7 +236,7 @@ std::string ConfigToJson(const Config& c) {
   o.Set("dim_large_delay_s", JsonValue(c.dim_large_delay_s));
   o.Set("dim_large_strength_pct", JsonValue(c.dim_large_strength_pct));
   o.Set("dim_bright_threshold_pct", JsonValue(c.dim_bright_threshold_pct));
-  o.Set("dim_large_fraction_pct", JsonValue(c.dim_large_fraction_pct));
+  o.Set("dim_motion_fraction_pct", JsonValue(c.dim_motion_fraction_pct));
   o.Set("dim_exclude", list(c.dim_exclude));
   return SerializeJson(o) + "\n";
 }

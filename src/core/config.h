@@ -40,7 +40,7 @@ struct Config {
   int dim_large_delay_s = 1200;       // 300-14400
   int dim_large_strength_pct = 20;    // 5-80
   int dim_bright_threshold_pct = 25;  // 5-100, % del bianco SDR in luce lineare
-  int dim_large_fraction_pct = 40;    // 10-90
+  int dim_motion_fraction_pct = 25;   // 10-90, movimento intorno a un logo dentro un'app
   std::vector<std::string> dim_exclude;
 
   bool operator==(const Config&) const = default;
