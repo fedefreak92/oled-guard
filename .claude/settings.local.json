@@ -11,7 +11,8 @@
       "PowerShell(.\\\\build\\\\oled-guard-tests.exe)",
       "PowerShell(git add -A)",
       "PowerShell(git commit -q -m \"build: scaffolding CMake, build.ps1, framework di test, PRNG\" -m \"Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\")",
-      "PowerShell(.\\\\build\\\\oled-guard-tests.exe generator)"
+      "PowerShell(.\\\\build\\\\oled-guard-tests.exe generator)",
+      "PowerShell(Get-Process oled-guard -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep -Milliseconds 300; \"ancora vivo: $\\([bool]\\(Get-Process oled-guard -ErrorAction SilentlyContinue\\)\\)\")"
     ]
   }
 }

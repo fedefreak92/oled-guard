@@ -7,12 +7,15 @@
 #include "diagnostics.h"
 #include "logger.h"
 #include "paths.h"
+#include "text.h"
 
 namespace oled {
 namespace {
 
 constexpr wchar_t kMainClass[] = L"OledGuardMain";
 constexpr UINT_PTR kTimerBeat = 1;
+constexpr UINT WM_APP_TRAY = WM_APP + 2;
+constexpr UINT kCmdExit = 100;
 
 LONG WINAPI CrashFilter(EXCEPTION_POINTERS* info) {
   // Il processo termina: il sistema distrugge l'overlay e il desktop torna normale.
@@ -35,6 +38,7 @@ int App::Run(HINSTANCE instance) {
   LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
   for (int i = 1; argv && i < argc; ++i) args_.emplace_back(argv[i]);
   LocalFree(argv);
+  if (HasArg(L"--debug")) LogSetLevel(LogLevel::Debug);
   if (HasArg(L"--list-monitors")) {
     const int code = RunListMonitors(config_.monitor);
     LogShutdown();
@@ -50,12 +54,22 @@ int App::Run(HINSTANCE instance) {
   SetTimer(main_, kTimerBeat, 1000, nullptr);
   guard_.BeatMain();
 
+  taskbar_created_msg_ = RegisterWindowMessageW(L"TaskbarCreated");
+  icon_ = CreateAppIcon(GetSystemMetrics(SM_CXSMICON));
+  tray_.Create(main_, WM_APP_TRAY, icon_);
+  tray_.SetTooltip(L"OLED Guard");
+
+  StartOverlay();
+
   MSG msg;
   while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
     TranslateMessage(&msg);
     DispatchMessageW(&msg);
   }
 
+  StopOverlay();
+  tray_.Destroy();
+  if (icon_) DestroyIcon(icon_);
   guard_.Stop();
   LogInfo("OLED Guard chiuso");
   LogShutdown();
@@ -79,6 +93,84 @@ bool App::CreateMainWindow() {
   return main_ != nullptr;
 }
 
+bool App::StartOverlay() {
+  if (overlay_running_) return true;
+  monitor_ = FindMonitor(config_.monitor);
+  if (!monitor_) {
+    LogWarn("Monitor \"{}\" non trovato", config_.monitor);
+    return false;
+  }
+  if (!overlay_.Create(instance_, monitor_->rect)) return false;
+
+  RenderParams params;
+  params.overlay = overlay_.Hwnd();
+  params.main = main_;
+  params.monitor = *monitor_;
+  params.allow_tearing = config_.allow_tearing;
+  params.shift = nullptr;
+  params.guard = &guard_;
+  if (!render_.Start(params)) {
+    overlay_.Destroy();
+    return false;
+  }
+  overlay_running_ = true;
+  LogInfo("Overlay avviato su \"{}\" ({}x{})", Narrow(monitor_->friendly_name), monitor_->rect.right - monitor_->rect.left,
+          monitor_->rect.bottom - monitor_->rect.top);
+  return true;
+}
+
+void App::StopOverlay() {
+  if (!overlay_running_) return;
+  guard_.SetOverlayActive(false);
+  // Prima il thread (rilascia device, duplicazione, swap chain), poi la finestra.
+  render_.Stop();
+  overlay_.Destroy();
+  overlay_running_ = false;
+  LogInfo("Overlay fermato");
+}
+
+void App::OnRenderEvent(RenderEvent event) {
+  switch (event) {
+    case RenderEvent::FirstFrameShown:
+      LogInfo("Overlay a schermo");
+      guard_.SetOverlayActive(true);
+      break;
+    case RenderEvent::CaptureLost:
+      guard_.SetOverlayActive(false);
+      break;
+    case RenderEvent::CaptureFailed:
+      LogWarn("Cattura non disponibile: overlay disattivato");
+      StopOverlay();
+      break;
+    case RenderEvent::DisplayRotated:
+      LogWarn("Display ruotato: overlay disattivato");
+      StopOverlay();
+      break;
+  }
+}
+
+void App::OnTrayEvent(UINT event) {
+  if (event == WM_CONTEXTMENU || event == NIN_SELECT || event == NIN_KEYSELECT) ShowTrayMenu();
+}
+
+void App::ShowTrayMenu() {
+  HMENU menu = CreatePopupMenu();
+  AppendMenuW(menu, MF_STRING, kCmdExit, L"Esci");
+  POINT pt;
+  GetCursorPos(&pt);
+  // Necessario perche' il menu si chiuda cliccando altrove.
+  SetForegroundWindow(main_);
+  const UINT cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY, pt.x, pt.y, 0, main_, nullptr);
+  PostMessageW(main_, WM_NULL, 0, 0);
+  DestroyMenu(menu);
+  if (cmd == kCmdExit) Quit();
+}
+
+void App::Quit() {
+  StopOverlay();
+  DestroyWindow(main_);
+}
+
 LRESULT CALLBACK App::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
   if (msg == WM_NCCREATE) {
     auto* cs = reinterpret_cast<CREATESTRUCTW*>(lp);
@@ -90,12 +182,30 @@ LRESULT CALLBACK App::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 LRESULT App::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
+  if (msg == taskbar_created_msg_ && taskbar_created_msg_ != 0) {
+    tray_.Recreate();
+    return 0;
+  }
   switch (msg) {
     case WM_TIMER:
       if (wp == kTimerBeat) guard_.BeatMain();
       return 0;
+    case WM_APP_TRAY:
+      OnTrayEvent(LOWORD(lp));
+      return 0;
+    case WM_APP_RENDER_EVENT:
+      OnRenderEvent(static_cast<RenderEvent>(wp));
+      return 0;
+    case WM_DISPLAYCHANGE:
+      // Risoluzione o disposizione cambiate: si ricrea l'overlay con le nuove misure.
+      LogInfo("Configurazione dei display cambiata");
+      if (overlay_running_) {
+        StopOverlay();
+        StartOverlay();
+      }
+      return 0;
     case WM_CLOSE:
-      DestroyWindow(main_);
+      Quit();
       return 0;
     case WM_DESTROY:
       PostQuitMessage(0);
