@@ -127,6 +127,8 @@ input { font-family: inherit; font-size: inherit; color: inherit; }
 .row .control.wide { flex: 0 1 26rem; min-width: 14rem; }
 .row.off { opacity: 0.4; pointer-events: none; }
 .row.col { flex-direction: column; align-items: stretch; gap: 0.6rem; }
+.row.stacked { flex-direction: column; align-items: stretch; gap: 0.55rem; }
+.row.stacked .control { width: 100%; }
 
 .kv { display: flex; justify-content: space-between; gap: 1rem; padding: 0.55rem 0; border-bottom: 1px solid var(--line); font-size: 0.92rem; }
 .kv:last-child { border-bottom: 0; }
@@ -333,3 +335,15 @@ input[type=range]:disabled::-webkit-slider-thumb { border-color: #56666b; }
 
 /* ------------------------------------------------------------------ avviso */
 .toast { position: fixed; bottom: 9rem; left: 50%; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--accent); color: var(--text); padding: 0.7rem 1.1rem; border-radius: 10px; font-size: 0.92rem; max-width: 36rem; z-index: 10; box-shadow: 0 10px 30px #000a; }
+
+/* radar dello spostamento (SVG): colori dai gettoni */
+.radar .ring { fill: none; stroke: var(--line-2); }
+.radar .ring.in { stroke: var(--line); }
+.radar .axis { stroke: var(--line); }
+.radar .cell { fill: var(--accent); }
+.radar .trail { stroke: var(--accent); stroke-width: 1.5; fill: none; }
+.radar .now { fill: var(--accent); }
+.radar .now-ring { fill: none; stroke: var(--accent); stroke-width: 1.5; opacity: 0.5; }
+.stage-off { opacity: 0.5; }
+
+.grow { flex: 1; }

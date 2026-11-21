@@ -270,10 +270,12 @@ function panel(title, sub, ...right) {
 }
 
 // Riga impostazione: titolo e descrizione a sinistra, controllo a destra.
+// wide: controllo largo (cursore) sotto l'etichetta, a tutta larghezza.
 function settingRow(title, desc, control, opts = {}) {
-  return h('div.row', { cls: opts.cls },
-    h('div.label', null, h('b', { text: title }), desc ? h('p', { text: desc }) : null, opts.code ? h('code', { text: opts.code }) : null),
-    h('div.control', { cls: opts.wide ? 'wide' : null }, control));
+  const descEl = typeof desc === 'string' ? h('p', { text: desc }) : desc;
+  return h('div.row', { cls: [opts.cls, opts.wide ? 'stacked' : null].filter(Boolean).join(' ') || null },
+    h('div.label', null, h('b', { text: title }), descEl || null, opts.code ? h('code', { text: opts.code }) : null),
+    h('div.control', null, control));
 }
 
 // Rapporto di contrasto WCAG fra due colori #rrggbb.
