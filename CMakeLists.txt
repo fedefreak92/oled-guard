@@ -71,6 +71,7 @@ add_executable(oled-guard WIN32
   src/app/autostart.cpp
   src/app/single_instance.cpp
   src/app/ui_window.cpp
+  src/app/windows_settings.cpp
   src/app/oled-guard.manifest
 )
 
@@ -101,4 +102,4 @@ add_custom_command(TARGET oled-guard POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/src/ui $<TARGET_FILE_DIR:oled-guard>/ui
   VERBATIM)
 target_link_libraries(oled-guard PRIVATE oled_core
-  d3d11 dxgi dcomp dwmapi wtsapi32 shell32 user32 advapi32 shlwapi ole32)
+  d3d11 dxgi dcomp dwmapi wtsapi32 shell32 user32 advapi32 shlwapi ole32 powrprof)

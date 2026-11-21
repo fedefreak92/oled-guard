@@ -35,6 +35,8 @@ constexpr UINT WM_APP_TRAY = WM_APP + 2;
 constexpr UINT WM_APP_CONFIG_CHANGED = WM_APP + 3;
 constexpr UINT WM_APP_SECOND_INSTANCE = WM_APP + 4;
 constexpr UINT WM_APP_UI_CLOSE = WM_APP + 5;
+constexpr UINT WM_APP_WINDOWS_DONE = WM_APP + 6;
+constexpr int kDisplayOffHotkeyId = 2;
 
 constexpr UINT kCmdExit = 100;
 constexpr UINT kCmdToggle = 101;
@@ -139,6 +141,7 @@ int App::Run(HINSTANCE instance) {
   for (const auto& [title, text] : pending_notices_) tray_.ShowBalloon(title, text);
   pending_notices_.clear();
   RegisterToggleHotkey();
+  RegisterDisplayOffHotkey();
   // Con una config illeggibile i valori sono quelli predefiniti: non si tocca il
   // registro, altrimenti un errore di battitura toglierebbe l'avvio automatico.
   if (!initial_config_failed_) SyncAutostart();
@@ -154,6 +157,7 @@ int App::Run(HINSTANCE instance) {
   }
 
   config_file_.StopWatching();
+  if (windows_worker_.joinable()) windows_worker_.join();
   ui_.Close();
   StopOverlay();
   if (foreground_hook_) UnhookWinEvent(foreground_hook_);
@@ -257,6 +261,7 @@ void App::ApplyConfig(const Config& next) {
   hysteresis_.SetDelays(config_.pause_enter_delay_ms, config_.resume_delay_ms);
   if (previous.hotkey_toggle != config_.hotkey_toggle) RegisterToggleHotkey();
   if (previous.hotkey_emergency_exit != config_.hotkey_emergency_exit) StartEmergencyGuard();
+  if (previous.hotkey_display_off != config_.hotkey_display_off) RegisterDisplayOffHotkey();
   SyncAutostart();
   if (previous.monitor != config_.monitor || previous.allow_tearing != config_.allow_tearing) {
     // Serve un overlay nuovo: altro monitor o altra swap chain. Lo stato "ruotato"
@@ -291,6 +296,44 @@ void App::RegisterToggleHotkey() {
     ShowNotice(L"Hotkey non disponibile", L"La combinazione " + Widen(config_.hotkey_toggle) +
                                                      L" è già usata da un'altra app.");
   }
+}
+
+void App::RegisterDisplayOffHotkey() {
+  if (display_off_hotkey_registered_) UnregisterHotKey(main_, kDisplayOffHotkeyId);
+  display_off_hotkey_registered_ = false;
+  const auto key = ParseHotkey(config_.hotkey_display_off);
+  if (!key) return;
+  display_off_hotkey_registered_ =
+      RegisterHotKey(main_, kDisplayOffHotkeyId, key->modifiers | MOD_NOREPEAT, key->vk) != FALSE;
+  if (!display_off_hotkey_registered_) {
+    LogWarn("Hotkey {} non registrata: gia' in uso", config_.hotkey_display_off);
+    ShowNotice(L"Hotkey non disponibile",
+               L"La combinazione " + Widen(config_.hotkey_display_off) + L" per spegnere lo schermo è già in uso.");
+  }
+}
+
+void App::RunWindowsTask(std::function<void()> task) {
+  // Una modifica alla volta: le notifiche di Windows possono richiedere qualche secondo
+  // e non devono bloccare il thread UI (il watchdog lo considererebbe bloccato).
+  if (windows_busy_.exchange(true)) {
+    ui_.Post(R"({"type":"notice","text":"Modifica gia' in corso, attendi un istante."})");
+    return;
+  }
+  if (windows_worker_.joinable()) windows_worker_.join();
+  windows_worker_ = std::thread([this, task = std::move(task)] {
+    const HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    task();
+    if (SUCCEEDED(hr)) CoUninitialize();
+    windows_busy_ = false;
+    PostMessageW(main_, WM_APP_WINDOWS_DONE, 0, 0);
+  });
+}
+
+void App::PushWindowsToUi() {
+  if (!ui_.IsReady()) return;
+  const auto items = windows_.ReadAll();
+  for (const auto& it : items) LogDebug("Windows per OLED: {} = {} (consigliato: {})", it.id, it.current, it.ok ? "si'" : "no");
+  ui_.Post(WindowsMessage(items));
 }
 
 void App::StartEmergencyGuard() {
@@ -422,6 +465,7 @@ void App::PushAllToUi() {
   ui_.Post(ConfigMessage(config_));
   ui_.Post(StatsMessage(wear_, config_.amplitude_px));
   ui_.Post(AppsMessage(app_history_, config_));
+  PushWindowsToUi();
   ui_.Post(StateMessage(BuildUiState(now)));
   last_state_push_ms_ = now;
   last_stats_push_ms_ = now;
@@ -559,6 +603,21 @@ void App::OnUiMessage(const std::string& json) {
     case UiCommandType::SetManualPause:
       SetManualPause(command->on);
       break;
+    case UiCommandType::WindowsApply: {
+      const std::string id = command->id;
+      RunWindowsTask([this, id] { windows_.Apply(id); });
+      break;
+    }
+    case UiCommandType::WindowsApplyAll:
+      RunWindowsTask([this] { windows_.ApplyAll(); });
+      break;
+    case UiCommandType::WindowsRestoreAll:
+      RunWindowsTask([this] { windows_.RestoreAll(); });
+      break;
+    case UiCommandType::DisplayOff:
+      LogInfo("Schermo spento dall'interfaccia");
+      TurnDisplayOff(main_);
+      break;
     case UiCommandType::Window:
       // Mai chiudere WebView2 dentro un suo evento: si rimanda al ciclo dei messaggi.
       if (command->action == "close") PostMessageW(main_, WM_APP_UI_CLOSE, 0, 0);
@@ -668,6 +727,7 @@ void App::Quit() {
   ui_.Close();
   StopOverlay();
   if (toggle_hotkey_registered_) UnregisterHotKey(main_, kToggleHotkeyId);
+  if (display_off_hotkey_registered_) UnregisterHotKey(main_, kDisplayOffHotkeyId);
   WTSUnRegisterSessionNotification(main_);
   DestroyWindow(main_);
 }
@@ -706,6 +766,13 @@ LRESULT App::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
       return 0;
     case WM_HOTKEY:
       if (wp == kToggleHotkeyId) SetManualPause(!manual_pause_);
+      if (wp == kDisplayOffHotkeyId) {
+        LogInfo("Schermo spento con la hotkey");
+        TurnDisplayOff(main_);
+      }
+      return 0;
+    case WM_APP_WINDOWS_DONE:
+      PushWindowsToUi();
       return 0;
     case WM_APP_TRAY:
       OnTrayEvent(LOWORD(lp));

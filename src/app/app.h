@@ -3,8 +3,11 @@
 
 #include <windows.h>
 
+#include <atomic>
+#include <functional>
 #include <memory>
 #include <optional>
+#include <thread>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -25,6 +28,7 @@
 #include "single_instance.h"
 #include "tray.h"
 #include "ui_window.h"
+#include "windows_settings.h"
 
 namespace oled {
 
@@ -51,6 +55,10 @@ class App {
   void ShowNotice(const std::wstring& title, const std::wstring& text);
   ShiftTiming EffectiveTiming() const;
   void RegisterToggleHotkey();
+  void RegisterDisplayOffHotkey();
+  // Esegue una modifica alle impostazioni di Windows su un thread di lavoro.
+  void RunWindowsTask(std::function<void()> task);
+  void PushWindowsToUi();
   void StartEmergencyGuard();
 
   // Valuta i segnali di pausa e crea/distrugge l'overlay di conseguenza.
@@ -94,6 +102,10 @@ class App {
   bool fast_shift_ = false;
   bool debug_ = false;
   bool toggle_hotkey_registered_ = false;
+  bool display_off_hotkey_registered_ = false;
+  WindowsSettings windows_{AppDataDir() / L"windows-backup.json"};
+  std::thread windows_worker_;
+  std::atomic<bool> windows_busy_{false};
   EmergencyGuard guard_;
   Tray tray_;
   OverlayWindow overlay_;
