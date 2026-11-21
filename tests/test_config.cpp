@@ -343,3 +343,31 @@ TEST(config_app_list_normalized) {
   CHECK_EQ(m.config.app_list[199], std::string("app199.exe"));
   CHECK(AnyContains(m.warnings, "app_list"));
 }
+
+TEST(config_alert_privacy_defaults) {
+  auto r = ConfigFromJson("{}");
+  CHECK(r.warnings.empty());
+  CHECK(r.config.alert_enabled);
+  CHECK_EQ(r.config.alert_threshold, std::string("medium"));
+  CHECK_EQ(r.config.alert_after_min, 60);
+  CHECK(r.config.app_stats_enabled);
+}
+
+TEST(config_alert_privacy_read_roundtrip) {
+  auto r = ConfigFromJson(R"({"alert_enabled": false, "alert_threshold": "HIGH", "alert_after_min": 5,
+    "app_stats_enabled": false})");
+  CHECK(r.warnings.empty());
+  CHECK(!r.config.alert_enabled);
+  CHECK_EQ(r.config.alert_threshold, std::string("high"));
+  CHECK_EQ(r.config.alert_after_min, 5);
+  CHECK(!r.config.app_stats_enabled);
+  CHECK(ConfigFromJson(ConfigToJson(r.config)).config == r.config);
+}
+
+TEST(config_alert_privacy_invalid) {
+  for (const char* json : {R"({"alert_threshold": "extreme"})", R"({"alert_after_min": 4})", R"({"alert_after_min": 241})"}) {
+    auto r = ConfigFromJson(json);
+    CHECK(r.config == Config{});
+    CHECK(AnyContains(r.warnings, "alert_"));
+  }
+}

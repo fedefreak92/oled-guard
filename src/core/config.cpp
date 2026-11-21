@@ -228,6 +228,10 @@ ConfigLoadResult ConfigFromJson(std::string_view raw) {
     else if (key == "away_brightness_pct") r.Int(key, v, 10, 80, c.away_brightness_pct);
     else if (key == "ui_accent") r.Choice(key, v, {"teal", "indigo", "coral", "green", "amber", "violet"}, c.ui_accent);
     else if (key == "ui_text_size") r.Choice(key, v, {"small", "normal", "large", "xl"}, c.ui_text_size);
+    else if (key == "alert_enabled") r.Bool(key, v, c.alert_enabled);
+    else if (key == "alert_threshold") r.Choice(key, v, {"low", "medium", "high"}, c.alert_threshold);
+    else if (key == "alert_after_min") r.Int(key, v, 5, 240, c.alert_after_min);
+    else if (key == "app_stats_enabled") r.Bool(key, v, c.app_stats_enabled);
     else if (key == "app_list") {
       r.List(key, v, c.app_list);
       CleanAppList(r, c.app_list);
@@ -310,6 +314,10 @@ std::string ConfigToJson(const Config& c) {
   o.Set("ui_accent", JsonValue(c.ui_accent));
   o.Set("ui_text_size", JsonValue(c.ui_text_size));
   o.Set("app_list", list(c.app_list));
+  o.Set("alert_enabled", JsonValue(c.alert_enabled));
+  o.Set("alert_threshold", JsonValue(c.alert_threshold));
+  o.Set("alert_after_min", JsonValue(c.alert_after_min));
+  o.Set("app_stats_enabled", JsonValue(c.app_stats_enabled));
   return SerializeJson(o) + "\n";
 }
 

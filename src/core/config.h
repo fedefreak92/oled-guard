@@ -66,6 +66,13 @@ struct Config {
   // App aggiunte a mano nella pagina Profili app (restano in elenco anche con regola automatica).
   std::vector<std::string> app_list;   // .exe minuscoli, max 200
 
+  // Avviso nella barra delle applicazioni per il rischio non protetto.
+  bool alert_enabled = true;
+  std::string alert_threshold = "medium";  // low | medium | high
+  int alert_after_min = 60;                // 5-240
+  // Statistiche per app (tempo in primo piano), solo sul PC.
+  bool app_stats_enabled = true;
+
   bool operator==(const Config&) const = default;
 };
 
