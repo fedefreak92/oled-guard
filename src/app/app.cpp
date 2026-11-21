@@ -1,10 +1,13 @@
 #include "app.h"
 
 #include <dwmapi.h>
+#include <shobjidl.h>
 #include <shellapi.h>
 #include <wtsapi32.h>
 
 #include <algorithm>
+#include <chrono>
+#include <memory>
 #include <ctime>
 #include <functional>
 #include <random>
@@ -44,6 +47,7 @@ constexpr UINT WM_APP_CONFIG_CHANGED = WM_APP + 3;
 constexpr UINT WM_APP_SECOND_INSTANCE = WM_APP + 4;
 constexpr UINT WM_APP_UI_CLOSE = WM_APP + 5;
 constexpr UINT WM_APP_WINDOWS_DONE = WM_APP + 6;
+constexpr UINT WM_APP_BROWSED = WM_APP + 7;  // lParam: std::string* (nome .exe, vuoto se annullato)
 constexpr int kDisplayOffHotkeyId = 2;
 
 constexpr UINT kCmdExit = 100;
@@ -247,6 +251,8 @@ void App::SyncAutostart() {
 
 void App::ReportConfigWarnings(const ConfigLoadResult& result, bool at_startup) {
   for (const auto& warning : result.warnings) LogWarn("Configurazione: {}", warning);
+  if (result.parse_failed) Record("config", "Configurazione non valida: dettagli nel log");
+  else if (!result.warnings.empty()) Record("config", std::to_string(result.warnings.size()) + " avvisi nella configurazione");
   if (result.parse_failed && at_startup) {
     ShowNotice(L"Configurazione non valida",
                L"Il file non si legge: uso i valori predefiniti finché non lo correggi. Dettagli nel log.");
@@ -297,7 +303,40 @@ void App::ApplyConfig(const Config& next) {
   }
   Tick();
   if (ui_.IsReady()) ui_.Post(ConfigMessage(config_));
-  if (previous.monitor != config_.monitor) PushMonitorsToUi();
+  if (previous.monitor != config_.monitor) {
+    Record("monitor", "Schermo protetto: " + (monitor_ ? Narrow(monitor_->friendly_name) : config_.monitor));
+    PushMonitorsToUi();
+  }
+}
+
+void App::Record(std::string_view kind, std::string_view text) {
+  const auto now = std::chrono::system_clock::now().time_since_epoch();
+  const int64_t t_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+  const ActivityEvent& e = activity_.Add(t_ms, kind, text);
+  if (ui_.IsReady()) ui_.Post(ActivityAddMessage(e));
+}
+
+void App::BrowseExe() {
+  if (browsing_) return;  // una finestra "Apri" alla volta
+  browsing_ = true;
+  const HWND target = main_;
+  RunShellAction([target] {
+    auto result = std::make_unique<std::string>();
+    Microsoft::WRL::ComPtr<IFileOpenDialog> dialog;
+    if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog)))) {
+      const COMDLG_FILTERSPEC filter[] = {{L"Programmi (*.exe)", L"*.exe"}};
+      dialog->SetFileTypes(1, filter);
+      dialog->SetTitle(L"Scegli l'app");
+      Microsoft::WRL::ComPtr<IShellItem> item;
+      PWSTR path = nullptr;
+      if (SUCCEEDED(dialog->Show(nullptr)) && SUCCEEDED(dialog->GetResult(&item)) &&
+          SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
+        *result = LowerUnicode(Narrow(std::filesystem::path(path).filename().wstring()));
+        CoTaskMemFree(path);
+      }
+    }
+    if (PostMessageW(target, WM_APP_BROWSED, 0, reinterpret_cast<LPARAM>(result.get()))) result.release();
+  });
 }
 
 void App::PushMonitorsToUi() {
@@ -474,8 +513,12 @@ void App::Tick() {
     if (paused) {
       LogInfo("In pausa: {} (processo in primo piano: {})", PauseReasonText(reason),
               in.foreground_process.empty() ? "-" : in.foreground_process);
+      std::string text = "In pausa: " + std::string(PauseReasonText(reason));
+      if (CausedByApp(reason) && !in.foreground_process.empty()) text += " · " + in.foreground_process;
+      Record(reason == PauseReason::Manual ? "manual" : "pause", text);
     } else {
       LogInfo("Attivo");
+      Record("resume", "Protezione attiva");
     }
     first_tick_ = false;
     last_paused_ = paused;
@@ -565,6 +608,8 @@ void App::PushAllToUi() {
   ui_.Post(AppsMessage(app_history_, config_));
   PushWindowsToUi();
   PushMonitorsToUi();
+  ui_.Post(ActivityMessage(activity_));
+  ui_.Post(AboutMessage(OLED_GUARD_VERSION, Narrow(config_file_.Path().wstring()), Narrow(LogDir().wstring())));
   ui_.Post(StateMessage(BuildUiState(now)));
   last_state_push_ms_ = now;
   last_stats_push_ms_ = now;
@@ -688,8 +733,13 @@ void App::OnSecond() {
   in.enabled = config_.away_enabled;
   in.after_min = config_.away_after_min;
   if (away_.Update(in)) {
-    if (away_.Away()) LogInfo("Modalita' assente: schermo scurito");
-    else LogInfo("Modalita' assente: fine");
+    if (away_.Away()) {
+      LogInfo("Modalita' assente: schermo scurito");
+      Record("away", "Modalità assente: schermo scurito");
+    } else {
+      LogInfo("Modalita' assente: fine");
+      Record("back", "Di nuovo qui: luminosità normale");
+    }
     PushShadeInputs();
     UpdateTrayTooltip();
   }
@@ -858,13 +908,16 @@ void App::OnUiMessage(const std::string& json) {
     case UiCommandType::WindowsApply: {
       const std::string id = command->id;
       RunWindowsTask([this, id] { windows_.Apply(id); });
+      Record("windows", "Impostazione di Windows applicata");
       break;
     }
     case UiCommandType::WindowsApplyAll:
       RunWindowsTask([this] { windows_.ApplyAll(); });
+      Record("windows", "Applicati tutti i consigli per Windows");
       break;
     case UiCommandType::WindowsRestoreAll:
       RunWindowsTask([this] { windows_.RestoreAll(); });
+      Record("windows", "Impostazioni di Windows ripristinate come prima");
       break;
     case UiCommandType::DisplayOff:
       LogInfo("Schermo spento dall'interfaccia");
@@ -874,14 +927,21 @@ void App::OnUiMessage(const std::string& json) {
     case UiCommandType::AddApp:
     case UiCommandType::RemoveApp: {
       const std::string exe = LowerUnicode(command->exe);
-      const AppRule rule = command->type == UiCommandType::SetAppRule ? command->rule
-                           : command->type == UiCommandType::AddApp  ? AppRule::AlwaysPause
-                                                                     : AppRule::Auto;
-      if (command->type == UiCommandType::RemoveApp) app_history_.Remove(exe);
-      LogInfo("Regola per {}: {}", exe, rule == AppRule::AlwaysPause ? "sempre in pausa"
-                                       : rule == AppRule::NeverPause ? "mai in pausa"
-                                                                     : "automatica");
-      ApplyConfig(NormalizedConfig(WithRule(config_, exe, rule)));
+      Config next = config_;
+      if (command->type == UiCommandType::SetAppRule) {
+        LogInfo("Regola per {}: {}", exe, command->rule == AppRule::AlwaysPause ? "sempre in pausa"
+                                         : command->rule == AppRule::NeverPause ? "mai in pausa"
+                                                                                : "automatica");
+        next = WithRule(next, exe, command->rule);
+      } else if (command->type == UiCommandType::AddApp) {
+        LogInfo("App aggiunta all'elenco: {}", exe);
+        next = WithListedApp(next, exe);
+      } else {
+        LogInfo("App tolta dall'elenco: {}", exe);
+        app_history_.Remove(exe);
+        next = WithoutApp(next, exe);
+      }
+      ApplyConfig(NormalizedConfig(next));
       SaveConfig();
       ui_.Post(AppsMessage(app_history_, config_));
       break;
@@ -900,6 +960,7 @@ void App::OnUiMessage(const std::string& json) {
       shift_->MoveSoon(now);
       SetTimer(main_, kTimerTestShift, kTestShiftMs, nullptr);
       LogInfo("Prova dello spostamento per {} s", kTestShiftMs / 1000);
+      Record("test", "Prova dello spostamento (" + std::to_string(kTestShiftMs / 1000) + " s)");
       PushUiUpdates(now);
       break;
     }
@@ -933,6 +994,24 @@ void App::OnUiMessage(const std::string& json) {
       PushDimToUi(NowMs());
       break;
     }
+    case UiCommandType::SetDimExclude: {
+      const std::string exe = LowerUnicode(command->exe);
+      LogInfo("Oscuramento {} con {}", command->on ? "sospeso" : "attivo", exe);
+      ApplyConfig(NormalizedConfig(WithDimExclude(config_, exe, command->on)));
+      SaveConfig();
+      ui_.Post(AppsMessage(app_history_, config_));
+      break;
+    }
+    case UiCommandType::OpenLogFolder:
+      OpenLogFolder();
+      break;
+    case UiCommandType::ClearActivity:
+      activity_.Clear();
+      ui_.Post(ActivityMessage(activity_));
+      break;
+    case UiCommandType::BrowseExe:
+      BrowseExe();
+      break;
     case UiCommandType::SetMonitor:
       SelectMonitorSetting(command->id);
       break;
@@ -1106,6 +1185,12 @@ LRESULT App::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
     case WM_APP_WINDOWS_DONE:
       OnWindowsDone();
       return 0;
+    case WM_APP_BROWSED: {
+      const std::unique_ptr<std::string> exe(reinterpret_cast<std::string*>(lp));
+      browsing_ = false;
+      if (exe && !exe->empty() && ui_.IsReady()) ui_.Post(BrowsedMessage(*exe));
+      return 0;
+    }
     case WM_APP_TRAY:
       OnTrayEvent(LOWORD(lp));
       return 0;

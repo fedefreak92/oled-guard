@@ -65,6 +65,10 @@ class App {
   void RunWindowsTask(std::function<void()> task);
   void PushWindowsToUi();
   void PushMonitorsToUi();
+  // Attivita' recente: aggiunge l'evento e lo invia alla pagina se aperta.
+  void Record(std::string_view kind, std::string_view text);
+  // Finestra "Apri" per scegliere un .exe, su un thread proprio.
+  void BrowseExe();
   void OnWindowsDone();
   void ScheduleDisplayOff();
   static std::filesystem::path StatsPath();
@@ -155,6 +159,8 @@ class App {
   std::unique_ptr<SharedShift> shift_;
   // Luminosita', bordi scuriti e modalita' assente.
   SharedShade shade_;
+  ActivityLog activity_;
+  bool browsing_ = false;
   MotionWindow motion_;
   AwayModel away_;
   double app_start_ms_ = 0;

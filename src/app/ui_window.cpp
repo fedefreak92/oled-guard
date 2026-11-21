@@ -21,10 +21,10 @@ constexpr wchar_t kUiClass[] = L"OledGuardUi";
 constexpr wchar_t kHost[] = L"oledguard.local";
 constexpr wchar_t kStartUrl[] = L"https://oledguard.local/index.html";
 constexpr wchar_t kAllowedPrefix[] = L"https://oledguard.local/";
-constexpr int kWidthDip = 1100;
-constexpr int kHeightDip = 720;
-constexpr int kMinWidthDip = 900;
-constexpr int kMinHeightDip = 600;
+constexpr int kWidthDip = 1280;
+constexpr int kHeightDip = 800;
+constexpr int kMinWidthDip = 1000;
+constexpr int kMinHeightDip = 640;
 constexpr int kTopBorderDip = 4;  // fascia scoperta in alto per ridimensionare dal bordo superiore
 
 int Scale(int dip, UINT dpi) { return MulDiv(dip, static_cast<int>(dpi), 96); }
