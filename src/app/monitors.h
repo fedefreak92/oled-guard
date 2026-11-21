@@ -23,6 +23,14 @@ struct MonitorInfo {
 };
 
 std::vector<MonitorInfo> EnumerateMonitors();
+
+// Per la pagina Monitor: frequenza e tipo di collegamento da DisplayConfig.
+struct MonitorDetails {
+  MonitorInfo info;
+  int refresh_hz = 0;      // 0 se sconosciuta
+  std::string connection;  // "HDMI" | "DP" | "DVI" | "Interno" | ""
+};
+std::vector<MonitorDetails> ListMonitorDetails();
 std::optional<MonitorInfo> FindMonitor(std::string_view setting);
 
 // Bianco SDR del monitor in scRGB (1 = 80 nit), dal cursore "luminosita' contenuto SDR".

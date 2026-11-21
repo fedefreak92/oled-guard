@@ -297,6 +297,28 @@ void App::ApplyConfig(const Config& next) {
   }
   Tick();
   if (ui_.IsReady()) ui_.Post(ConfigMessage(config_));
+  if (previous.monitor != config_.monitor) PushMonitorsToUi();
+}
+
+void App::PushMonitorsToUi() {
+  if (!ui_.IsReady()) return;
+  std::vector<MonitorItem> items;
+  for (const MonitorDetails& d : ListMonitorDetails()) {
+    MonitorItem m;
+    m.device = Narrow(d.info.device_name);
+    m.name = Narrow(d.info.friendly_name);
+    m.width = d.info.rect.right - d.info.rect.left;
+    m.height = d.info.rect.bottom - d.info.rect.top;
+    m.refresh_hz = d.refresh_hz;
+    m.hdr = d.info.hdr;
+    m.primary = d.info.primary;
+    m.is_protected = monitor_ && monitor_->device_name == d.info.device_name;
+    m.connection = d.connection;
+    LogDebug("Monitor per la pagina: {} {} {}x{} {} Hz {} {}", m.device, m.name, m.width, m.height, m.refresh_hz,
+             m.hdr ? "HDR" : "SDR", m.connection.empty() ? "-" : m.connection);
+    items.push_back(std::move(m));
+  }
+  ui_.Post(MonitorsMessage(items, config_.monitor));
 }
 
 void App::SaveConfig() {
@@ -542,6 +564,7 @@ void App::PushAllToUi() {
   ui_.Post(StatsMessage(wear_, config_.amplitude_px));
   ui_.Post(AppsMessage(app_history_, config_));
   PushWindowsToUi();
+  PushMonitorsToUi();
   ui_.Post(StateMessage(BuildUiState(now)));
   last_state_push_ms_ = now;
   last_stats_push_ms_ = now;
@@ -910,6 +933,9 @@ void App::OnUiMessage(const std::string& json) {
       PushDimToUi(NowMs());
       break;
     }
+    case UiCommandType::SetMonitor:
+      SelectMonitorSetting(command->id);
+      break;
     case UiCommandType::Window:
       // Mai chiudere WebView2 dentro un suo evento: si rimanda al ciclo dei messaggi.
       if (command->action == "close") PostMessageW(main_, WM_APP_UI_CLOSE, 0, 0);
@@ -1114,6 +1140,7 @@ LRESULT App::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
       monitor_valid_ = false;
       StopOverlay();
       Tick();
+      PushMonitorsToUi();
       return 0;
     case WM_CLOSE:
       Quit();

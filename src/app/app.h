@@ -64,6 +64,7 @@ class App {
   // Esegue una modifica alle impostazioni di Windows su un thread di lavoro.
   void RunWindowsTask(std::function<void()> task);
   void PushWindowsToUi();
+  void PushMonitorsToUi();
   void OnWindowsDone();
   void ScheduleDisplayOff();
   static std::filesystem::path StatsPath();

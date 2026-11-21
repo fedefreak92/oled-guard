@@ -44,7 +44,71 @@ std::map<std::wstring, std::wstring> FriendlyNames() {
   return names;
 }
 
+struct PathExtras {
+  int refresh_hz = 0;
+  std::string connection;
+};
+
+std::string ConnectionName(DISPLAYCONFIG_VIDEO_OUTPUT_TECHNOLOGY tech) {
+  switch (tech) {
+    case DISPLAYCONFIG_OUTPUT_TECHNOLOGY_HDMI: return "HDMI";
+    case DISPLAYCONFIG_OUTPUT_TECHNOLOGY_DISPLAYPORT_EXTERNAL: return "DP";
+    case DISPLAYCONFIG_OUTPUT_TECHNOLOGY_DVI: return "DVI";
+    case DISPLAYCONFIG_OUTPUT_TECHNOLOGY_INTERNAL:
+    case DISPLAYCONFIG_OUTPUT_TECHNOLOGY_DISPLAYPORT_EMBEDDED:
+    case DISPLAYCONFIG_OUTPUT_TECHNOLOGY_UDI_EMBEDDED: return "Interno";
+    default: return "";
+  }
+}
+
+// Device name GDI -> frequenza e collegamento. Errori: mappa vuota.
+std::map<std::wstring, PathExtras> PathDetails() {
+  std::map<std::wstring, PathExtras> out;
+  UINT32 path_count = 0;
+  UINT32 mode_count = 0;
+  if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &path_count, &mode_count) != ERROR_SUCCESS) return out;
+  std::vector<DISPLAYCONFIG_PATH_INFO> paths(path_count);
+  std::vector<DISPLAYCONFIG_MODE_INFO> modes(mode_count);
+  if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &path_count, paths.data(), &mode_count, modes.data(), nullptr) !=
+      ERROR_SUCCESS) {
+    return out;
+  }
+  paths.resize(path_count);
+  for (const auto& path : paths) {
+    DISPLAYCONFIG_SOURCE_DEVICE_NAME source{};
+    source.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+    source.header.size = sizeof(source);
+    source.header.adapterId = path.sourceInfo.adapterId;
+    source.header.id = path.sourceInfo.id;
+    if (DisplayConfigGetDeviceInfo(&source.header) != ERROR_SUCCESS) continue;
+    PathExtras extras;
+    const DISPLAYCONFIG_RATIONAL rate = path.targetInfo.refreshRate;
+    if (rate.Denominator != 0) {
+      extras.refresh_hz = static_cast<int>(static_cast<double>(rate.Numerator) / rate.Denominator + 0.5);
+    }
+    extras.connection = ConnectionName(path.targetInfo.outputTechnology);
+    out[source.viewGdiDeviceName] = extras;
+  }
+  return out;
+}
+
 }  // namespace
+
+std::vector<MonitorDetails> ListMonitorDetails() {
+  const auto extras = PathDetails();
+  std::vector<MonitorDetails> out;
+  for (auto& m : EnumerateMonitors()) {
+    MonitorDetails d;
+    const auto it = extras.find(m.device_name);
+    if (it != extras.end()) {
+      d.refresh_hz = it->second.refresh_hz;
+      d.connection = it->second.connection;
+    }
+    d.info = std::move(m);
+    out.push_back(std::move(d));
+  }
+  return out;
+}
 
 std::vector<MonitorInfo> EnumerateMonitors() {
   std::vector<MonitorInfo> result;
