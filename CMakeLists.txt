@@ -38,6 +38,7 @@ add_library(oled_core STATIC
   src/core/summary_model.cpp
   src/core/signals.cpp
   src/core/history.cpp
+  src/core/alert_model.cpp
 )
 target_include_directories(oled_core PUBLIC src/core)
 
@@ -67,6 +68,7 @@ add_executable(oled-guard-tests
   tests/test_summary_model.cpp
   tests/test_signals.cpp
   tests/test_history.cpp
+  tests/test_alert_model.cpp
 )
 target_include_directories(oled-guard-tests PRIVATE tests)
 target_link_libraries(oled-guard-tests PRIVATE oled_core)
