@@ -195,6 +195,15 @@ function segmented(options, onChange) {
   return { el, set(v) { buttons.forEach((b) => b.classList.toggle('on', b.dataset.value === String(v))); } };
 }
 
+// Segue il trascinamento sull'elemento stesso (pointer capture): nessun ascoltatore su
+// window, cosi' una pagina lasciata non resta in memoria.
+function trackDrag(input, onChange) {
+  input.addEventListener('pointerdown', (e) => { input.setPointerCapture(e.pointerId); onChange(true); });
+  const end = () => onChange(false);
+  input.addEventListener('pointerup', end);
+  input.addEventListener('lostpointercapture', end);
+}
+
 function paintRange(input) {
   const min = Number(input.min), max = Number(input.max);
   input.style.setProperty('--p', `${((Number(input.value) - min) / (max - min)) * 100}%`);
@@ -206,8 +215,7 @@ function slider({ min, max, step = 1, format = (v) => String(v), onInput }) {
   const value = h('span.value');
   const el = h('div.slider', null, input, value);
   let dragging = false;
-  input.addEventListener('pointerdown', () => { dragging = true; });
-  window.addEventListener('pointerup', () => { dragging = false; });
+  trackDrag(input, (v) => { dragging = v; });
   input.addEventListener('input', () => {
     const v = Number(input.value);
     paintRange(input);
@@ -243,10 +251,9 @@ function dualSlider({ min, max, step = 1, format, onInput }) {
     setText(value, format(lo, hi));
   };
   [a, b].forEach((inp) => {
-    inp.addEventListener('pointerdown', () => { dragging = true; });
+    trackDrag(inp, (v) => { dragging = v; });
     inp.addEventListener('input', () => { paint(); onInput(...range()); });
   });
-  window.addEventListener('pointerup', () => { dragging = false; });
   return { el, set(lo, hi) { if (dragging) return; a.value = lo; b.value = hi; paint(); } };
 }
 
