@@ -1012,11 +1012,53 @@ PAGES.impostazioni = {
       settingRow('Cartella dei log', logPath, h('button.btn', { type: 'button', on: { click: () => send({ cmd: 'openLogFolder' }) } }, icon('folder'), 'Apri')),
       settingRow('File di configurazione', cfgPath, h('span')));
 
-    root.append(h('div.page', null, h('div.cols.even', null, h('div.stack', null, start.el, away.el), h('div.stack', null, look.el, diag.el))));
+    // Notifiche: avviso per il rischio non protetto.
+    const alertToggle = toggle((v) => setConfig({ alert_enabled: v }));
+    const alertLevel = segmented([['low', 'Bassa · 10%'], ['medium', 'Media · 20%'], ['high', 'Alta · 35%']], (v) => setConfig({ alert_threshold: v }));
+    const alertAfter = slider({ min: 5, max: 240, step: 5, format: (v) => `${v} min`, onInput: throttledConfig('alert_after_min') });
+    const alertRows = [
+      settingRow('Soglia', 'Quanta parte dello schermo ferma, luminosa e non scurita fa partire il conteggio.', alertLevel.el, { wide: true }),
+      settingRow('Avvisa dopo', 'Minuti di fila sopra la soglia. Al massimo un avviso all\'ora.', alertAfter.el, { wide: true }),
+    ];
+    const notif = panel('Notifiche', 'quando avvisarti');
+    notif.el.classList.add('accented');
+    notif.body.append(settingRow('Avviso nella barra delle applicazioni', 'Solo per le zone ferme e luminose che la protezione non sta già scurendo.', alertToggle.el), ...alertRows);
+
+    // Privacy: statistiche per app e storico.
+    const appStats = toggle((v) => setConfig({ app_stats_enabled: v }));
+    let confirmUntil = 0, confirmTimer = 0;
+    const clearBtn = h('button.btn.danger', { type: 'button' }, icon('trash'), h('span', { text: 'Cancella lo storico' }));
+    // Serve un secondo clic entro 5 s: un clic per sbaglio non cancella nulla.
+    clearBtn.addEventListener('click', () => {
+      if (performance.now() < confirmUntil) {
+        confirmUntil = 0;
+        clearTimeout(confirmTimer);
+        setText(clearBtn.lastChild, 'Cancella lo storico');
+        send({ cmd: 'clearHistory' });
+        return;
+      }
+      confirmUntil = performance.now() + 5000;
+      setText(clearBtn.lastChild, 'Conferma: cancella');
+      clearTimeout(confirmTimer);
+      confirmTimer = setTimeout(() => { confirmUntil = 0; setText(clearBtn.lastChild, 'Cancella lo storico'); }, 5000);
+    });
+    const privacy = panel('Privacy', 'cosa resta sul PC');
+    privacy.el.classList.add('accented');
+    privacy.body.append(
+      settingRow('Statistiche per app', 'Tempo in primo piano di ogni app, per la pagina Statistiche. Restano sul PC.', appStats.el),
+      settingRow('Cancella lo storico', 'Azzera grafico, mappa di usura, app e giorni di fila (history.json).', clearBtn));
+
+    root.append(h('div.page', null, h('div.cols.even', null, h('div.stack', null, start.el, away.el, notif.el), h('div.stack', null, look.el, privacy.el, diag.el))));
     return {
+      leave() { clearTimeout(confirmTimer); },
       update() {
         const c = cfg();
         if (c) {
+          alertToggle.set(c.alert_enabled);
+          alertLevel.set(c.alert_threshold);
+          alertAfter.set(c.alert_after_min);
+          alertRows.forEach((r) => r.classList.toggle('off', !c.alert_enabled));
+          appStats.set(c.app_stats_enabled);
           autostart.set(c.autostart);
           awayToggle.set(c.away_enabled);
           awayAfter.set(c.away_after_min);
@@ -1111,6 +1153,13 @@ PAGES.avanzate = {
 // ------------------------------------------------------------------ informazioni
 
 const CHANGES = [
+  ['1.1.0', [
+    'Segnali dal vivo nella striscia in basso: rischio, movimento e luminosità degli ultimi 60 secondi',
+    'Statistiche: mappa di usura del pannello, rischio nel tempo, app più usate, usura per contenuto',
+    'Sessioni, giorni di fila e usura evitata',
+    'Avviso quando zone ferme e luminose restano senza protezione troppo a lungo',
+    'Impostazioni: notifiche e privacy, con la cancellazione dello storico',
+  ]],
   ['1.0.0', [
     'Nuova interfaccia con barra laterale, barra di stato e riepilogo in basso',
     'Luminosità via software dello schermo protetto',

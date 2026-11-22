@@ -18,6 +18,7 @@ if (preview) {
       brightness_pct: 100, vignette_enabled: true, vignette_strength_pct: 50, vignette_left_pct: 8, vignette_right_pct: 8,
       vignette_top_pct: 0, vignette_bottom_pct: 12, away_enabled: false, away_after_min: 10, away_brightness_pct: 30,
       ui_accent: 'teal', ui_text_size: 'normal', app_list: ['code.exe'],
+      alert_enabled: true, alert_threshold: 'medium', alert_after_min: 60, app_stats_enabled: true,
     },
     history: [
       { exe: 'cyberpunk2077.exe', reason: 'Gioco o app a schermo intero', last_seen_s: now() / 1000 - 30, count: 12 },
@@ -51,7 +52,7 @@ if (preview) {
       this.log('resume', 'Protezione attiva', now() - 1500000);
       this.log('test', 'Prova dello spostamento (30 s)', now() - 600000);
       receive({ type: 'config', config: this.config });
-      receive({ type: 'about', version: '1.0.0', config_path: 'C:\\Users\\utente\\AppData\\Roaming\\oled-guard\\config.json', log_dir: 'C:\\Users\\utente\\AppData\\Roaming\\oled-guard\\logs' });
+      receive({ type: 'about', version: '1.1.0', config_path: 'C:\\Users\\utente\\AppData\\Roaming\\oled-guard\\config.json', log_dir: 'C:\\Users\\utente\\AppData\\Roaming\\oled-guard\\logs' });
       receive({ type: 'activity', events: this.activity });
       this.sendApps();
       this.sendMonitors();
@@ -256,6 +257,10 @@ if (preview) {
           receive({ type: 'config', config: c });
           this.sendMonitors();
           this.log('monitor', 'Schermo protetto: ' + (this.monitorList.find((m) => m.device === this.protectedDevice()) || {}).name);
+          break;
+        case 'clearHistory':
+          this.clearedHistory = (this.clearedHistory || 0) + 1;
+          receive({ type: 'notice', text: 'Anteprima: storico cancellato.' });
           break;
         case 'clearActivity': this.activity = []; receive({ type: 'activity', events: [] }); break;
         case 'openLogFolder': receive({ type: 'notice', text: 'Anteprima: qui si aprirebbe la cartella dei log.' }); break;
