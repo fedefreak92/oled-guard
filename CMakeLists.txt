@@ -121,6 +121,7 @@ add_test(NAME oled-guard-gpu-tests COMMAND oled-guard-gpu-tests)
 add_executable(oled-guard WIN32
   src/app/main.cpp
   src/app/app.cpp
+  src/app/history_file.cpp
   src/app/logger.cpp
   src/app/paths.cpp
   src/app/emergency.cpp

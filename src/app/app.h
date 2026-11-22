@@ -28,7 +28,11 @@
 #include "render_thread.h"
 #include "away_model.h"
 #include "shared_dim.h"
+#include "alert_model.h"
+#include "history.h"
 #include "shared_shade.h"
+#include "shared_signals.h"
+#include "signals.h"
 #include "single_instance.h"
 #include "stats_file.h"
 #include "tray.h"
@@ -65,6 +69,10 @@ class App {
   void RunWindowsTask(std::function<void()> task);
   void PushWindowsToUi();
   void PushMonitorsToUi();
+  // Statistiche: un secondo di segnali e storico, avviso; storico verso la pagina.
+  void UpdateStatistics(double now);
+  void PushHistoryToUi();
+  void SaveHistoryNow();
   // Attivita' recente: aggiunge l'evento e lo invia alla pagina se aperta.
   void Record(std::string_view kind, std::string_view text);
   // Finestra "Apri" per scegliere un .exe, su un thread proprio.
@@ -160,6 +168,12 @@ class App {
   // Luminosita', bordi scuriti e modalita' assente.
   SharedShade shade_;
   ActivityLog activity_;
+  // Segnali dal vivo e statistiche (progetto 2).
+  SharedSignals signals_;
+  SignalRing signal_ring_;
+  History history_;
+  AlertModel alert_;
+  double last_history_push_ms_ = 0;
   bool browsing_ = false;
   MotionWindow motion_;
   AwayModel away_;

@@ -14,6 +14,7 @@
 #include <thread>
 
 #include "ascii.h"
+#include "history_file.h"
 #include "autostart.h"
 #include "clock.h"
 #include "diagnostics.h"
@@ -132,6 +133,12 @@ int App::Run(HINSTANCE instance) {
     wear_ = std::move(stats.wear);
     app_history_ = std::move(stats.apps);
     ui_rect_ = stats.ui_rect;
+  }
+  history_ = LoadHistory(AppDataDir() / L"history.json");
+  {
+    SYSTEMTIME local{};
+    GetLocalTime(&local);
+    history_.CountSession(local.wYear * 10000 + local.wMonth * 100 + local.wDay);
   }
 
   std::random_device seed_source;
@@ -402,6 +409,112 @@ std::filesystem::path App::StatsPath() { return AppDataDir() / L"stats.json"; }
 
 void App::SaveStatsNow() {
   if (!SaveStats(StatsPath(), StatsData{wear_, app_history_, ui_rect_})) LogWarn("stats.json non salvato");
+  SaveHistoryNow();
+}
+
+void App::SaveHistoryNow() {
+  if (!SaveHistory(AppDataDir() / L"history.json", history_)) LogWarn("history.json non salvato");
+}
+
+namespace {
+
+// Ora locale: secondi "locali" dall'epoca (l'ora locale trattata come UTC) e giorno AAAAMMGG.
+void LocalNow(int64_t& local_s, int& day_key) {
+  SYSTEMTIME local{};
+  GetLocalTime(&local);
+  FILETIME ft{};
+  SystemTimeToFileTime(&local, &ft);
+  const uint64_t ticks = (static_cast<uint64_t>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
+  local_s = static_cast<int64_t>(ticks / 10000000ULL) - 11644473600LL;
+  day_key = local.wYear * 10000 + local.wMonth * 100 + local.wDay;
+}
+
+const char* RuleText(AppRule rule) {
+  switch (rule) {
+    case AppRule::AlwaysPause: return "always";
+    case AppRule::NeverPause: return "never";
+    default: return "auto";
+  }
+}
+
+}  // namespace
+
+void App::UpdateStatistics(double now) {
+  const bool shown = overlay_running_ && overlay_shown_;
+  const std::optional<FrameSummary> summary = shown ? signals_.Latest(now, 3000) : std::nullopt;
+  SignalSample sample;
+  if (summary) sample = SignalSample{true, summary->risk, summary->motion, summary->brightness};
+  signal_ring_.Push(sample);
+
+  SecondSample s;
+  LocalNow(s.local_s, s.day_key);
+  s.summary = summary ? &*summary : nullptr;
+  s.overlay_shown = shown;
+  if (last_paused_) {
+    if (last_reason_ == PauseReason::Manual) s.content = ContentKind::ManualPause;
+    else if (last_reason_ == PauseReason::NotificationState || last_reason_ == PauseReason::FullscreenWindow ||
+             last_reason_ == PauseReason::Denylisted) {
+      s.content = ContentKind::Games;
+    }
+  } else if (away_.Away()) {
+    s.content = ContentKind::Away;
+  } else if (shown) {
+    s.content = summary && summary->motion > 0.15 ? ContentKind::Video : ContentKind::StillWork;
+  }
+  const bool app_counts = shown || (last_paused_ && CausedByApp(last_reason_));
+  if (config_.app_stats_enabled && app_counts && !last_foreground_.empty()) {
+    s.app = last_foreground_;
+    s.app_paused = last_paused_;
+  }
+  if (monitor_) s.monitor = Narrow(monitor_->friendly_name);
+  history_.AddSecond(s);
+
+  AlertParams alert;
+  alert.enabled = config_.alert_enabled;
+  alert.threshold = AlertThreshold(config_.alert_threshold);
+  alert.after_min = config_.alert_after_min;
+  const std::optional<double> unprotected = summary ? std::optional<double>(summary->risk_unprotected) : std::nullopt;
+  if (alert_.Update(now, unprotected, alert)) {
+    const int minutes = static_cast<int>(alert_.AboveForMs(now) / 60000.0 + 0.5);
+    const int pct = static_cast<int>(summary->risk_unprotected * 100 + 0.5);
+    const std::string text = "Da " + std::to_string(minutes) + " minuti il " + std::to_string(pct) +
+                             "% dello schermo è fermo, luminoso e non protetto. Una pausa o \"Spegni schermo\" "
+                             "aiutano il pannello.";
+    LogInfo("Avviso: rischio non protetto {}% da {} min", pct, minutes);
+    tray_.ShowBalloon(L"OLED Guard", Widen(text));
+    Record("alert", "Avviso: schermo fermo e non protetto da " + std::to_string(minutes) + " min");
+  }
+
+  if (ui_.IsReady()) {
+    ui_.Post(SignalsMessage(sample));
+    if (now - last_history_push_ms_ >= 60000) PushHistoryToUi();
+  }
+}
+
+void App::PushHistoryToUi() {
+  if (!ui_.IsReady()) return;
+  last_history_push_ms_ = NowMs();
+  int64_t local_s = 0;
+  int day = 0;
+  LocalNow(local_s, day);
+  HistoryPayload p;
+  p.timeline = history_.Timeline(local_s, kTimelineBuckets);
+  p.timeline_end_local_s = local_s;
+  p.risk_peak_24h = history_.RiskPeak(local_s, 288);
+  p.wear_monitor = monitor_ ? Narrow(monitor_->friendly_name) : "";
+  p.wear = history_.Wear(p.wear_monitor);
+  p.top_apps = history_.TopApps(day, 8);
+  for (const AppView& a : p.top_apps) p.top_app_rules.push_back(RuleText(RuleFor(config_, a.exe)));
+  p.content = history_.ContentShares(day);
+  p.sessions_total = history_.SessionsTotal();
+  p.sessions_week = history_.SessionsThisWeek(day);
+  const auto [streak, best] = history_.Streak(day);
+  p.streak = streak;
+  p.streak_best = best;
+  p.avoided_today = history_.WearAvoidedToday(day);
+  p.avoided_total = history_.WearAvoidedTotal();
+  p.protected_week_s = history_.ProtectedThisWeekS(day);
+  ui_.Post(HistoryMessage(p));
 }
 
 void App::RunWindowsTask(std::function<void()> task) {
@@ -609,6 +722,8 @@ void App::PushAllToUi() {
   PushWindowsToUi();
   PushMonitorsToUi();
   ui_.Post(ActivityMessage(activity_));
+  ui_.Post(SignalsHistoryMessage(signal_ring_));
+  PushHistoryToUi();
   ui_.Post(AboutMessage(OLED_GUARD_VERSION, Narrow(config_file_.Path().wstring()), Narrow(LogDir().wstring())));
   ui_.Post(StateMessage(BuildUiState(now)));
   last_state_push_ms_ = now;
@@ -718,6 +833,7 @@ void App::PushShadeInputs() {
 
 void App::OnSecond() {
   const double now = NowMs();
+  UpdateStatistics(now);
   // Il movimento si misura solo con l'overlay a schermo (i frame li conta il render).
   const int frames = shade_.TakeNewFrames();
   if (overlay_running_ && overlay_shown_) motion_.AddSecond(frames);
@@ -769,6 +885,7 @@ bool App::StartOverlay() {
   params.shift = shift_.get();
   params.dim = &dim_;
   params.shade = &shade_;
+  params.signals = &signals_;
   params.frame_period_ms = latency_ms_ > 0 ? latency_ms_ : 7.0;
   params.dim_diagnostics = dim_diagnostics_;
   params.diagnostics_dir = LogDir();
@@ -1004,6 +1121,13 @@ void App::OnUiMessage(const std::string& json) {
     }
     case UiCommandType::OpenLogFolder:
       OpenLogFolder();
+      break;
+    case UiCommandType::ClearHistory:
+      history_.Clear();
+      SaveHistoryNow();
+      LogInfo("Storico delle statistiche cancellato");
+      Record("config", "Storico delle statistiche cancellato");
+      PushHistoryToUi();
       break;
     case UiCommandType::ClearActivity:
       activity_.Clear();
