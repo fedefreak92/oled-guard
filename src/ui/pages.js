@@ -82,7 +82,7 @@ function dimStatusText() {
 function highlightLeft() { return Math.max(0, store.highlightUntil - performance.now()); }
 function canHighlight() { const d = store.dim; return !!d && !['off', 'suspended', 'paused'].includes(d.status); }
 
-const ACTIVITY_ICONS = { pause: 'pause', manual: 'pause', resume: 'play', test: 'move', away: 'moon', back: 'sun', monitor: 'monitor', windows: 'windows', config: 'doc' };
+const ACTIVITY_ICONS = { pause: 'pause', manual: 'pause', resume: 'play', test: 'move', away: 'moon', back: 'sun', monitor: 'monitor', windows: 'windows', config: 'doc', alert: 'bolt' };
 
 // ------------------------------------------------------------------ panoramica
 
@@ -521,53 +521,229 @@ PAGES.monitor = {
 
 // ------------------------------------------------------------------ statistiche
 
+// Scala della mappa di usura: blu scuro -> verde acqua -> verde -> ambra -> rosso.
+const WEAR_SCALE = [[0, [14, 26, 36]], [0.3, [23, 52, 74]], [0.5, [31, 111, 106]], [0.7, [79, 157, 93]], [0.85, [211, 154, 69]], [1, [224, 96, 91]]];
+function wearColor(t) {
+  const v = Math.min(1, Math.max(0, t));
+  for (let i = 1; i < WEAR_SCALE.length; i++) {
+    const [p1, c1] = WEAR_SCALE[i], [p0, c0] = WEAR_SCALE[i - 1];
+    if (v <= p1) {
+      const k = (v - p0) / (p1 - p0);
+      return `rgb(${c0.map((c, j) => Math.round(c + (c1[j] - c) * k)).join(',')})`;
+    }
+  }
+  return 'rgb(224,96,91)';
+}
+
+const CONTENT_KINDS = [
+  ['Interfaccia ferma e lavoro', 'var(--accent)'],
+  ['Video e animazioni', 'var(--info)'],
+  ['Giochi e schermo intero', '#b28cff'],
+  ['Assente', '#5fdc8f'],
+  ['Pausa manuale', 'var(--warn)'],
+];
+const RANGES = { '6h': 72, '24h': 288, '7g': 2016 };
+
+// Grafico del rischio: area ambra, griglia 25/50/75%, vuoti dove non ci sono misure.
+function drawRiskChart(box, values, endLocalS, bucketS) {
+  const W = 600, H = 170, top = 8, bottom = 22, left = 30;
+  const n = values.length;
+  const x = (i) => left + (n <= 1 ? 0 : (i / (n - 1)) * (W - left - 4));
+  const y = (v) => top + (1 - Math.min(1, v)) * (H - top - bottom);
+  let grid = '';
+  for (const g of [0.25, 0.5, 0.75]) {
+    grid += `<line class="grid" x1="${left}" x2="${W}" y1="${y(g)}" y2="${y(g)}"/><text class="axis" x="0" y="${y(g) + 4}">${g * 100}%</text>`;
+  }
+  let line = '', area = '', run = [];
+  const flush = () => {
+    if (run.length) {
+      const pts = run.map(([i, v]) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+      line += `M${pts.join('L')}`;
+      area += `M${x(run[0][0]).toFixed(1)},${y(0)}L${pts.join('L')}L${x(run[run.length - 1][0]).toFixed(1)},${y(0)}Z`;
+    }
+    run = [];
+  };
+  values.forEach((v, i) => { if (v === null) flush(); else run.push([i, v]); });
+  flush();
+  // Etichette: ora locale (il secondo "locale" trattato come UTC).
+  let labels = '';
+  for (let k = 0; k <= 4; k++) {
+    const i = Math.round((k / 4) * (n - 1));
+    const d = new Date((endLocalS - (n - 1 - i) * bucketS) * 1000);
+    const text = k === 4 ? 'ora' : (bucketS >= 3600
+      ? d.toLocaleDateString('it-IT', { weekday: 'short', timeZone: 'UTC' })
+      : `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`);
+    labels += `<text class="axis" x="${Math.min(W - 24, Math.max(left, x(i) - 14))}" y="${H - 4}">${text}</text>`;
+  }
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${grid}<path class="area" d="${area}"/><path class="line" d="${line}"/>${labels}</svg>`;
+}
+
 PAGES.statistiche = {
   build(root) {
     const stat = (label) => { const b = h('b', { text: '-' }), sp = h('span'); return [h('div.stat', null, h('small', { text: label }), b, sp), b, sp]; };
     const [sTot, vTot, nTot] = stat('Protetto in totale');
-    const [sToday, vToday, nToday] = stat('Protetto oggi');
-    const [sUni, vUni, nUni] = stat('Uniformità');
-    const [sPau, vPau, nPau] = stat('Pause oggi');
+    const [sSes, vSes, nSes] = stat('Sessioni');
+    const [sAvo, vAvo, nAvo] = stat('Usura evitata oggi');
+    const [sStr, vStr, nStr] = stat('Giorni di fila');
     vTot.className = 'accent';
+    vSes.className = 'info';
+    vAvo.className = 'accent';
+    vStr.className = 'warn';
+
+    // Mappa di usura
+    const mapSub = h('span.sub');
+    const wear = panel('Mappa di usura del pannello');
+    wear.el.querySelector('.panel-head').insertBefore(mapSub, wear.el.querySelector('.panel-head .grow'));
+    wear.body.classList.add('pad');
+    const grid = h('div.wear-grid');
+    const cells = [];
+    for (let i = 0; i < 576; i++) { const c = h('i'); cells.push(c); grid.append(c); }
+    const legend = h('div.legend', null, h('span', { text: 'sinistra' }), h('span.grow'), h('span', { text: 'meno' }),
+      ...[0.1, 0.35, 0.6, 0.78, 0.95].map((t) => { const i = h('i'); i.style.background = wearColor(t); return i; }),
+      h('span', { text: 'più' }), h('span.grow'), h('span', { text: 'destra' }));
+    const wkv = (label) => { const b = h('b', { text: '-' }), s = h('span'); return [h('div.wear-stat', null, h('small', { text: label }), b, s), b, s]; };
+    const [w1, w1b, w1s] = wkv('Misurato');
+    const [w2, w2b, w2s] = wkv('Zona peggiore');
+    const [w3, w3b, w3s] = wkv('Concentrazione');
+    const [w4, w4b, w4s] = wkv('Zone oltre il doppio');
+    const wearEmpty = h('div.empty', { text: 'Nessuna misura ancora: la mappa si riempie mentre la protezione è attiva.' });
+    wear.body.append(grid, legend, h('div.wear-stats', null, w1, w2, w3, w4), wearEmpty,
+      h('p.hint', { text: 'Luce arrivata al pannello × tempo, dopo oscuramento, luminosità e bordi. Il tempo in pausa (giochi, video a tutto schermo) non è misurato.' }));
+
+    // Grafico del rischio
+    let range = '24h';
+    const rangeSeg = segmented([['6h', '6 h'], ['24h', '24 h'], ['7g', '7 g']], (v) => { range = v; lastHistory = null; view.update(); });
+    const chartPanel = panel('Rischio nel tempo', null, rangeSeg.el);
+    chartPanel.body.classList.add('pad');
+    const chartInfo = h('div.mono.muted.chart-info');
+    const chart = h('div.chart');
+    chartPanel.body.append(chartInfo, chart);
+
+    // App piu' usate
+    const appsPanel = panel('App più usate', '7 giorni');
+    const appsList = h('div.top-apps');
+    appsPanel.body.append(appsList);
+
+    // Contenuti
+    const contentPanel = panel('Usura per contenuto', '7 giorni');
+    contentPanel.body.classList.add('pad');
+    const contentBar = h('div.content-bar');
+    const contentLegend = h('div.content-legend');
+    contentPanel.body.append(contentBar, contentLegend);
+
+    // Parti del progetto 1: posizioni dello spostamento e pause di oggi.
     const heatPanel = panel('Posizioni dello spostamento', 'tempo su ogni posizione · totale');
     heatPanel.body.classList.add('pad');
     const heat = h('div.heat');
-    const cells = [];
-    for (let i = 0; i < 49; i++) { const b = h('b'); const c = h('i', null, b); cells.push([c, b]); heat.append(c); }
-    heatPanel.body.append(heat, h('div.legend', null, h('span', { text: 'meno' }), h('i'), h('span', { text: 'più tempo' })),
-      h('p.hint', { text: 'Le posizioni dentro l\'ampiezza scelta dovrebbero avere colori simili: vuol dire che l\'usura è distribuita in modo uniforme.' }));
+    const heatCells = [];
+    for (let i = 0; i < 49; i++) { const b = h('b'); const c = h('i', null, b); heatCells.push([c, b]); heat.append(c); }
+    const uniform = h('p.hint');
+    heatPanel.body.append(heat, uniform);
     const pausePanel = panel('Pause di oggi', 'per motivo');
     const bars = h('div.bars');
     pausePanel.body.append(bars);
-    root.append(h('div.page', null, h('div.stats4', null, sTot, sToday, sUni, sPau),
-      h('div.cols', null, heatPanel.el, pausePanel.el),
-      h('p.hint', { text: 'La mappa di usura del pannello, il grafico nel tempo e le app più usate arriveranno con il prossimo aggiornamento.' })));
 
-    let lastStats = null;
-    return {
+    root.append(h('div.page', null, h('div.stats4', null, sTot, sSes, sAvo, sStr),
+      h('div.cols.even', null, wear.el, chartPanel.el),
+      h('div.cols.even', null, appsPanel.el, contentPanel.el),
+      h('div.cols.even', null, heatPanel.el, pausePanel.el)));
+
+    let lastHistory = null, lastStats = null;
+    const view = {
       update() {
-        const st = store.stats, s = store.state, c = cfg();
-        if (!st) return;
-        const a = (c && c.amplitude_px) || 2;
-        if (st !== lastStats) {
-          lastStats = st;
+        const hist = store.history, st = store.stats, c = cfg(), s = store.state;
+        if (st) {
           setText(vTot, fmtHours(st.total_ms));
-          setText(nTot, 'con l\'overlay a schermo');
-          setText(vToday, fmtClock(st.today_ms));
-          setText(nToday, 'da mezzanotte');
-          setText(vUni, st.uniformity === null ? 'n/d' : fmtPct(st.uniformity, 1));
-          setText(nUni, st.uniformity === null ? 'servono 10 minuti di dati' : '100% = usura identica ovunque');
-          setText(vPau, String(st.pauses_today));
-          setText(nPau, 'giochi, video, blocchi schermo');
+          setText(nTot, hist ? `+${fmtHours(hist.protected_week_s * 1000)} questa settimana` : 'con l\'overlay a schermo');
+        }
+        if (hist && hist !== lastHistory) {
+          lastHistory = hist;
+          setText(vSes, String(hist.sessions_total));
+          setText(nSes, `+${hist.sessions_week} questa settimana`);
+          setText(vAvo, hist.avoided_today === null ? 'n/d' : `${Math.round(hist.avoided_today * 100)}%`);
+          setText(nAvo, hist.avoided_total === null ? 'luce tolta alle zone ferme' : `totale ${Math.round(hist.avoided_total * 100)}%`);
+          setText(vStr, `${hist.streak} ${hist.streak === 1 ? 'giorno' : 'giorni'}`);
+          setText(nStr, `record ${hist.streak_best}`);
+
+          const w = hist.wear;
+          setText(mapSub, w.monitor || '');
+          const has = w.hottest >= 0;
+          grid.hidden = !has;
+          wearEmpty.hidden = has;
+          cells.forEach((cell, i) => {
+            cell.style.background = has ? wearColor(w.cells[i]) : 'transparent';
+            cell.classList.toggle('hot', has && i === w.hottest);
+          });
+          const since = has ? new Date(w.since * 1000).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', timeZone: 'UTC' }) : '-';
+          setText(w1b, has ? `${Math.round(w.measured_hours)} h` : '-');
+          setText(w1s, has ? `dal ${since}` : '');
+          setText(w2b, has ? w.hottest_label : '-');
+          setText(w2s, has ? `${w.hottest_hours.toFixed(1).replace('.', ',')} h a bianco pieno` : '');
+          setText(w3b, has ? `${w.concentration.toFixed(2).replace('.', ',')}×` : '-');
+          setText(w3s, 'zona peggiore / media');
+          setText(w4b, has ? `${w.over_double}/576` : '-');
+          setText(w4s, has ? `${fmtPct((w.over_double / 576) * 100, 1)} del pannello` : '');
+
+          const n = RANGES[range];
+          let vals = hist.timeline.slice(-n);
+          let bucketS = 300;
+          if (range === '7g') {  // a ore
+            const hourly = [];
+            for (let i = 0; i < vals.length; i += 12) {
+              const part = vals.slice(i, i + 12).filter((v) => v !== null);
+              hourly.push(part.length ? part.reduce((a, b) => a + b, 0) / part.length : null);
+            }
+            vals = hourly;
+            bucketS = 3600;
+          }
+          rangeSeg.set(range);
+          drawRiskChart(chart, vals, hist.timeline_end, bucketS);
+          const m = vals.filter((v) => v !== null);
+          const cur = [...vals].reverse().find((v) => v !== null);
+          setText(chartInfo, m.length
+            ? `picco ${Math.round(Math.max(...m) * 100)}% · media ${Math.round((m.reduce((a, b) => a + b, 0) / m.length) * 100)}% · attuale ${cur === undefined ? '-' : Math.round(cur * 100) + '%'}`
+            : 'nessuna misura in questo intervallo');
+
+          appsList.innerHTML = '';
+          if (!hist.top_apps.length) appsList.append(h('div.empty', { text: 'Ancora nessuna app registrata.' }));
+          const topTotal = Math.max(1, ...hist.top_apps.map((a) => a.protected_s + a.paused_s));
+          for (const a of hist.top_apps) {
+            const info = RULE_INFO[a.rule] || RULE_INFO.auto;
+            const prot = h('i.prot'), paus = h('i.paus');
+            prot.style.width = `${(a.protected_s / topTotal) * 100}%`;
+            paus.style.width = `${(a.paused_s / topTotal) * 100}%`;
+            appsList.append(h('div.top-app', null, avatar(a.exe),
+              h('div.grow', null, h('div.top-app-name', null, h('b', { text: a.exe }), pill(info[2], info[3])), h('div.split-bar', null, prot, paus)),
+              h('span.mono', { text: fmtClock((a.protected_s + a.paused_s) * 1000) })));
+          }
+          if (hist.top_apps.length) appsList.append(h('div.legend.left', null, h('i.prot'), h('span', { text: 'protetto' }), h('i.paus'), h('span', { text: 'in pausa' })));
+
+          contentBar.innerHTML = '';
+          contentLegend.innerHTML = '';
+          const total = hist.content.reduce((a, b) => a + b, 0);
+          if (total <= 0) contentLegend.append(h('div.empty', { text: 'Ancora nessun dato.' }));
+          hist.content.forEach((share, k) => {
+            const [label, color] = CONTENT_KINDS[k];
+            if (share > 0) { const seg = h('i'); seg.style.width = `${share * 100}%`; seg.style.background = color; contentBar.append(seg); }
+            if (total > 0) {
+              const dot = h('i');
+              dot.style.background = color;
+              contentLegend.append(h('div', null, dot, h('span', { text: label }), h('b', { text: `${Math.round(share * 100)}%` })));
+            }
+          });
+        }
+        if (st && st !== lastStats) {
+          lastStats = st;
+          const a = (c && c.amplitude_px) || 2;
           let max = 0;
           for (let y = -a; y <= a; y++) for (let x = -a; x <= a; x++) max = Math.max(max, st.cells[(y + 3) * 7 + x + 3]);
-          cells.forEach(([cell, fill], i) => {
+          heatCells.forEach(([cell, fill], i) => {
             const x = i % 7 - 3, y = Math.floor(i / 7) - 3;
             const inside = Math.abs(x) <= a && Math.abs(y) <= a;
             cell.classList.toggle('out', !inside);
             fill.style.opacity = inside && max > 0 ? (0.1 + 0.9 * st.cells[i] / max).toFixed(2) : '0';
-            cell.title = inside ? fmtClock(st.cells[i]) : 'fuori dall\'ampiezza attuale';
           });
+          setText(uniform, st.uniformity === null ? 'Uniformità: servono 10 minuti di dati.' : `Uniformità ${fmtPct(st.uniformity, 1)}: 100% = usura identica su tutte le posizioni.`);
           bars.innerHTML = '';
           const entries = Object.entries(st.pauses_by_reason || {}).sort((x, y) => y[1] - x[1]);
           if (!entries.length) bars.append(h('div.empty', { text: 'Nessuna pausa oggi.' }));
@@ -579,9 +755,10 @@ PAGES.statistiche = {
           }
         }
         const now = s && !s.paused ? (s.offset[1] + 3) * 7 + s.offset[0] + 3 : -1;
-        cells.forEach(([cell], i) => cell.classList.toggle('now', i === now));
+        heatCells.forEach(([cell], i) => cell.classList.toggle('now', i === now));
       },
     };
+    return view;
   },
 };
 
