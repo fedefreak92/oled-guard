@@ -147,6 +147,7 @@ RenderThread::SessionEnd RenderThread::RunSession() {
   Offset last_drawn{INT_MIN, INT_MIN};
   ShadeParams last_shade;
   uint64_t shade_version = 0;
+  double summary_requested_ms = -1e9;
   // Luminosita' effettiva: base x rampa della modalita' assente.
   const auto shade_at = [&](double t, const ShadeInputs& in) {
     ShadeParams p = in.base;
@@ -278,6 +279,18 @@ RenderThread::SessionEnd RenderThread::RunSession() {
     // (altrimenti un ridisegno "dovuto" ma impossibile farebbe girare il ciclo a vuoto).
     if (dim_ok && have_frame) {
       next = std::min(next, dim_schedule.NextRedrawAt(now, dim_in.params, params_.frame_period_ms));
+      // Segnali: un riassunto al secondo, letto senza mai attendere la GPU.
+      if (params_.signals) {
+        FrameSummary summary;
+        double measured_ms = 0;
+        if (dimmer.TryReadSummary(summary, measured_ms)) params_.signals->Publish(summary, measured_ms);
+        if (now - summary_requested_ms >= 1000) {
+          dimmer.RequestSummary(now, shade_at(now, shade_in));
+          summary_requested_ms = now;
+        }
+        next = std::min(next, summary_requested_ms + 1000);
+        if (dimmer.SummaryPending()) next = std::min(next, now + 16);
+      }
       if (highlight) next = std::min(next, dim_in.highlight_until_ms);
       // Mappa per la scheda: una copia al secondo, letta senza mai attendere la GPU.
       if (dim_in.watch) {

@@ -63,6 +63,7 @@ class Dimmer {
   void RequestSummary(double now_ms, const ShadeParams& shade);
   // Legge il riassunto piu' vecchio gia' pronto, senza mai attendere la GPU.
   bool TryReadSummary(FrameSummary& out, double& measured_ms);
+  bool SummaryPending() const { return summary_pending_[0] || summary_pending_[1]; }
 
   // Diagnostica: copia asincrona di livelli, flag, classi e ultimo cambiamento.
   void RequestDebugReadback(double now_ms);

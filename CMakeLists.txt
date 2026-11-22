@@ -84,6 +84,7 @@ add_library(oled_gpu STATIC
   src/app/dimmer.cpp
   src/app/shared_dim.cpp
   src/app/shared_shade.cpp
+  src/app/shared_signals.cpp
 )
 target_include_directories(oled_gpu PUBLIC src/app ${SHADER_OUT})
 target_link_libraries(oled_gpu PUBLIC oled_core d3d11 dxgi)
