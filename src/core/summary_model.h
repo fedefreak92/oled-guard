@@ -4,6 +4,8 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
+#include <vector>
 #include <string_view>
 
 #include "dim_model.h"
@@ -28,9 +30,23 @@ struct FrameSummary {
   std::array<double, kZones> zone_light{};  // luce media arrivata al pannello per zona
 };
 
+// Disposizione del buffer scritto dallo shader CSSummary (dim_cs.hlsl, stesse costanti):
+// kSummarySlots gruppi di kSummaryTotals totali (le celle si distribuiscono per indice,
+// cosi' le somme a 32 bit non traboccano), poi per ogni zona luce arrivata e pixel.
+// Le luci sono luminanza x pixel x kSummaryScale, arrotondate cella per cella.
+inline constexpr int kSummarySlots = 64;
+inline constexpr int kSummaryTotals = 6;
+inline constexpr int kSumRiskPx = 0, kSumUnprotectedPx = 1, kSumMotionPx = 2, kSumLuma = 3, kSumStillBefore = 4,
+                     kSumStillRemoved = 5;
+inline constexpr double kSummaryScale = 64;
+inline constexpr int kSummaryZoneBase = kSummarySlots * kSummaryTotals;
+inline constexpr int kSummaryWords = kSummaryZoneBase + kZones * 2;
+
 // Zona 32x18 di una cella della griglia cols x rows.
 int ZoneOf(int cx, int cy, int cols, int rows);
 FrameSummary ComputeSummary(const DimModel& m, double now_s, const ShadeParams& shade);
 std::string_view MotionCaption(double motion);
+// Dal buffer dello shader; dimensione sbagliata o total_px <= 0: riassunto vuoto.
+FrameSummary DecodeSummary(const std::vector<uint32_t>& words, double total_px);
 
 }  // namespace oled

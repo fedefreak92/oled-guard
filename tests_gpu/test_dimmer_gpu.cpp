@@ -8,6 +8,8 @@
 #include "dim_scenes.h"
 #include "dimmer.h"
 #include "gpu_test_util.h"
+#include "shade_model.h"
+#include "summary_model.h"
 #include "test_framework.h"
 
 using oled::DimModel;
@@ -82,6 +84,22 @@ class Sim {
     return d;
   }
   float GpuLevel(int cx, int cy) { return GpuLevels()[static_cast<size_t>(cy) * model_.Cols() + cx]; }
+
+  // Riassunto dei segnali dalla GPU: richiesta e lettura asincrona ripetuta.
+  bool GpuSummary(double t, const oled::ShadeParams& shade, oled::FrameSummary& out) {
+    dimmer_.RequestSummary(t * 1000, shade);
+    double measured = 0;
+    // WARP lavora in modo asincrono: si riprova per al massimo 2 s, come farebbe il render.
+    for (int i = 0; i < 400; ++i) {
+      if (dimmer_.TryReadSummary(out, measured)) return true;
+      ctx_->Flush();
+      Sleep(5);
+    }
+    return false;
+  }
+  oled::FrameSummary ModelSummary(double t, const oled::ShadeParams& shade) {
+    return oled::ComputeSummary(model_, t, shade);
+  }
 
  private:
   bool Hdr() const { return format_ == kHdr; }
@@ -410,4 +428,103 @@ TEST(gpu_windows_like_desktop_and_activation) {
   sim.Run(img, 481, 810, {}, p);
   CHECK_NEAR(sim.GpuLevel(10, 10), 0.20, 0.01);  // la prima ha ripreso il conteggio da 480
   CHECK(sim.MaxDiff() <= 0.002);
+}
+
+namespace {
+// Differenza massima fra riassunto della GPU e del modello (luci relative sopra 1).
+double SummaryDiff(const oled::FrameSummary& a, const oled::FrameSummary& b) {
+  const auto rel = [](double x, double y) { return std::fabs(x - y) / std::max(1.0, std::fabs(y)); };
+  double d = std::max({rel(a.risk, b.risk), rel(a.risk_unprotected, b.risk_unprotected), rel(a.motion, b.motion),
+                       rel(a.brightness, b.brightness), rel(a.light_still_before, b.light_still_before),
+                       rel(a.light_still_removed, b.light_still_removed)});
+  for (int z = 0; z < oled::kZones; ++z) d = std::max(d, rel(a.zone_light[z], b.zone_light[z]));
+  if (d > 1e-3) {
+    std::printf("    riassunto gpu/modello: rischio %.4f/%.4f non protetto %.4f/%.4f movimento %.4f/%.4f "
+                "luminosita' %.4f/%.4f prima %.4f/%.4f tolta %.4f/%.4f\n",
+                a.risk, b.risk, a.risk_unprotected, b.risk_unprotected, a.motion, b.motion, a.brightness,
+                b.brightness, a.light_still_before, b.light_still_before, a.light_still_removed,
+                b.light_still_removed);
+  }
+  return d;
+}
+}  // namespace
+
+TEST(gpu_summary_matches_model_sdr) {
+  Sim sim(kW, kH, kSdr, 1.0f, Zones(kShell));
+  CHECK(sim.Ok());
+  if (!sim.Ok()) return;
+  LumaImage img = DesktopIcons();
+  sim.Frame(img, 0);
+  sim.Run(img, 0.5, 90);
+  oled::FrameSummary gpu;
+  CHECK(sim.GpuSummary(90, {}, gpu));
+  const oled::FrameSummary ref = sim.ModelSummary(90, {});
+  CHECK(ref.risk > 0.01);
+  CHECK(SummaryDiff(gpu, ref) <= 1e-3);
+}
+
+TEST(gpu_summary_matches_model_hdr_odd_size) {
+  Sim sim(1366, 768, kHdr, 2.5f, Zones(kShell, 86, 48));
+  CHECK(sim.Ok());
+  if (!sim.Ok()) return;
+  LumaImage img = Black(1366, 768);
+  Fill(img, 100, 100, 400, 300, 40.0f);   // molto oltre il bianco SDR
+  Fill(img, 1360, 760, 1366, 768, 1.0f);  // cella parziale nell'angolo
+  sim.Frame(img, 0);
+  sim.Run(img, 0.5, 90, [](LumaImage& im, double t) {
+    if (t < 85) return false;
+    Fill(im, 600, 400, 900, 600, static_cast<float>(std::fmod(t, 1.0) * 3.0));  // movimento recente
+    return true;
+  });
+  oled::FrameSummary gpu;
+  CHECK(sim.GpuSummary(90, {}, gpu));
+  const oled::FrameSummary ref = sim.ModelSummary(90, {});
+  CHECK(ref.risk > 0.01 && ref.motion > 0.01 && ref.brightness > 1.0);
+  CHECK(SummaryDiff(gpu, ref) <= 1e-3);
+}
+
+TEST(gpu_summary_matches_model_active_window) {
+  Sim sim(kW, kH, kSdr, 1.0f, Zones(kApp));
+  CHECK(sim.Ok());
+  if (!sim.Ok()) return;
+  LumaImage img = Black();
+  Fill(img, 0, 0, kW, kH, 1.0f);  // pagina bianca ferma sotto il mouse
+  sim.Active({kApp});
+  sim.Frame(img, 0);
+  sim.Run(img, 0.5, 90);
+  oled::FrameSummary gpu;
+  CHECK(sim.GpuSummary(90, {}, gpu));
+  CHECK_NEAR(gpu.risk, 1.0, 1e-3);
+  CHECK(SummaryDiff(gpu, sim.ModelSummary(90, {})) <= 1e-3);
+}
+
+TEST(gpu_summary_with_dim_and_shade) {
+  Sim sim(kW, kH, kSdr, 1.0f, Zones(kShell));
+  CHECK(sim.Ok());
+  if (!sim.Ok()) return;
+  LumaImage img = DesktopIcons();
+  sim.Frame(img, 0);
+  sim.Run(img, 0.5, 400);
+  oled::ShadeParams shade;
+  shade.brightness = 0.7f;
+  shade.vignette_strength = 0.5f;
+  shade.spread[0] = 0.2f;
+  oled::FrameSummary gpu;
+  CHECK(sim.GpuSummary(400, shade, gpu));
+  const oled::FrameSummary ref = sim.ModelSummary(400, shade);
+  CHECK(ref.light_still_removed > 0.0);
+  CHECK(ref.risk_unprotected < ref.risk);
+  CHECK(SummaryDiff(gpu, ref) <= 1e-3);
+}
+
+TEST(gpu_summary_never_waits) {
+  Sim sim(kW, kH, kSdr, 1.0f, Zones(kShell));
+  CHECK(sim.Ok());
+  if (!sim.Ok()) return;
+  LumaImage img = DesktopIcons();
+  sim.Frame(img, 0);
+  oled::FrameSummary out;
+  double measured = -1;
+  CHECK(!sim.dimmer().TryReadSummary(out, measured));  // niente richiesto: nessuna lettura
+  CHECK(sim.GpuSummary(1, {}, out));
 }

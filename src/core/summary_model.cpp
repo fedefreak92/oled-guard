@@ -47,6 +47,27 @@ FrameSummary ComputeSummary(const DimModel& m, double now_s, const ShadeParams& 
   return s;
 }
 
+FrameSummary DecodeSummary(const std::vector<uint32_t>& words, double total_px) {
+  FrameSummary s;
+  if (words.size() != static_cast<size_t>(kSummaryWords) || total_px <= 0) return s;
+  std::array<double, kSummaryTotals> t{};
+  for (int slot = 0; slot < kSummarySlots; ++slot) {
+    for (int f = 0; f < kSummaryTotals; ++f) t[f] += words[static_cast<size_t>(slot) * kSummaryTotals + f];
+  }
+  s.risk = t[kSumRiskPx] / total_px;
+  s.risk_unprotected = t[kSumUnprotectedPx] / total_px;
+  s.motion = t[kSumMotionPx] / total_px;
+  s.brightness = t[kSumLuma] / kSummaryScale / total_px;
+  s.light_still_before = t[kSumStillBefore] / kSummaryScale / total_px;
+  s.light_still_removed = t[kSumStillRemoved] / kSummaryScale / total_px;
+  for (int z = 0; z < kZones; ++z) {
+    const double light = words[static_cast<size_t>(kSummaryZoneBase) + z * 2];
+    const double px = words[static_cast<size_t>(kSummaryZoneBase) + z * 2 + 1];
+    s.zone_light[z] = px > 0 ? light / kSummaryScale / px : 0;
+  }
+  return s;
+}
+
 std::string_view MotionCaption(double motion) {
   if (motion < 0.02) return "interfaccia ferma";
   if (motion <= 0.15) return "lavoro";

@@ -104,6 +104,7 @@ add_shader_entry(dim_activate dim_cs CSActivate cs_5_0)
 add_shader_entry(dim_motion_h dim_cs CSMotionH cs_5_0)
 add_shader_entry(dim_motion_v dim_cs CSMotionV cs_5_0)
 add_shader_entry(dim_level dim_cs CSLevel cs_5_0)
+add_shader_entry(dim_summary dim_cs CSSummary cs_5_0)
 
 # Test degli shader su device WARP (nessuna GPU necessaria).
 add_executable(oled-guard-gpu-tests

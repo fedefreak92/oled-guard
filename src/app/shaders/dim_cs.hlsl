@@ -21,6 +21,11 @@ cbuffer DimConstants : register(b0) {
   uint active0;  // zone delle finestre attive (0 = nessuna)
   uint active1;
   uint2 pad;
+  // Riassunto dei segnali: luminosita' e bordi (come ShadeParams, src/core/shade_model.h).
+  float4 shade_spread;  // sinistra, destra, alto, basso
+  float shade_brightness;
+  float shade_strength;
+  uint2 pad2;
 };
 
 static const uint kFlagSdr = 1;
@@ -54,11 +59,19 @@ RWTexture2D<uint> hash_out : register(u2);
 RWTexture2D<uint> anchor_hash_io : register(u3);
 RWTexture2D<float> anchor_time_io : register(u4);
 RWTexture2D<float> excursion_io : register(u5);
+// Statistiche: luminanza media della cella e istante dell'ultimo cambio reale dei pixel
+// (le finestre attive non lo toccano, a differenza di last_change).
+RWTexture2D<float> luma_out : register(u6);
+RWTexture2D<float> content_change_out : register(u7);
 
 groupshared uint g_changed;
 groupshared uint g_bright;
 groupshared uint g_hash_add;
 groupshared uint g_hash_xor;
+groupshared uint g_luma;  // somma della luminanza x kLumaFixed, saturata a kLumaMax per pixel
+
+static const float kLumaMax = 64.0;
+static const float kLumaFixed = 1024.0;
 
 float SrgbToLinear(float c) {
   return c <= 0.04045 ? c / 12.92 : pow(abs((c + 0.055) / 1.055), 2.4);
@@ -84,6 +97,7 @@ void CSDetect(uint3 cell : SV_GroupID, uint3 tid : SV_GroupThreadID, uint index 
     g_bright = 0;
     g_hash_add = 0;
     g_hash_xor = 0;
+    g_luma = 0;
   }
   GroupMemoryBarrierWithGroupSync();
 
@@ -92,7 +106,9 @@ void CSDetect(uint3 cell : SV_GroupID, uint3 tid : SV_GroupThreadID, uint index 
     const float4 now = frame_tex.Load(int3(pixel, 0));
     const float4 before = previous_tex.Load(int3(pixel, 0));
     if (any(now != before)) InterlockedOr(g_changed, 1u);
-    if (Luma(now) >= bright_threshold) InterlockedAdd(g_bright, 1u);
+    const float luma = Luma(now);
+    if (luma >= bright_threshold) InterlockedAdd(g_bright, 1u);
+    InterlockedAdd(g_luma, (uint)(min(luma, kLumaMax) * kLumaFixed + 0.5));
     const uint4 bits = asuint(now);
     const uint h = Pcg(bits.r ^ Pcg(bits.g ^ Pcg(bits.b ^ Pcg(index))));
     InterlockedAdd(g_hash_add, h);
@@ -135,6 +151,9 @@ void CSDetect(uint3 cell : SV_GroupID, uint3 tid : SV_GroupThreadID, uint index 
     }
     flags_out[cell.xy] = bright ? 1u : 0u;
     hash_out[cell.xy] = hash;
+    luma_out[cell.xy] = (float)g_luma / kLumaFixed / (float)(w * h);
+    if (flags & kFlagFirstFrame) content_change_out[cell.xy] = last_change_out[cell.xy];
+    else if (g_changed != 0) content_change_out[cell.xy] = now_s;
   }
 }
 
@@ -241,4 +260,78 @@ void CSLevel(uint3 id : SV_DispatchThreadID) {
   if (level <= target) slow = false;
   class_io[c] = cls | (slow ? 4u : 0u);
   levels_io[c] = level;
+}
+
+// ------------------------------------------------------------------ riassunto dei segnali
+
+// Stesse costanti di src/core/summary_model.h.
+static const uint kSummarySlots = 64;
+static const uint kSummaryTotals = 6;
+static const uint kSumRiskPx = 0;
+static const uint kSumUnprotectedPx = 1;
+static const uint kSumMotionPx = 2;
+static const uint kSumLuma = 3;
+static const uint kSumStillBefore = 4;
+static const uint kSumStillRemoved = 5;
+static const float kSummaryScale = 64.0;
+static const uint kZoneCols = 32;
+static const uint kZoneRows = 18;
+static const float kStillS = 60.0;
+static const float kMovingS = 10.0;
+static const float kProtectedLevel = 0.05;
+
+Texture2D<uint> summary_flags_in : register(t0);
+Texture2D<float> summary_luma_in : register(t1);
+Texture2D<float> summary_change_in : register(t2);
+Texture2D<float> summary_levels_in : register(t3);
+RWByteAddressBuffer summary_out : register(u0);
+
+float ShadeEdge(float d, float s) {
+  if (s <= 0.0) return 0.0;
+  const float t = saturate(d / s);
+  return 1.0 - t * t * (3.0 - 2.0 * t);
+}
+
+// Fattore di luminosita' e bordi, come ShadeFactor (src/core/shade_model.cpp).
+float ShadeAt(float2 uv) {
+  const float v = max(max(ShadeEdge(uv.x, shade_spread.x), ShadeEdge(1.0 - uv.x, shade_spread.y)),
+                      max(ShadeEdge(uv.y, shade_spread.z), ShadeEdge(1.0 - uv.y, shade_spread.w)));
+  return shade_brightness * (1.0 - shade_strength * v);
+}
+
+void AddTotal(uint slot, uint field, uint value) {
+  if (value != 0) summary_out.InterlockedAdd((slot * kSummaryTotals + field) * 4, value);
+}
+
+// Una cella per thread: somme a virgola fissa nel buffer (azzerato prima del passaggio).
+[numthreads(8, 8, 1)]
+void CSSummary(uint3 id : SV_DispatchThreadID) {
+  if (id.x >= cols || id.y >= rows) return;
+  const uint x0 = id.x * kCellPx, y0 = id.y * kCellPx;
+  const uint x1 = min(width, x0 + kCellPx), y1 = min(height, y0 + kCellPx);
+  const uint px = (x1 - x0) * (y1 - y0);
+  const float luma = summary_luma_in[id.xy];
+  const float age = now_s - summary_change_in[id.xy];
+  const bool still = age >= kStillS;
+  const float level = summary_levels_in[id.xy];
+  const float2 uv = float2((x0 + x1) * 0.5 / (float)width, (y0 + y1) * 0.5 / (float)height);
+  const float arrived = luma * (1.0 - level) * ShadeAt(uv);
+  const float scale = (float)px * kSummaryScale;
+  const uint slot = (id.y * cols + id.x) % kSummarySlots;
+  if (still && (summary_flags_in[id.xy] & 1u) != 0) {
+    AddTotal(slot, kSumRiskPx, px);
+    if (level <= kProtectedLevel) AddTotal(slot, kSumUnprotectedPx, px);
+  }
+  if (age < kMovingS) AddTotal(slot, kSumMotionPx, px);
+  AddTotal(slot, kSumLuma, (uint)(luma * scale + 0.5));
+  if (still) {
+    AddTotal(slot, kSumStillBefore, (uint)(luma * scale + 0.5));
+    AddTotal(slot, kSumStillRemoved, (uint)(max(0.0, luma - arrived) * scale + 0.5));
+  }
+  const uint zx = min(kZoneCols - 1, id.x * kZoneCols / cols);
+  const uint zy = min(kZoneRows - 1, id.y * kZoneRows / rows);
+  const uint zone_base = (kSummarySlots * kSummaryTotals + (zy * kZoneCols + zx) * 2) * 4;
+  const uint light = (uint)(arrived * scale + 0.5);
+  if (light != 0) summary_out.InterlockedAdd(zone_base, light);
+  summary_out.InterlockedAdd(zone_base + 4, px);
 }

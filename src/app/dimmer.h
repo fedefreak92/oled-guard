@@ -10,6 +10,8 @@
 
 #include "dim_model.h"
 #include "dim_params.h"
+#include "shade_model.h"
+#include "summary_model.h"
 
 namespace oled {
 
@@ -56,6 +58,12 @@ class Dimmer {
   bool TryReadback(std::vector<float>& levels);
   bool ReadbackPending() const { return readback_pending_; }
 
+  // Riassunto per i segnali (una volta al secondo): dispatch di CSSummary e copia in uno
+  // dei due staging liberi (se sono entrambi in attesa, la richiesta si salta).
+  void RequestSummary(double now_ms, const ShadeParams& shade);
+  // Legge il riassunto piu' vecchio gia' pronto, senza mai attendere la GPU.
+  bool TryReadSummary(FrameSummary& out, double& measured_ms);
+
   // Diagnostica: copia asincrona di livelli, flag, classi e ultimo cambiamento.
   void RequestDebugReadback(double now_ms);
   bool TryDebugReadback(DimDebugGrids& out);
@@ -80,10 +88,20 @@ class Dimmer {
   ComPtr<ID3D11Device> device_;
   ComPtr<ID3D11DeviceContext> context_;
   ComPtr<ID3D11Buffer> constants_;
-  ComPtr<ID3D11ComputeShader> detect_, activate_, motion_h_, motion_v_, level_;
+  ComPtr<ID3D11ComputeShader> detect_, activate_, motion_h_, motion_v_, level_, summary_;
   unsigned active_[2] = {0, 0};
   Grid last_change_, flags_, hash_, sums_, motion_, levels_grid_, class_, zones_, saved_hash_, saved_age_;
   Grid anchor_hash_, anchor_time_, excursion_;
+  Grid luma_, content_change_;  // statistiche: luminanza media e ultimo cambio reale
+  ComPtr<ID3D11Buffer> summary_buffer_;
+  ComPtr<ID3D11UnorderedAccessView> summary_uav_;
+  ComPtr<ID3D11Buffer> summary_staging_[2];
+  bool summary_pending_[2] = {false, false};
+  double summary_time_ms_[2] = {0, 0};
+  uint64_t summary_seq_[2] = {0, 0};
+  uint64_t summary_counter_ = 0;
+  ShadeParams shade_;
+  DimParams last_params_;
   bool restore_ = false;
   DimSavedState pending_restore_;  // da restituire se si salva prima del primo frame
   ID3D11Texture2D* levels_ = nullptr;  // = levels_grid_.texture

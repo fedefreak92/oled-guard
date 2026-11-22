@@ -125,3 +125,30 @@ TEST(summary_motion_caption) {
   CHECK_EQ(std::string(oled::MotionCaption(0.1)), std::string("lavoro"));
   CHECK_EQ(std::string(oled::MotionCaption(0.2)), std::string("video o animazioni"));
 }
+
+// Buffer del riassunto scritto da CSSummary: totali in 64 slot, poi due parole per zona.
+TEST(summary_decode_layout) {
+  std::vector<uint32_t> w(oled::kSummaryWords, 0);
+  const auto total = [&](int slot, int field) -> uint32_t& { return w[slot * oled::kSummaryTotals + field]; };
+  total(0, oled::kSumRiskPx) = 256;
+  total(1, oled::kSumRiskPx) = 256;
+  total(1, oled::kSumUnprotectedPx) = 256;
+  total(5, oled::kSumMotionPx) = 1024;
+  total(2, oled::kSumLuma) = static_cast<uint32_t>(0.5 * 3072 * oled::kSummaryScale);
+  total(3, oled::kSumStillBefore) = static_cast<uint32_t>(1.0 * 256 * oled::kSummaryScale);
+  total(4, oled::kSumStillRemoved) = static_cast<uint32_t>(0.25 * 256 * oled::kSummaryScale);
+  w[oled::kSummaryZoneBase + 3 * 2] = static_cast<uint32_t>(0.75 * 256 * oled::kSummaryScale);
+  w[oled::kSummaryZoneBase + 3 * 2 + 1] = 256;
+  const double px = 64.0 * 48;
+  const FrameSummary s = oled::DecodeSummary(w, px);
+  CHECK_NEAR(s.risk, 512 / px, 1e-12);
+  CHECK_NEAR(s.risk_unprotected, 256 / px, 1e-12);
+  CHECK_NEAR(s.motion, 1024 / px, 1e-12);
+  CHECK_NEAR(s.brightness, 0.5 * 3072 / px, 1e-9);
+  CHECK_NEAR(s.light_still_before, 256 / px, 1e-9);
+  CHECK_NEAR(s.light_still_removed, 0.25 * 256 / px, 1e-9);
+  CHECK_NEAR(s.zone_light[3], 0.75, 1e-9);
+  CHECK_NEAR(s.zone_light[4], 0.0, 1e-12);
+  const FrameSummary bad = oled::DecodeSummary(std::vector<uint32_t>(10, 7), px);
+  CHECK_NEAR(bad.risk, 0.0, 1e-12);
+}

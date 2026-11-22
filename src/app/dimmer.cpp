@@ -8,6 +8,7 @@
 #include "dim_level.h"
 #include "dim_motion_h.h"
 #include "dim_motion_v.h"
+#include "dim_summary.h"
 
 namespace oled {
 namespace {
@@ -33,8 +34,12 @@ struct DimConstants {
   unsigned active0;
   unsigned active1;
   unsigned pad[2];
+  float shade_spread[4];
+  float shade_brightness;
+  float shade_strength;
+  unsigned pad2[2];
 };
-static_assert(sizeof(DimConstants) == 80);
+static_assert(sizeof(DimConstants) == 112);
 
 constexpr unsigned kFlagSdr = 1;
 constexpr unsigned kFlagSuspended = 2;
@@ -87,6 +92,7 @@ HRESULT Dimmer::Init(ID3D11Device* device, UINT width, UINT height, DXGI_FORMAT 
   shader(g_dim_motion_h, sizeof(g_dim_motion_h), motion_h_);
   shader(g_dim_motion_v, sizeof(g_dim_motion_v), motion_v_);
   shader(g_dim_level, sizeof(g_dim_level), level_);
+  shader(g_dim_summary, sizeof(g_dim_summary), summary_);
   if (FAILED(hr)) return hr;
 
   D3D11_BUFFER_DESC cb{};
@@ -113,6 +119,28 @@ HRESULT Dimmer::Init(ID3D11Device* device, UINT width, UINT height, DXGI_FORMAT 
   if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_UINT, no_flags.data(), 4, anchor_hash_))) return hr;
   if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_FLOAT, zeros.data(), 4, anchor_time_))) return hr;
   if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_FLOAT, no_excursion.data(), 4, excursion_))) return hr;
+  if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_FLOAT, zeros.data(), 4, luma_))) return hr;
+  if (FAILED(hr = CreateGrid(DXGI_FORMAT_R32_FLOAT, zeros.data(), 4, content_change_))) return hr;
+  // Buffer del riassunto (raw, interi a 32 bit) e due copie leggibili dalla CPU.
+  D3D11_BUFFER_DESC sb{};
+  sb.ByteWidth = kSummaryWords * 4;
+  sb.Usage = D3D11_USAGE_DEFAULT;
+  sb.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
+  sb.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS;
+  if (FAILED(hr = device_->CreateBuffer(&sb, nullptr, &summary_buffer_))) return hr;
+  D3D11_UNORDERED_ACCESS_VIEW_DESC ud{};
+  ud.Format = DXGI_FORMAT_R32_TYPELESS;
+  ud.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+  ud.Buffer.NumElements = kSummaryWords;
+  ud.Buffer.Flags = D3D11_BUFFER_UAV_FLAG_RAW;
+  if (FAILED(hr = device_->CreateUnorderedAccessView(summary_buffer_.Get(), &ud, &summary_uav_))) return hr;
+  D3D11_BUFFER_DESC st{};
+  st.ByteWidth = kSummaryWords * 4;
+  st.Usage = D3D11_USAGE_STAGING;
+  st.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+  for (auto& s : summary_staging_) {
+    if (FAILED(hr = device_->CreateBuffer(&st, nullptr, &s))) return hr;
+  }
   // Ripresa dopo una pausa: solo con le stesse dimensioni.
   restore_ = restore && restore->width == static_cast<int>(width) && restore->height == static_cast<int>(height) &&
              restore->ages.size() == n && restore->hashes.size() == n;
@@ -130,8 +158,15 @@ void Dimmer::Shutdown() {
   levels_ = nullptr;
   levels_srv_.Reset();
   for (Grid* g : {&last_change_, &flags_, &hash_, &sums_, &motion_, &levels_grid_, &class_, &zones_, &saved_hash_,
-                  &saved_age_, &anchor_hash_, &anchor_time_, &excursion_}) {
+                  &saved_age_, &anchor_hash_, &anchor_time_, &excursion_, &luma_, &content_change_}) {
     *g = Grid{};
+  }
+  summary_.Reset();
+  summary_buffer_.Reset();
+  summary_uav_.Reset();
+  for (int i = 0; i < 2; ++i) {
+    summary_staging_[i].Reset();
+    summary_pending_[i] = false;
   }
   detect_.Reset();
   activate_.Reset();
@@ -187,6 +222,9 @@ void Dimmer::SetConstants(double now_s, double dt_s, const DimParams& p, float s
             (first && restore_ ? kFlagRestore : 0) | (p.windows_like_desktop ? kFlagWindowsLikeDesktop : 0);
   c.active0 = active_[0];
   c.active1 = active_[1];
+  for (int i = 0; i < 4; ++i) c.shade_spread[i] = shade_.spread[i];
+  c.shade_brightness = shade_.brightness;
+  c.shade_strength = shade_.vignette_strength;
   c.cols = cols_;
   c.rows = rows_;
   c.width = width_;
@@ -197,7 +235,7 @@ void Dimmer::SetConstants(double now_s, double dt_s, const DimParams& p, float s
 void Dimmer::Run(ID3D11ComputeShader* shader, std::initializer_list<ID3D11ShaderResourceView*> srvs,
                  std::initializer_list<ID3D11UnorderedAccessView*> uavs, UINT groups_x, UINT groups_y) {
   ID3D11ShaderResourceView* srv_list[4] = {};
-  ID3D11UnorderedAccessView* uav_list[6] = {};
+  ID3D11UnorderedAccessView* uav_list[8] = {};
   UINT n = 0;
   for (auto* s : srvs) srv_list[n++] = s;
   n = 0;
@@ -206,13 +244,13 @@ void Dimmer::Run(ID3D11ComputeShader* shader, std::initializer_list<ID3D11Shader
   context_->CSSetShader(shader, nullptr, 0);
   context_->CSSetConstantBuffers(0, 1, &cb);
   context_->CSSetShaderResources(0, 4, srv_list);
-  context_->CSSetUnorderedAccessViews(0, 6, uav_list, nullptr);
+  context_->CSSetUnorderedAccessViews(0, 8, uav_list, nullptr);
   context_->Dispatch(groups_x, groups_y, 1);
   // Si staccano subito: la stessa texture fa da uscita e poi da ingresso.
   ID3D11ShaderResourceView* no_srv[4] = {};
-  ID3D11UnorderedAccessView* no_uav[6] = {};
+  ID3D11UnorderedAccessView* no_uav[8] = {};
   context_->CSSetShaderResources(0, 4, no_srv);
-  context_->CSSetUnorderedAccessViews(0, 6, no_uav, nullptr);
+  context_->CSSetUnorderedAccessViews(0, 8, no_uav, nullptr);
   context_->CSSetShader(nullptr, nullptr, 0);
 }
 
@@ -247,7 +285,7 @@ HRESULT Dimmer::Detect(ID3D11Texture2D* frame, ID3D11Texture2D* previous_cache, 
   SetConstants(Seconds(now_ms), 0, p, sdr_white, false, first_frame_);
   Run(detect_.Get(), {frame_srv.Get(), previous_srv_.Get(), saved_hash_.srv.Get(), saved_age_.srv.Get()},
       {last_change_.uav.Get(), flags_.uav.Get(), hash_.uav.Get(), anchor_hash_.uav.Get(), anchor_time_.uav.Get(),
-       excursion_.uav.Get()},
+       excursion_.uav.Get(), luma_.uav.Get(), content_change_.uav.Get()},
       cols_, rows_);
   if (first_frame_ && restore_) {
     saved_hash_ = Grid{};
@@ -264,6 +302,7 @@ void Dimmer::Update(double now_ms, const DimParams& p, bool suspended) {
   const double now_s = Seconds(now_ms);
   const double dt = last_update_s_ < 0 ? 0.0 : std::max(0.0, now_s - last_update_s_);
   last_update_s_ = now_s;
+  last_params_ = p;
   SetConstants(now_s, dt, p, last_white_, suspended, false);
   const UINT gx = (cols_ + 7) / 8, gy = (rows_ + 7) / 8;
   if (active_[0] || active_[1]) {
@@ -422,6 +461,44 @@ bool Dimmer::TryDebugReadback(DimDebugGrids& out) {
   }
   out.now_s = debug_now_s_;
   debug_pending_ = false;
+  return true;
+}
+
+void Dimmer::RequestSummary(double now_ms, const ShadeParams& shade) {
+  if (!Ready() || first_frame_) return;
+  int slot = -1;
+  for (int i = 0; i < 2; ++i) {
+    if (!summary_pending_[i]) slot = i;
+  }
+  if (slot < 0) return;  // entrambe le copie aspettano ancora la GPU
+  shade_ = shade;
+  SetConstants(Seconds(now_ms), 0, last_params_, last_white_, false, false);
+  const UINT zeros[4] = {0, 0, 0, 0};
+  context_->ClearUnorderedAccessViewUint(summary_uav_.Get(), zeros);
+  Run(summary_.Get(), {flags_.srv.Get(), luma_.srv.Get(), content_change_.srv.Get(), levels_grid_.srv.Get()},
+      {summary_uav_.Get()}, (cols_ + 7) / 8, (rows_ + 7) / 8);
+  context_->CopyResource(summary_staging_[slot].Get(), summary_buffer_.Get());
+  summary_pending_[slot] = true;
+  summary_time_ms_[slot] = now_ms;
+  summary_seq_[slot] = ++summary_counter_;
+}
+
+bool Dimmer::TryReadSummary(FrameSummary& out, double& measured_ms) {
+  int slot = -1;
+  for (int i = 0; i < 2; ++i) {
+    if (summary_pending_[i] && (slot < 0 || summary_seq_[i] < summary_seq_[slot])) slot = i;
+  }
+  if (slot < 0) return false;
+  D3D11_MAPPED_SUBRESOURCE map{};
+  const HRESULT hr = context_->Map(summary_staging_[slot].Get(), 0, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &map);
+  if (hr == DXGI_ERROR_WAS_STILL_DRAWING) return false;
+  summary_pending_[slot] = false;
+  if (FAILED(hr)) return false;
+  std::vector<uint32_t> words(kSummaryWords);
+  std::memcpy(words.data(), map.pData, words.size() * 4);
+  context_->Unmap(summary_staging_[slot].Get(), 0);
+  out = DecodeSummary(words, static_cast<double>(width_) * height_);
+  measured_ms = summary_time_ms_[slot];
   return true;
 }
 
