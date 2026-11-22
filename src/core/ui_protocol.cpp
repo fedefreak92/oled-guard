@@ -279,6 +279,84 @@ std::string BrowsedMessage(std::string_view exe) {
   return Compact(o);
 }
 
+namespace {
+JsonValue OptionalNumber(const std::optional<double>& v) { return v ? JsonValue(*v) : JsonValue(nullptr); }
+}  // namespace
+
+std::string SignalsMessage(const SignalSample& s) {
+  JsonValue o = JsonValue::MakeObject();
+  o.Set("type", JsonValue("signals"));
+  o.Set("measured", JsonValue(s.measured));
+  o.Set("risk", JsonValue(s.risk));
+  o.Set("motion", JsonValue(s.motion));
+  o.Set("brightness", JsonValue(s.brightness));
+  o.Set("caption", JsonValue(std::string(MotionCaption(s.motion))));
+  return Compact(o);
+}
+
+std::string SignalsHistoryMessage(const SignalRing& r) {
+  JsonValue list = JsonValue::MakeArray();
+  for (const SignalSample& s : r.Samples()) {
+    if (!s.measured) {
+      list.Push(JsonValue(nullptr));
+      continue;
+    }
+    JsonValue a = JsonValue::MakeArray();
+    a.Push(JsonValue(s.risk));
+    a.Push(JsonValue(s.motion));
+    a.Push(JsonValue(s.brightness));
+    list.Push(a);
+  }
+  JsonValue o = JsonValue::MakeObject();
+  o.Set("type", JsonValue("signals"));
+  o.Set("history", list);
+  return Compact(o);
+}
+
+std::string HistoryMessage(const HistoryPayload& p) {
+  JsonValue o = JsonValue::MakeObject();
+  o.Set("type", JsonValue("history"));
+  JsonValue timeline = JsonValue::MakeArray();
+  for (const auto& v : p.timeline) timeline.Push(OptionalNumber(v));
+  o.Set("timeline", timeline);
+  o.Set("timeline_end", JsonValue(static_cast<double>(p.timeline_end_local_s)));
+  o.Set("risk_peak_24h", JsonValue(p.risk_peak_24h));
+  JsonValue wear = JsonValue::MakeObject();
+  wear.Set("monitor", JsonValue(p.wear_monitor));
+  JsonValue cells = JsonValue::MakeArray();
+  for (double v : p.wear.normalized) cells.Push(JsonValue(v));
+  wear.Set("cells", cells);
+  wear.Set("hottest", JsonValue(p.wear.hottest));
+  wear.Set("hottest_hours", JsonValue(p.wear.hottest_hours));
+  wear.Set("hottest_label", JsonValue(p.wear.hottest_label));
+  wear.Set("concentration", JsonValue(p.wear.concentration));
+  wear.Set("over_double", JsonValue(p.wear.over_double));
+  wear.Set("measured_hours", JsonValue(p.wear.measured_hours));
+  wear.Set("since", JsonValue(static_cast<double>(p.wear.since_local_s)));
+  o.Set("wear", wear);
+  JsonValue apps = JsonValue::MakeArray();
+  for (size_t i = 0; i < p.top_apps.size(); ++i) {
+    JsonValue a = JsonValue::MakeObject();
+    a.Set("exe", JsonValue(p.top_apps[i].exe));
+    a.Set("protected_s", JsonValue(p.top_apps[i].protected_s));
+    a.Set("paused_s", JsonValue(p.top_apps[i].paused_s));
+    a.Set("rule", JsonValue(i < p.top_app_rules.size() ? p.top_app_rules[i] : std::string("auto")));
+    apps.Push(a);
+  }
+  o.Set("top_apps", apps);
+  JsonValue content = JsonValue::MakeArray();
+  for (double v : p.content) content.Push(JsonValue(v));
+  o.Set("content", content);
+  o.Set("sessions_total", JsonValue(p.sessions_total));
+  o.Set("sessions_week", JsonValue(p.sessions_week));
+  o.Set("streak", JsonValue(p.streak));
+  o.Set("streak_best", JsonValue(p.streak_best));
+  o.Set("avoided_today", OptionalNumber(p.avoided_today));
+  o.Set("avoided_total", OptionalNumber(p.avoided_total));
+  o.Set("protected_week_s", JsonValue(p.protected_week_s));
+  return Compact(o);
+}
+
 std::optional<UiCommand> ParseUiCommand(std::string_view json) {
   const auto parsed = ParseJson(json);
   if (!parsed.value || parsed.value->type() != JsonValue::Type::Object) return std::nullopt;
@@ -350,6 +428,8 @@ std::optional<UiCommand> ParseUiCommand(std::string_view json) {
     c.type = UiCommandType::OpenLogFolder;
   } else if (name == "browseExe") {
     c.type = UiCommandType::BrowseExe;
+  } else if (name == "clearHistory") {
+    c.type = UiCommandType::ClearHistory;
   } else if (name == "clearActivity") {
     c.type = UiCommandType::ClearActivity;
   } else if (name == "setMonitor") {

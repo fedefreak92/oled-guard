@@ -3,6 +3,8 @@
 #include <cmath>
 
 #include "activity_log.h"
+#include "history.h"
+#include "signals.h"
 #include "app_history.h"
 #include "json.h"
 #include "test_framework.h"
@@ -349,4 +351,83 @@ TEST(ui_parse_new_commands_reject) {
   }
   CHECK(!oled::ParseUiCommand(R"({"cmd":"setDimExclude","on":true,"exe":")" + std::string(261, 'a') + "\"}")
              .has_value());
+}
+
+TEST(ui_signals_messages) {
+  oled::SignalSample s{true, 0.24, 0.1, 0.41};
+  const JsonValue v = Parse(oled::SignalsMessage(s));
+  CHECK_EQ(v.Find("type")->AsString(), std::string("signals"));
+  CHECK(v.Find("measured")->AsBool());
+  CHECK_NEAR(v.Find("risk")->AsNumber(), 0.24, 1e-9);
+  CHECK_NEAR(v.Find("motion")->AsNumber(), 0.1, 1e-9);
+  CHECK_NEAR(v.Find("brightness")->AsNumber(), 0.41, 1e-9);
+  CHECK_EQ(v.Find("caption")->AsString(), std::string("lavoro"));
+  oled::SignalRing ring;
+  ring.Push(s);
+  ring.Push(oled::SignalSample{});
+  const JsonValue h = Parse(oled::SignalsHistoryMessage(ring));
+  CHECK_EQ(h.Find("type")->AsString(), std::string("signals"));
+  const auto& list = h.Find("history")->AsArray();
+  CHECK_EQ(list.size(), size_t{2});
+  if (list.size() == 2) {
+    CHECK_EQ(list[0].AsArray().size(), size_t{3});
+    CHECK(list[1].type() == JsonValue::Type::Null);
+  }
+}
+
+TEST(ui_history_message_fields) {
+  oled::HistoryPayload p;
+  p.timeline.assign(oled::kTimelineBuckets, std::nullopt);
+  p.timeline.back() = 0.3;
+  p.timeline_end_local_s = 123456;
+  p.risk_peak_24h = 0.5;
+  p.wear.hottest = 3;
+  p.wear.hottest_label = "in alto a sinistra";
+  p.wear.normalized[3] = 1;
+  p.wear_monitor = "LG TV SSCR2";
+  p.top_apps = {oled::AppView{"code.exe", 100, 20}};
+  p.top_app_rules = {"never"};
+  p.content = {0.5, 0.2, 0.2, 0.1, 0};
+  p.sessions_total = 47;
+  p.sessions_week = 3;
+  p.streak = 12;
+  p.streak_best = 19;
+  p.avoided_total = 0.31;
+  p.protected_week_s = 18720;
+  const JsonValue v = Parse(oled::HistoryMessage(p));
+  CHECK_EQ(v.Find("type")->AsString(), std::string("history"));
+  const auto& t = v.Find("timeline")->AsArray();
+  CHECK_EQ(t.size(), size_t{oled::kTimelineBuckets});
+  CHECK(t.front().type() == JsonValue::Type::Null);
+  CHECK_NEAR(t.back().AsNumber(), 0.3, 1e-9);
+  CHECK_NEAR(v.Find("timeline_end")->AsNumber(), 123456, 1e-9);
+  CHECK_NEAR(v.Find("risk_peak_24h")->AsNumber(), 0.5, 1e-9);
+  const JsonValue* wear = v.Find("wear");
+  CHECK(wear && wear->Find("cells") && wear->Find("cells")->AsArray().size() == size_t{oled::kZones});
+  if (wear) {
+    CHECK_EQ(wear->Find("monitor")->AsString(), std::string("LG TV SSCR2"));
+    CHECK_EQ(wear->Find("hottest_label")->AsString(), std::string("in alto a sinistra"));
+    CHECK(wear->Find("hottest_hours") && wear->Find("concentration") && wear->Find("over_double") &&
+          wear->Find("measured_hours") && wear->Find("since"));
+  }
+  const auto& apps = v.Find("top_apps")->AsArray();
+  CHECK_EQ(apps.size(), size_t{1});
+  if (!apps.empty()) {
+    CHECK_EQ(apps[0].Find("exe")->AsString(), std::string("code.exe"));
+    CHECK_EQ(apps[0].Find("rule")->AsString(), std::string("never"));
+    CHECK_NEAR(apps[0].Find("paused_s")->AsNumber(), 20, 1e-9);
+  }
+  CHECK_EQ(v.Find("content")->AsArray().size(), size_t{5});
+  CHECK_NEAR(v.Find("sessions_total")->AsNumber(), 47, 1e-9);
+  CHECK_NEAR(v.Find("sessions_week")->AsNumber(), 3, 1e-9);
+  CHECK_NEAR(v.Find("streak")->AsNumber(), 12, 1e-9);
+  CHECK_NEAR(v.Find("streak_best")->AsNumber(), 19, 1e-9);
+  CHECK(v.Find("avoided_today")->type() == JsonValue::Type::Null);
+  CHECK_NEAR(v.Find("avoided_total")->AsNumber(), 0.31, 1e-9);
+  CHECK_NEAR(v.Find("protected_week_s")->AsNumber(), 18720, 1e-9);
+}
+
+TEST(ui_parse_clear_history) {
+  auto c = oled::ParseUiCommand(R"({"cmd":"clearHistory"})");
+  CHECK(c && c->type == UiCommandType::ClearHistory);
 }

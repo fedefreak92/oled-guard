@@ -10,6 +10,8 @@
 
 #include "activity_log.h"
 #include "app_history.h"
+#include "history.h"
+#include "signals.h"
 #include "config.h"
 #include "json.h"
 #include "offset.h"
@@ -71,6 +73,29 @@ std::string ActivityMessage(const ActivityLog& log);
 std::string ActivityAddMessage(const ActivityEvent& e);
 std::string AboutMessage(std::string_view version, std::string_view config_path, std::string_view log_dir);
 std::string BrowsedMessage(std::string_view exe);
+// Segnali dal vivo: il campione dell'ultimo secondo, oppure gli ultimi 60 (null = non misurato).
+std::string SignalsMessage(const SignalSample& s);
+std::string SignalsHistoryMessage(const SignalRing& r);
+
+struct HistoryPayload {
+  std::vector<std::optional<double>> timeline;  // kTimelineBuckets secchi, dal piu' vecchio
+  int64_t timeline_end_local_s = 0;
+  double risk_peak_24h = 0;
+  WearView wear;
+  std::string wear_monitor;
+  std::vector<AppView> top_apps;
+  std::vector<std::string> top_app_rules;  // "auto" | "always" | "never", stesso ordine
+  std::array<double, kContentKinds> content{};
+  int sessions_total = 0;
+  int sessions_week = 0;
+  int streak = 0;
+  int streak_best = 0;
+  std::optional<double> avoided_today;
+  std::optional<double> avoided_total;
+  double protected_week_s = 0;
+};
+std::string HistoryMessage(const HistoryPayload& p);
+
 // Avviso breve mostrato dalla pagina (testo italiano, UTF-8).
 std::string NoticeMessage(std::string_view text);
 
@@ -118,6 +143,7 @@ enum class UiCommandType {
   SetMonitor,     // id = device o "auto"
   ClearActivity,
   SetDimExclude,  // exe, on
+  ClearHistory,
 };
 
 struct UiCommand {
