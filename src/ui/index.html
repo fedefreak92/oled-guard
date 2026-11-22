@@ -39,15 +39,19 @@
 
     <footer class="strip">
       <div class="strip-head">
-        <h6><i class="dot"></i>OGGI</h6>
+        <h6><i class="dot"></i>SEGNALI DAL VIVO · ULTIMI 60 S</h6>
         <button class="link" id="btnOpenStats">Apri statistiche ›</button>
       </div>
-      <div class="tiles">
-        <div class="tile"><small>Sessione</small><b class="accent" id="sSession">-</b><span>da quando l'app è aperta</span></div>
-        <div class="tile"><small>Protetto oggi</small><b id="sToday">-</b><span>overlay a schermo</span></div>
-        <div class="tile"><small>Totale</small><b id="sTotal">-</b><span>da sempre</span></div>
-        <div class="tile"><small>Uniformità</small><b id="sUniform">-</b><span>usura fra le posizioni</span></div>
-        <div class="tile"><small>Pause oggi</small><b id="sPauses">-</b><span id="sPausesSub">giochi, video, blocchi</span></div>
+      <div class="sig-tiles">
+        <div class="sig risk"><div class="sig-top"><small>Rischio</small><b id="sigRisk">-</b></div><div class="spark" id="sparkRisk"></div><span id="sigRiskSub">-</span></div>
+        <div class="sig motion"><div class="sig-top"><small>Movimento</small><b id="sigMotion">-</b></div><div class="spark" id="sparkMotion"></div><span id="sigMotionSub">-</span></div>
+        <div class="sig bright"><div class="sig-top"><small>Luminosità</small><b id="sigBright">-</b></div><div class="spark" id="sparkBright"></div><span id="sigBrightSub">-</span></div>
+        <div class="sig sum">
+          <div><b class="accent" id="sSession">-</b><small>Sessione</small></div>
+          <div><b id="sTotal">-</b><small>Protetto in totale</small></div>
+          <div><b id="sPeak">-</b><small>Picco rischio · 24 h</small></div>
+          <div><b class="accent" id="sAvoided">-</b><small>Usura evitata oggi</small></div>
+        </div>
       </div>
     </footer>
   </section>

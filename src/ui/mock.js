@@ -57,7 +57,11 @@ if (preview) {
       this.sendMonitors();
       this.sendWindows();
       this.sendStats();
+      this.sendSignalsHistory();
+      this.sendHistory();
       this.step();
+      setInterval(() => this.sendSignal(), 1000);
+      setInterval(() => this.sendHistory(), 60000);
       setInterval(() => this.step(), 250);
       setInterval(() => this.sendStats(), 5000);
       setInterval(() => this.sendDim(), 1000);
@@ -99,6 +103,68 @@ if (preview) {
     sendStats() {
       const by = { 'Gioco o app a schermo intero': 2, 'Finestra a tutto schermo': 1 };
       receive({ type: 'stats', cells: this.cells, uniformity: 96.2, today_ms: 22320000 + (now() - this.t0), total_ms: 511200000, pauses_today: 3, pauses_by_reason: by });
+    },
+    signalAt(t) {
+      const s = t / 1000;
+      const motion = Math.max(0, 0.09 + 0.05 * Math.sin(s / 3) + (Math.sin(s / 11) > 0.8 ? 0.2 : 0));
+      return { risk: 0.22 + 0.04 * Math.sin(s / 7), motion, brightness: 0.41 + 0.03 * Math.sin(s / 5) };
+    },
+    sendSignal() {
+      if (this.paused) { receive({ type: 'signals', measured: false, risk: 0, motion: 0, brightness: 0, caption: '' }); return; }
+      const v = this.signalAt(now());
+      const caption = v.motion < 0.02 ? 'interfaccia ferma' : (v.motion <= 0.15 ? 'lavoro' : 'video o animazioni');
+      receive({ type: 'signals', measured: true, ...v, caption });
+    },
+    sendSignalsHistory() {
+      const t = now();
+      const history = [];
+      for (let i = 59; i >= 0; i--) {
+        if (i > 30 && i < 38) { history.push(null); continue; }  // breve pausa: buco nella linea
+        const v = this.signalAt(t - i * 1000);
+        history.push([v.risk, v.motion, v.brightness]);
+      }
+      receive({ type: 'signals', history });
+    },
+    sendHistory() {
+      const end = Math.floor(now() / 1000) - new Date().getTimezoneOffset() * 60;
+      const timeline = [];
+      for (let i = 2015; i >= 0; i--) {
+        const s = end - i * 300;
+        const hour = Math.floor((s % 86400) / 3600);
+        if (hour < 8) { timeline.push(null); continue; }  // PC spento di notte
+        const x = s / 3600;
+        timeline.push(Math.max(0, 0.3 + 0.25 * Math.sin(x / 2.3) + 0.1 * Math.sin(x * 1.7)));
+      }
+      const cells = [];
+      for (let y = 0; y < 18; y++) {
+        for (let x = 0; x < 32; x++) {
+          let v = 0.15 + 0.1 * Math.random();
+          if (x < 5 && y < 6) v = 0.75 + 0.25 * Math.random();   // icone in alto a sinistra
+          if (x > 26 && y < 2) v = 0.6 + 0.2 * Math.random();    // orologio
+          if (y >= 17) v = 0.5 + 0.2 * Math.random();            // barra delle applicazioni
+          if (x > 10 && x < 22 && y > 12 && y < 16) v = 0.45;
+          cells.push(v);
+        }
+      }
+      const max = Math.max(...cells);
+      receive({
+        type: 'history', timeline, timeline_end: end, risk_peak_24h: 0.82,
+        wear: {
+          monitor: 'LG TV SSCR2', cells: cells.map((v) => v / max), hottest: 0, hottest_hours: 38.5,
+          hottest_label: 'in alto a sinistra', concentration: 1.86, over_double: 14, measured_hours: 142,
+          since: end - 45 * 86400,
+        },
+        top_apps: [
+          { exe: 'code.exe', protected_s: 51720, paused_s: 0, rule: 'auto' },
+          { exe: 'chrome.exe', protected_s: 32400, paused_s: 7200, rule: 'auto' },
+          { exe: 'cyberpunk2077.exe', protected_s: 0, paused_s: 30600, rule: 'auto' },
+          { exe: 'discord.exe', protected_s: 14400, paused_s: 0, rule: 'never' },
+          { exe: 'vlc.exe', protected_s: 3600, paused_s: 5400, rule: 'never' },
+        ],
+        content: [0.42, 0.24, 0.18, 0.11, 0.05],
+        sessions_total: 47, sessions_week: 3, streak: 12, streak_best: 19,
+        avoided_today: 0.31, avoided_total: 0.27, protected_week_s: 18720,
+      });
     },
     sendDim() {
       if (!dimWatching) return;

@@ -12,7 +12,8 @@ const preview = !webview;
 // Ultimo messaggio di ogni tipo; "activity" tiene la lista intera.
 const store = {
   state: null, stats: null, config: null, apps: null, windows: null, dim: null,
-  monitors: null, activity: [], about: null,
+  monitors: null, activity: [], about: null, history: null,
+  signals: [], signalCaption: '', signalsVersion: 0,
   nextMoveAt: 0, highlightUntil: 0,
 };
 const listeners = {};
@@ -47,6 +48,15 @@ function receive(msg) {
         if (first && first.kind === a.kind && first.text === a.text && a.count > 1) store.activity[0] = a;
         else store.activity = [a, ...store.activity].slice(0, 100);
       }
+      break;
+    case 'signals':
+      if (msg.history) {
+        store.signals = msg.history.map((s) => (s ? { measured: true, risk: s[0], motion: s[1], brightness: s[2] } : { measured: false }));
+      } else {
+        store.signals = [...store.signals, msg].slice(-60);
+        store.signalCaption = msg.caption || '';
+      }
+      store.signalsVersion++;
       break;
     case 'notice': toast(msg.text); return;
     case 'processes': case 'browsed': break;
@@ -388,6 +398,53 @@ function buildShell() {
   document.querySelector('.top .fill').addEventListener('dblclick', () => send({ cmd: 'window', action: 'maximize' }));
 }
 
+// Grafico a linea con area sfumata; i campioni non misurati interrompono la linea.
+// values: numeri o null; max: valore in cima al grafico.
+function sparkline(box, values, max) {
+  const W = 120, H = 30, n = 60;
+  const x = (i) => ((i + n - values.length) / (n - 1)) * W;
+  const y = (v) => H - Math.min(1, v / max) * H;
+  let line = '', area = '';
+  let run = [];
+  const flush = () => {
+    if (run.length > 0) {
+      const pts = run.map(([i, v]) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+      line += `M${pts.join('L')}`;
+      area += `M${x(run[0][0]).toFixed(1)},${H}L${pts.join('L')}L${x(run[run.length - 1][0]).toFixed(1)},${H}Z`;
+    }
+    run = [];
+  };
+  values.forEach((v, i) => { if (v === null || v === undefined) flush(); else run.push([i, v]); });
+  flush();
+  const svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><path class="area" d="${area}"/><path class="line" d="${line}"/></svg>`;
+  if (box.dataset.svg !== svg) { box.innerHTML = svg; box.dataset.svg = svg; }
+}
+
+function channel(key) {
+  const vals = store.signals.map((s) => (s.measured ? s[key] : null));
+  const m = vals.filter((v) => v !== null);
+  return { vals, peak: m.length ? Math.max(...m) : 0, mean: m.length ? m.reduce((a, b) => a + b, 0) / m.length : 0, any: m.length > 0 };
+}
+
+let lastSignalsVersion = -1;
+function renderSignals() {
+  if (store.signalsVersion === lastSignalsVersion) return;
+  lastSignalsVersion = store.signalsVersion;
+  const last = store.signals[store.signals.length - 1];
+  const live = !!(last && last.measured);
+  const pct = (v) => `${Math.round(v * 100)}%`;
+  const risk = channel('risk'), motion = channel('motion'), bright = channel('brightness');
+  sparkline($('sparkRisk'), risk.vals, 1);
+  sparkline($('sparkMotion'), motion.vals, 1);
+  sparkline($('sparkBright'), bright.vals, Math.max(1, bright.peak));
+  setText($('sigRisk'), live ? pct(last.risk) : '–');
+  setText($('sigMotion'), live ? pct(last.motion) : '–');
+  setText($('sigBright'), live ? pct(last.brightness) : '–');
+  setText($('sigRiskSub'), live ? `picco ${Math.round(risk.peak * 100)} · media ${Math.round(risk.mean * 100)}` : 'in pausa');
+  setText($('sigMotionSub'), live ? `media ${Math.round(motion.mean * 100)} · ${store.signalCaption}` : 'in pausa');
+  setText($('sigBrightSub'), live ? `media ${Math.round(bright.mean * 100)} (APL)` : 'in pausa');
+}
+
 function statusInfo(s) {
   if (!s) return { cls: 'paused', text: '...' };
   if (s.testing_shift) return { cls: 'test', text: 'Prova in corso' };
@@ -416,12 +473,13 @@ function renderShell() {
   setText($('sSession'), session);
   const version = about ? `v${about.version}` : 'v-';
   ['brandVersion', 'footVersion', 'topVersion'].forEach((id) => setText($(id), version));
-  if (st) {
-    setText($('sToday'), fmtClock(st.today_ms));
-    setText($('sTotal'), fmtHours(st.total_ms));
-    setText($('sUniform'), st.uniformity === null ? 'n/d' : fmtPct(st.uniformity, 1));
-    setText($('sPauses'), String(st.pauses_today));
+  if (st) setText($('sTotal'), fmtHours(st.total_ms));
+  const hist = store.history;
+  if (hist) {
+    setText($('sPeak'), `${Math.round(hist.risk_peak_24h * 100)}%`);
+    setText($('sAvoided'), hist.avoided_today === null ? 'n/d' : `${Math.round(hist.avoided_today * 100)}%`);
   }
+  renderSignals();
 }
 
 // Ridisegno raggruppato: piu' messaggi nello stesso frame producono un solo passaggio.
