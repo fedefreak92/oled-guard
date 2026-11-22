@@ -115,6 +115,10 @@ class History {
   double light_removed_total_ = 0;
 };
 
+// Vero se il JSON e' uno storico di questa versione (oggetto con "version": 1). Un file
+// di un'altra versione non va letto ne' sovrascritto: il chiamante lo mette da parte.
+bool HistoryJsonUsable(const JsonValue& v);
+
 int DayKeyAddDays(int day_key, int days);  // calendario gregoriano
 int Weekday(int day_key);                  // 0 = lunedi'
 

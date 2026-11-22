@@ -17,9 +17,20 @@ History LoadHistory(const std::filesystem::path& file) {
   std::ifstream in(file, std::ios::binary);
   std::ostringstream text;
   text << in.rdbuf();
+  in.close();
   const auto parsed = ParseJson(text.str());
-  if (!parsed.value || parsed.value->type() != JsonValue::Type::Object) {
-    LogWarn("history.json non leggibile ({}): storico vuoto", parsed.error);
+  if (!parsed.value || !HistoryJsonUsable(*parsed.value)) {
+    // Non si sovrascrive in silenzio (puo' essere di una versione piu' nuova): si mette da
+    // parte con un nome nuovo e si riparte da uno storico vuoto.
+    std::filesystem::path aside = file;
+    aside += L".non-letto";
+    for (int i = 2; std::filesystem::exists(aside, ec) && i < 100; ++i) {
+      aside = file;
+      aside += L".non-letto-" + std::to_wstring(i);
+    }
+    std::filesystem::rename(file, aside, ec);
+    LogWarn("history.json non leggibile o di un'altra versione ({}): messo da parte come {}, storico vuoto",
+            parsed.value ? "versione diversa" : parsed.error, aside.filename().string());
     return History{};
   }
   return History::FromJson(*parsed.value);

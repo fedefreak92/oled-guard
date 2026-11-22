@@ -279,3 +279,40 @@ TEST(history_json_keeps_top_apps_per_day) {
   CHECK_EQ(top.front().exe, std::string("app59.exe"));
   CHECK_EQ(top.back().exe, std::string("app10.exe"));
 }
+
+// Un file di un'altra versione o di forma sbagliata non va riusato (ne' sovrascritto in
+// silenzio): il chiamante lo mette da parte.
+TEST(history_json_usable_only_version_1) {
+  const auto usable = [](const char* text) {
+    const auto parsed = oled::ParseJson(text);
+    return parsed.value.has_value() && oled::HistoryJsonUsable(*parsed.value);
+  };
+  CHECK(usable(R"({"version": 1})"));
+  CHECK(!usable(R"({"version": 2, "timeline": []})"));
+  CHECK(!usable("{}"));
+  CHECK(!usable("[]"));
+  CHECK(!usable(R"({"version": "1"})"));
+}
+
+// L'orologio torna indietro (correzione manuale, data sbagliata all'avvio poi corretta):
+// i secchi "nel futuro" si scartano e il grafico riprende subito.
+TEST(history_timeline_recovers_after_clock_goes_back) {
+  History h;
+  const FrameSummary a = Risk(0.2), b = Risk(0.6);
+  h.AddSecond(Sec(kMonday + 30 * kDay, 20261223, &a));  // data sbagliata, un mese avanti
+  h.AddSecond(Sec(kMonday, 20261123, &b));               // orologio corretto
+  h.AddSecond(Sec(kMonday + 300, 20261123, &b));
+  const auto t = h.Timeline(kMonday + 300, 2);
+  CHECK(t[0].has_value() && t[1].has_value());
+  if (t[0] && t[1]) {
+    CHECK_NEAR(*t[0], 0.6, 1e-9);
+    CHECK_NEAR(*t[1], 0.6, 1e-9);
+  }
+  // Un piccolo passo indietro (ora legale, pochi minuti) resta nell'ultimo secchio.
+  History d;
+  d.AddSecond(Sec(kMonday + 600, 20261123, &a));
+  d.AddSecond(Sec(kMonday + 599, 20261123, &b));
+  const auto u = d.Timeline(kMonday + 600, 1);
+  CHECK(u[0].has_value());
+  if (u[0]) CHECK_NEAR(*u[0], 0.4, 1e-9);
+}

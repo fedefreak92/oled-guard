@@ -81,8 +81,12 @@ void History::AddSecond(const SecondSample& s) {
 
   if (const FrameSummary* f = s.summary) {
     const int64_t index = s.local_s / kBucketS;
+    // Orologio tornato indietro di oltre 2 ore (correzione, data sbagliata all'avvio): i
+    // secchi "nel futuro" si scartano, altrimenti il grafico resterebbe fermo. Il cambio
+    // dell'ora legale (1 ora) resta nell'ultimo secchio, come previsto dallo spec.
+    while (!timeline_.empty() && timeline_.back().index > index + 24) timeline_.pop_back();
     if (timeline_.empty() || timeline_.back().index < index) timeline_.push_back(Bucket{index, 0, 0});
-    // Un orologio che torna indietro (ora legale) aggiunge all'ultimo secchio.
+    // Un piccolo passo indietro (ora legale, pochi minuti) aggiunge all'ultimo secchio.
     Bucket& b = timeline_.back();
     b.sum += f->risk;
     ++b.count;
@@ -321,6 +325,12 @@ JsonValue History::ToJson() const {
   o.Set("light_before_total", JsonValue(light_before_total_));
   o.Set("light_removed_total", JsonValue(light_removed_total_));
   return o;
+}
+
+bool HistoryJsonUsable(const JsonValue& v) {
+  if (v.type() != JsonValue::Type::Object) return false;
+  const JsonValue* version = v.Find("version");
+  return version && version->type() == JsonValue::Type::Number && version->AsNumber() == 1;
 }
 
 History History::FromJson(const JsonValue& v) {

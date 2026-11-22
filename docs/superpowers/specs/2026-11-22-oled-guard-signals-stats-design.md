@@ -93,8 +93,9 @@ per pixel, divisa per il numero di pixel). Le celle parziali ai bordi usano i pi
 reali.
 
 Seconda uscita nuova `content_change_out` (`RWTexture2D<float>`, u7, l'ultimo UAV
-disponibile): l'istante dell'ultimo cambio **reale** del contenuto della cella, con la
-stessa regola delle deviazioni brevi di `last_change`, ma che `CSActivate` non tocca.
+disponibile): l'istante dell'ultimo cambio **reale** dei pixel della cella (senza la regola delle
+deviazioni brevi di `last_change`: servirebbero altre due griglie e gli UAV sono finiti),
+che `CSActivate` non tocca.
 Scelta del progetto: `last_change` viene riportato a "adesso" su tutte le celle della
 finestra sotto il mouse o in primo piano (`dim_activate`), quindi usarlo renderebbe
 falsi Rischio, Movimento, Usura per contenuto e Usura evitata (una pagina bianca ferma
