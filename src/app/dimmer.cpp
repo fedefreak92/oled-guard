@@ -497,7 +497,7 @@ bool Dimmer::TryReadSummary(FrameSummary& out, double& measured_ms) {
   std::vector<uint32_t> words(kSummaryWords);
   std::memcpy(words.data(), map.pData, words.size() * 4);
   context_->Unmap(summary_staging_[slot].Get(), 0);
-  out = DecodeSummary(words, static_cast<double>(width_) * height_);
+  out = DecodeSummary(words, static_cast<double>(width_) * height_, GridForSize(width_, height_));
   measured_ms = summary_time_ms_[slot];
   return true;
 }

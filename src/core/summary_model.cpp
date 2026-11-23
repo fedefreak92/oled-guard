@@ -1,13 +1,24 @@
 #include "summary_model.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace oled {
 
-int ZoneOf(int cx, int cy, int cols, int rows) {
-  const int zx = std::min(kZoneCols - 1, cx * kZoneCols / std::max(1, cols));
-  const int zy = std::min(kZoneRows - 1, cy * kZoneRows / std::max(1, rows));
-  return zy * kZoneCols + zx;
+ZoneGrid GridForSize(int width, int height) {
+  if (width <= 0 || height <= 0) return ZoneGrid{};
+  const double a = static_cast<double>(width) / height;
+  ZoneGrid g;
+  g.rows = std::max(1, static_cast<int>(std::lround(std::sqrt(576.0 / a))));
+  g.cols = std::max(1, static_cast<int>(std::lround(g.rows * a)));
+  while (g.Count() > kMaxZones && g.cols > 1) --g.cols;
+  return g;
+}
+
+int ZoneOf(int cx, int cy, int cols, int rows, ZoneGrid grid) {
+  const int zx = std::min(grid.cols - 1, cx * grid.cols / std::max(1, cols));
+  const int zy = std::min(grid.rows - 1, cy * grid.rows / std::max(1, rows));
+  return zy * grid.cols + zx;
 }
 
 FrameSummary ComputeSummary(const DimModel& m, double now_s, const ShadeParams& shade) {
@@ -15,7 +26,8 @@ FrameSummary ComputeSummary(const DimModel& m, double now_s, const ShadeParams& 
   const int w = m.Width(), h = m.Height();
   const double total = static_cast<double>(w) * h;
   if (total <= 0) return s;
-  std::array<double, kZones> zone_px{};
+  s.grid = GridForSize(w, h);
+  std::array<double, kMaxZones> zone_px{};
   for (int cy = 0; cy < m.Rows(); ++cy) {
     for (int cx = 0; cx < m.Cols(); ++cx) {
       const int x0 = cx * kDimCellPx, x1 = std::min(w, x0 + kDimCellPx);
@@ -38,17 +50,19 @@ FrameSummary ComputeSummary(const DimModel& m, double now_s, const ShadeParams& 
         s.light_still_before += luma * area;
         s.light_still_removed += (luma - arrived) * area;
       }
-      const int z = ZoneOf(cx, cy, m.Cols(), m.Rows());
+      const int z = ZoneOf(cx, cy, m.Cols(), m.Rows(), s.grid);
       s.zone_light[z] += arrived * px;
       zone_px[z] += px;
     }
   }
-  for (int z = 0; z < kZones; ++z) s.zone_light[z] = zone_px[z] > 0 ? s.zone_light[z] / zone_px[z] : 0;
+  for (int z = 0; z < s.grid.Count(); ++z) s.zone_light[z] = zone_px[z] > 0 ? s.zone_light[z] / zone_px[z] : 0;
   return s;
 }
 
-FrameSummary DecodeSummary(const std::vector<uint32_t>& words, double total_px) {
+FrameSummary DecodeSummary(const std::vector<uint32_t>& words, double total_px, ZoneGrid grid) {
   FrameSummary s;
+  s.grid = grid;
+  if (grid.cols <= 0 || grid.rows <= 0 || grid.Count() > kMaxZones) return s;
   if (words.size() != static_cast<size_t>(kSummaryWords) || total_px <= 0) return s;
   std::array<double, kSummaryTotals> t{};
   for (int slot = 0; slot < kSummarySlots; ++slot) {
@@ -60,7 +74,7 @@ FrameSummary DecodeSummary(const std::vector<uint32_t>& words, double total_px) 
   s.brightness = t[kSumLuma] / kSummaryScale / total_px;
   s.light_still_before = t[kSumStillBefore] / kSummaryScale / total_px;
   s.light_still_removed = t[kSumStillRemoved] / kSummaryScale / total_px;
-  for (int z = 0; z < kZones; ++z) {
+  for (int z = 0; z < grid.Count(); ++z) {
     const double light = words[static_cast<size_t>(kSummaryZoneBase) + z * 2];
     const double px = words[static_cast<size_t>(kSummaryZoneBase) + z * 2 + 1];
     s.zone_light[z] = px > 0 ? light / kSummaryScale / px : 0;

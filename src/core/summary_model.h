@@ -13,6 +13,20 @@
 
 namespace oled {
 
+// Griglia delle zone della mappa di usura: dipende dalle proporzioni dello schermo,
+// circa 576 zone quasi quadrate, al massimo kMaxZones.
+inline constexpr int kMaxZones = 640;
+struct ZoneGrid {
+  int cols = 32;
+  int rows = 18;
+  int Count() const { return cols * rows; }
+  bool operator==(const ZoneGrid&) const = default;
+};
+// a = w/h; rows = round(sqrt(576/a)); cols = round(rows*a); Count() <= kMaxZones.
+// Dimensioni non valide: 32x18.
+ZoneGrid GridForSize(int width, int height);
+
+// Griglia 16:9 dello storico versione 1 (history.json prima della 1.2.0).
 inline constexpr int kZoneCols = 32;
 inline constexpr int kZoneRows = 18;
 inline constexpr int kZones = kZoneCols * kZoneRows;
@@ -27,7 +41,8 @@ struct FrameSummary {
   double brightness = 0;          // luminanza media (1 = bianco SDR)
   double light_still_before = 0;  // luce sulle celle ferme, pesata per area totale
   double light_still_removed = 0; // luce tolta da oscuramento, luminosita' e bordi
-  std::array<double, kZones> zone_light{};  // luce media arrivata al pannello per zona
+  ZoneGrid grid;                                // griglia usata per zone_light
+  std::array<double, kMaxZones> zone_light{};  // luce media per zona, le prime grid.Count()
 };
 
 // Disposizione del buffer scritto dallo shader CSSummary (dim_cs.hlsl, stesse costanti):
@@ -40,14 +55,14 @@ inline constexpr int kSumRiskPx = 0, kSumUnprotectedPx = 1, kSumMotionPx = 2, kS
                      kSumStillRemoved = 5;
 inline constexpr double kSummaryScale = 64;
 inline constexpr int kSummaryZoneBase = kSummarySlots * kSummaryTotals;
-inline constexpr int kSummaryWords = kSummaryZoneBase + kZones * 2;
+inline constexpr int kSummaryWords = kSummaryZoneBase + kMaxZones * 2;
 
-// Zona 32x18 di una cella della griglia cols x rows.
-int ZoneOf(int cx, int cy, int cols, int rows);
+// Zona (della griglia `grid`) di una cella della griglia cols x rows.
+int ZoneOf(int cx, int cy, int cols, int rows, ZoneGrid grid);
 FrameSummary ComputeSummary(const DimModel& m, double now_s, const ShadeParams& shade);
 // Chiave della didascalia del movimento ("signals.caption.still" | "work" | "video").
 std::string_view MotionCaptionKey(double motion);
 // Dal buffer dello shader; dimensione sbagliata o total_px <= 0: riassunto vuoto.
-FrameSummary DecodeSummary(const std::vector<uint32_t>& words, double total_px);
+FrameSummary DecodeSummary(const std::vector<uint32_t>& words, double total_px, ZoneGrid grid);
 
 }  // namespace oled

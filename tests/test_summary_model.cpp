@@ -114,10 +114,11 @@ TEST(summary_light_removed_and_zones) {
   const FrameSummary s = ComputeSummary(m, 200, shade);
   CHECK_NEAR(s.light_still_before, 1.0 / 12, 1e-6);
   CHECK_NEAR(s.light_still_removed / s.light_still_before, 1 - (1 - level) * 0.5, 1e-6);
-  CHECK_EQ(oled::ZoneOf(0, 0, 4, 3), 0);
-  CHECK_EQ(oled::ZoneOf(1, 1, 4, 3), 6 * oled::kZoneCols + 8);
+  CHECK(s.grid == (oled::ZoneGrid{28, 21}));  // 64x48 px = 4:3
+  CHECK_EQ(oled::ZoneOf(0, 0, 4, 3, s.grid), 0);
+  CHECK_EQ(oled::ZoneOf(1, 1, 4, 3, s.grid), 7 * s.grid.cols + 7);
   CHECK_NEAR(s.zone_light[0], (1 - level) * 0.5, 1e-6);
-  CHECK_NEAR(s.zone_light[oled::ZoneOf(1, 1, 4, 3)], 0.0, 1e-9);
+  CHECK_NEAR(s.zone_light[oled::ZoneOf(1, 1, 4, 3, s.grid)], 0.0, 1e-9);
 }
 
 TEST(summary_motion_caption) {
@@ -140,7 +141,7 @@ TEST(summary_decode_layout) {
   w[oled::kSummaryZoneBase + 3 * 2] = static_cast<uint32_t>(0.75 * 256 * oled::kSummaryScale);
   w[oled::kSummaryZoneBase + 3 * 2 + 1] = 256;
   const double px = 64.0 * 48;
-  const FrameSummary s = oled::DecodeSummary(w, px);
+  const FrameSummary s = oled::DecodeSummary(w, px, oled::ZoneGrid{});
   CHECK_NEAR(s.risk, 512 / px, 1e-12);
   CHECK_NEAR(s.risk_unprotected, 256 / px, 1e-12);
   CHECK_NEAR(s.motion, 1024 / px, 1e-12);
@@ -149,6 +150,44 @@ TEST(summary_decode_layout) {
   CHECK_NEAR(s.light_still_removed, 0.25 * 256 / px, 1e-9);
   CHECK_NEAR(s.zone_light[3], 0.75, 1e-9);
   CHECK_NEAR(s.zone_light[4], 0.0, 1e-12);
-  const FrameSummary bad = oled::DecodeSummary(std::vector<uint32_t>(10, 7), px);
+  const FrameSummary bad = oled::DecodeSummary(std::vector<uint32_t>(10, 7), px, oled::ZoneGrid{});
   CHECK_NEAR(bad.risk, 0.0, 1e-12);
+}
+
+TEST(grid_for_size_examples) {
+  using oled::GridForSize;
+  using oled::ZoneGrid;
+  CHECK(GridForSize(3840, 2160) == (ZoneGrid{32, 18}));
+  CHECK(GridForSize(1920, 1200) == (ZoneGrid{30, 19}));
+  CHECK(GridForSize(3440, 1440) == (ZoneGrid{38, 16}));
+  CHECK(GridForSize(5120, 1440) == (ZoneGrid{46, 13}));
+  CHECK(GridForSize(1600, 1200) == (ZoneGrid{28, 21}));
+  CHECK(GridForSize(0, 0) == (ZoneGrid{32, 18}));  // dimensioni ignote: griglia 16:9
+}
+
+TEST(grid_for_size_bounds) {
+  for (int w = 1000; w <= 4000; ++w) {
+    const auto g = oled::GridForSize(w, 1000);
+    if (g.cols <= 0 || g.rows <= 0 || g.Count() < 500 || g.Count() > oled::kMaxZones) {
+      ::oled::test::ReportFailure(__FILE__, __LINE__, "griglia fuori limiti per larghezza " + std::to_string(w));
+      return;
+    }
+  }
+}
+
+TEST(summary_zones_follow_grid) {
+  // 21:9: 860x360 px (54x23 celle, piu' fitte delle 38x16 zone). Luce solo nell'ultima
+  // cella, in basso a destra.
+  constexpr int w = 860, h = 360;
+  LumaImage img = Black(w, h);
+  Fill(img, 53 * 16, 22 * 16, w, h, 1.0f);
+  DimModel m(w, h, 0);
+  m.OnFrame(img, 0);
+  const FrameSummary s = ComputeSummary(m, 61, ShadeParams{});
+  CHECK(s.grid == oled::GridForSize(w, h));
+  const int last = s.grid.Count() - 1;
+  CHECK(s.zone_light[last] > 0);
+  double others = 0;
+  for (int z = 0; z < last; ++z) others += s.zone_light[z];
+  CHECK_NEAR(others, 0.0, 1e-9);
 }
