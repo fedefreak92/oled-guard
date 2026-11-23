@@ -45,7 +45,7 @@ function radarSvg() {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 300 300');
   svg.setAttribute('class', 'radar');
-  svg.setAttribute('aria-label', 'Posizioni dello spostamento');
+  svg.setAttribute('aria-label', t('overview.radar_label'));
   return svg;
 }
 
@@ -68,16 +68,15 @@ function drawDimMap(cv) {
     ctx.fillStyle = '#56666b';
     ctx.font = '22px "Cascadia Mono", Consolas, monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(d && d.status === 'paused' ? 'in pausa' : 'mappa non ancora disponibile', W / 2, H / 2);
+    ctx.fillText(d && d.status === 'paused' ? t('dim.map_paused') : t('dim.map_pending'), W / 2, H / 2);
   }
 }
-function dimMapCanvas() { return h('canvas.dimmap', { width: 640, height: 360, 'aria-label': 'Zone oscurate' }); }
+function dimMapCanvas() { return h('canvas.dimmap', { width: 640, height: 360, 'aria-label': t('dim.map_label') }); }
 
-const DIM_STATUS = { active: 'Attivo', waiting: 'In attesa', suspended: 'Sospeso', off: 'Spento', paused: 'In pausa' };
 function dimStatusText() {
   const d = store.dim;
   if (!d) return '-';
-  return (DIM_STATUS[d.status] || d.status) + (d.suspended_by ? ` · ${d.suspended_by}` : '');
+  return t('dim.status.' + d.status) + (d.suspended_by ? ` · ${d.suspended_by}` : '');
 }
 function highlightLeft() { return Math.max(0, store.highlightUntil - performance.now()); }
 function canHighlight() { const d = store.dim; return !!d && !['off', 'suspended', 'paused'].includes(d.status); }
@@ -89,22 +88,22 @@ const ACTIVITY_ICONS = { pause: 'pause', manual: 'pause', resume: 'play', test: 
 PAGES.panoramica = {
   build(root) {
     // Protezione
-    const prot = panel('Protezione');
+    const prot = panel(t('overview.protection'));
     const sub = prot.el.querySelector('.panel-head');
     const monLabel = h('span.sub');
     sub.insertBefore(monLabel, sub.children[1]);
     const svg = radarSvg();
-    const count = h('div.big-count', null, h('span', { text: '--:--' }), h('small', { text: 'PROSSIMA MOSSA' }));
+    const count = h('div.big-count', null, h('span', { text: '--:--' }), h('small', { text: t('overview.next_move') }));
     const kv = (label) => { const b = h('b', { text: '-' }); return [h('div.kv', null, h('span', { text: label }), b), b]; };
-    const [kOffset, vOffset] = kv('Posizione attuale');
-    const [kFg, vFg] = kv('In primo piano');
-    const [kLat, vLat] = kv('Latenza aggiunta');
-    const [kAmp, vAmp] = kv('Spostamento massimo');
+    const [kOffset, vOffset] = kv(t('overview.offset'));
+    const [kFg, vFg] = kv(t('overview.foreground'));
+    const [kLat, vLat] = kv(t('overview.latency'));
+    const [kAmp, vAmp] = kv(t('overview.amplitude'));
     prot.body.classList.add('pad');
     prot.body.append(h('div.protect', null, svg, h('div', null, count, h('div', null, kOffset, kFg, kLat, kAmp))));
 
     // Azioni rapide
-    const quick = panel('Azioni rapide');
+    const quick = panel(t('overview.quick'));
     quick.body.classList.add('pad');
     const qa = (ic, title, onClick, withToggle) => {
       const sm = h('small');
@@ -114,25 +113,25 @@ PAGES.panoramica = {
         h('div', null, h('b', { text: title }), sm));
       return { el, sm, tg };
     };
-    const qPause = qa('pause', 'Pausa', () => send({ cmd: 'setManualPause', on: !(store.state && store.state.manual_pause) }), true);
-    const qTest = qa('move', 'Prova lo spostamento', () => send({ cmd: 'testShift' }), false);
-    const qHigh = qa('eye', 'Evidenzia zone', () => send({ cmd: 'dimHighlight' }), false);
-    const qDim = qa('sun', 'Oscuramento', () => cfg() && setConfig({ dim_enabled: !cfg().dim_enabled }), true);
-    const qVig = qa('vignette', 'Bordi scuriti', () => cfg() && setConfig({ vignette_enabled: !cfg().vignette_enabled }), true);
+    const qPause = qa('pause', t('overview.qa.pause'), () => send({ cmd: 'setManualPause', on: !(store.state && store.state.manual_pause) }), true);
+    const qTest = qa('move', t('overview.qa.test'), () => send({ cmd: 'testShift' }), false);
+    const qHigh = qa('eye', t('overview.qa.highlight'), () => send({ cmd: 'dimHighlight' }), false);
+    const qDim = qa('sun', t('overview.qa.dim'), () => cfg() && setConfig({ dim_enabled: !cfg().dim_enabled }), true);
+    const qVig = qa('vignette', t('overview.qa.vignette'), () => cfg() && setConfig({ vignette_enabled: !cfg().vignette_enabled }), true);
     quick.body.append(h('div.quick', null, qPause.el, qTest.el, qHigh.el, qDim.el, qVig.el));
 
     // Zone oscurate
-    const zones = panel('Zone oscurate ora');
+    const zones = panel(t('overview.zones'));
     zones.body.classList.add('pad');
     const cv = dimMapCanvas();
-    const [kSt, vSt] = kv('Stato');
-    const [kArea, vArea] = kv('Zone oscurate');
-    const [kMax, vMax] = kv('Oscuramento più forte');
+    const [kSt, vSt] = kv(t('overview.zones.status'));
+    const [kArea, vArea] = kv(t('overview.zones.area'));
+    const [kMax, vMax] = kv(t('overview.zones.max'));
     zones.body.append(cv, h('div', null, kSt, kArea, kMax));
 
     // Attivita' recente
-    const clear = h('button.btn.small', { type: 'button', text: 'Cancella', on: { click: () => send({ cmd: 'clearActivity' }) } });
-    const act = panel('Attività recente', 'da quando l\'app è aperta', clear);
+    const clear = h('button.btn.small', { type: 'button', text: t('overview.activity.clear'), on: { click: () => send({ cmd: 'clearActivity' }) } });
+    const act = panel(t('overview.activity'), t('overview.activity.since'), clear);
     const list = h('div.activity');
     act.body.append(list);
 
@@ -145,7 +144,7 @@ PAGES.panoramica = {
       if (store.activity === lastActivity) return;
       lastActivity = store.activity;
       list.innerHTML = '';
-      if (!store.activity.length) list.append(h('div.empty', { text: 'Nessun evento per ora.' }));
+      if (!store.activity.length) list.append(h('div.empty', { text: t('overview.activity.empty') }));
       for (const e of store.activity.slice(0, 30)) {
         list.append(h('div.act', { cls: e.kind },
           h('span.ai', null, icon(ACTIVITY_ICONS[e.kind] || 'info')),
@@ -161,29 +160,29 @@ PAGES.panoramica = {
           setText(monLabel, s.monitor ? `${s.monitor} · ${s.width}×${s.height} ${s.hdr ? 'HDR' : 'SDR'}` : '');
           setText(vOffset, s.paused ? '-' : `${s.offset[0] >= 0 ? '+' : ''}${s.offset[0]}, ${s.offset[1] >= 0 ? '+' : ''}${s.offset[1]} px`);
           setText(vFg, s.foreground || '-');
-          setText(vLat, s.latency_ms ? `${s.latency_ms.toFixed(1).replace('.', ',')} ms` : '-');
-          setText(count.lastChild, s.paused ? 'IN PAUSA' : (s.testing_shift ? 'PROVA · PROSSIMA MOSSA' : 'PROSSIMA MOSSA'));
+          setText(vLat, s.latency_ms ? `${fmtNumber(s.latency_ms, 1)} ms` : '-');
+          setText(count.lastChild, s.paused ? t('overview.paused_caps') : (s.testing_shift ? t('overview.test_next_move') : t('overview.next_move')));
           qPause.tg.set(s.manual_pause);
           qPause.el.classList.toggle('on', s.manual_pause);
-          setText(qPause.sm, s.manual_pause ? 'Protezione ferma' : 'Protezione attiva');
+          setText(qPause.sm, s.manual_pause ? t('overview.qa.pause.on') : t('overview.qa.pause.off'));
           qTest.el.classList.toggle('on', s.testing_shift);
-          setText(qTest.sm, s.testing_shift ? 'Prova in corso' : '30 s accelerati');
+          setText(qTest.sm, s.testing_shift ? t('status.test') : t('overview.qa.test.sub'));
         }
         if (c) {
           setText(vAmp, `${c.amplitude_px} px`);
           qDim.tg.set(c.dim_enabled);
           qDim.el.classList.toggle('on', c.dim_enabled);
-          setText(qDim.sm, c.dim_enabled ? 'Zone ferme scurite' : 'Spento');
+          setText(qDim.sm, c.dim_enabled ? t('overview.qa.dim.on') : t('dim.status.off'));
           qVig.tg.set(c.vignette_enabled);
           qVig.el.classList.toggle('on', c.vignette_enabled);
-          setText(qVig.sm, c.vignette_enabled ? `Intensità ${c.vignette_strength_pct}%` : 'Spenti');
+          setText(qVig.sm, c.vignette_enabled ? t('overview.qa.vignette.on', { pct: fmtPct(c.vignette_strength_pct) }) : t('overview.qa.vignette.off'));
         }
         drawRadar(svg);
         if (d !== lastDim) {
           lastDim = d;
           drawDimMap(cv);
           setText(vSt, dimStatusText());
-          setText(vArea, d && d.cells ? `${fmtPct(d.dimmed_pct, 1)} dello schermo` : '-');
+          setText(vArea, d && d.cells ? t('dim.of_screen', { pct: fmtPct(d.dimmed_pct, 1) }) : '-');
           setText(vMax, d && d.cells ? fmtPct(d.max_level * 100) : '-');
         }
         renderActivity();
@@ -200,7 +199,7 @@ PAGES.panoramica = {
         const left = highlightLeft();
         qHigh.el.disabled = !canHighlight();
         qHigh.el.classList.toggle('on', left > 0);
-        setText(qHigh.sm, left > 0 ? `Evidenziate · ${Math.ceil(left / 1000)} s` : '15 s sullo schermo');
+        setText(qHigh.sm, left > 0 ? t('dim.highlighted', { s: Math.ceil(left / 1000) }) : t('overview.qa.highlight.sub'));
       },
     };
     return view;
@@ -239,7 +238,7 @@ function vignetteEditor() {
   let dragging = null;
   for (const [id, s] of Object.entries(sides)) {
     s.guide = h('div.vig-guide', { cls: s.axis === 'x' ? 'v' : 'h' });
-    s.handle = h('div.vig-handle', { cls: s.axis === 'y' ? 'v' : null, title: 'Trascina' });
+    s.handle = h('div.vig-handle', { cls: s.axis === 'y' ? 'v' : null, title: t('overlay.vig.drag') });
     s.label = h('div.vig-label');
     s.send = throttledConfig(s.key);
     stage.append(s.guide, s.handle, s.label);
@@ -261,10 +260,10 @@ function vignetteEditor() {
   const strength = slider({ min: 0, max: 80, step: 1, format: (v) => `${v}%`, onInput: (v) => { local.strength = v; paint(); sendStrength(v); } });
   const sendStrength = throttledConfig('vignette_strength_pct');
   const strengthValue = h('b');
-  const side = h('div.vig-side', null, h('small', { text: 'INTENSITÀ' }), strengthValue, strength.input);
-  const reset = h('button.btn.small', { type: 'button', on: { click: () => setConfig({ ...VIG_DEFAULTS }) } }, icon('reset'), 'Ripristina tutti i lati');
+  const side = h('div.vig-side', null, h('small', { text: t('overlay.vig.strength_caps') }), strengthValue, strength.input);
+  const reset = h('button.btn.small', { type: 'button', on: { click: () => setConfig({ ...VIG_DEFAULTS }) } }, icon('reset'), t('overlay.vig.reset'));
   const el = h('div', null,
-    h('div.vig-head', null, h('span', { text: 'Anteprima · trascina le maniglie' }), reset),
+    h('div.vig-head', null, h('span', { text: t('overlay.vig.preview') }), reset),
     h('div.vig', null, stage, side));
 
   function paint() {
@@ -330,34 +329,34 @@ function vignetteEditor() {
 PAGES.overlay = {
   build(root) {
     // Spostamento
-    const shift = panel('Spostamento dei pixel', 'pixel shift');
+    const shift = panel(t('overlay.shift'), 'pixel shift');
     const amp = segmented([[1, '1 px'], [2, '2 px'], [3, '3 px']], (v) => setConfig({ amplitude_px: v }));
     const mini = h('span.mini-grid');
     const click = h('p');
     const dwellSend = throttle((lo, hi) => setConfig({ dwell_min_s: lo, dwell_max_s: hi }), 100);
     const dwell = dualSlider({ min: 5, max: 180, step: 1, format: (lo, hi) => `${lo}-${hi} s`, onInput: dwellSend });
     const transSend = throttle((lo, hi) => setConfig({ transition_min_s: lo, transition_max_s: hi }), 100);
-    const trans = dualSlider({ min: 0.5, max: 15, step: 0.5, format: (lo, hi) => `${String(lo).replace('.', ',')}-${String(hi).replace('.', ',')} s`, onInput: transSend });
-    const testBtn = h('button.btn.solid', { type: 'button', on: { click: () => send({ cmd: 'testShift' }) } }, icon('move'), 'Prova ora');
+    const trans = dualSlider({ min: 0.5, max: 15, step: 0.5, format: (lo, hi) => `${fmtNumber(lo, lo % 1 ? 1 : 0)}-${fmtNumber(hi, hi % 1 ? 1 : 0)} s`, onInput: transSend });
+    const testBtn = h('button.btn.solid', { type: 'button', on: { click: () => send({ cmd: 'testShift' }) } }, icon('move'), t('overlay.test_now'));
     shift.body.append(
-      settingRow('Spostamento massimo', 'Di quanti pixel al massimo si sposta l\'immagine. Più ampio protegge di più, ma i bordi si muovono di più.', amp.el),
-      settingRow('Posizioni usate', click, mini),
-      settingRow('Sosta fra una mossa e l\'altra', 'Tempo casuale in questo intervallo.', dwell.el, { wide: true }),
-      settingRow('Durata della transizione', 'La mossa avviene piano, un pixel alla volta.', trans.el, { wide: true }),
-      settingRow('Prova', 'Spostamento accelerato per 30 secondi, per vederlo.', testBtn));
+      settingRow(t('overview.amplitude'), t('overlay.amplitude.desc'), amp.el),
+      settingRow(t('overlay.positions'), click, mini),
+      settingRow(t('overlay.dwell'), t('overlay.dwell.desc'), dwell.el, { wide: true }),
+      settingRow(t('overlay.transition'), t('overlay.transition.desc'), trans.el, { wide: true }),
+      settingRow(t('overlay.test'), t('overlay.test.desc'), testBtn));
 
     // Bordi scuriti
     const vigToggle = toggle((v) => setConfig({ vignette_enabled: v }));
-    const vig = panel('Bordi scuriti', 'vignettatura', h('span.muted', { text: 'Attivi' }), vigToggle.el);
+    const vig = panel(t('overview.qa.vignette'), t('overlay.vig.sub'), h('span.muted', { text: t('overlay.vig.enabled') }), vigToggle.el);
     vig.body.classList.add('pad');
     const editor = vignetteEditor();
-    vig.body.append(editor.el, h('p.hint', { text: 'I bordi restano fermi mentre l\'immagine si sposta. Funzionano mentre la protezione è attiva.' }));
+    vig.body.append(editor.el, h('p.hint', { text: t('overlay.vig.hint') }));
 
     // Oscuramento
     const dimToggle = toggle((v) => setConfig({ dim_enabled: v }));
-    const dim = panel('Oscuramento delle zone ferme', null, h('span.muted', { text: 'Attivo' }), dimToggle.el);
+    const dim = panel(t('overlay.dim'), null, h('span.muted', { text: t('dim.status.active') }), dimToggle.el);
     const cv = dimMapCanvas();
-    const highBtn = h('button.btn.small', { type: 'button', on: { click: () => send({ cmd: 'dimHighlight' }) } }, icon('eye'), 'Evidenzia sullo schermo · 15 s');
+    const highBtn = h('button.btn.small', { type: 'button', on: { click: () => send({ cmd: 'dimHighlight' }) } }, icon('eye'), t('overlay.highlight'));
     const status = h('span.muted');
     const keepOrder = (patch) => {
       const c = cfg() || {};
@@ -372,28 +371,28 @@ PAGES.overlay = {
     const strength = mk('dim_strength_pct', 10, 80, 1, (v) => `${v}%`, (v) => v);
     const delay = mk('dim_delay_s', 0.5, 60, 0.5, (v) => fmtMin(v * 60), (v) => Math.round(v * 60));
     const ramp = mk('dim_ramp_s', 0.5, 60, 0.5, (v) => fmtMin(v * 60), (v) => Math.round(v * 60));
-    const winMode = segmented([['desktop', 'Come il desktop'], ['video', 'Solo loghi su video']], (v) => setConfig({ dim_window_mode: v }));
-    const activate = segmented([['hover', 'Sotto il mouse'], ['click', 'Cliccata'], ['both', 'Entrambe'], ['never', 'Mai']], (v) => setConfig({ dim_activate: v }));
+    const winMode = segmented([['desktop', t('overlay.win.desktop')], ['video', t('overlay.win.video')]], (v) => setConfig({ dim_window_mode: v }));
+    const activate = segmented([['hover', t('overlay.act.hover')], ['click', t('overlay.act.click')], ['both', t('overlay.act.both')], ['never', t('overlay.act.never')]], (v) => setConfig({ dim_activate: v }));
     const largeToggle = toggle((v) => setConfig({ dim_large_enabled: v }));
     const largeDelay = mk('dim_large_delay_s', 5, 240, 5, (v) => fmtMin(v * 60), (v) => Math.round(v * 60));
     const largeStrength = mk('dim_large_strength_pct', 5, 80, 1, (v) => `${v}%`, (v) => v);
     const rowsLarge = [
-      settingRow('Oscura anche le finestre ferme', 'Documenti e pagine immobili (solo con "Solo loghi su video").', largeToggle.el),
-      settingRow('Inizia quando è ferma da', null, largeDelay.el, { wide: true }),
-      settingRow('Intensità massima delle finestre ferme', null, largeStrength.el, { wide: true }),
+      settingRow(t('overlay.large'), t('overlay.large.desc'), largeToggle.el),
+      settingRow(t('overlay.large.delay'), null, largeDelay.el, { wide: true }),
+      settingRow(t('overlay.large.strength'), null, largeStrength.el, { wide: true }),
     ];
-    const exLink = h('button.btn.small', { type: 'button', on: { click: () => showPage('profili') } }, icon('apps'), 'Gestisci le app escluse');
+    const exLink = h('button.btn.small', { type: 'button', on: { click: () => showPage('profili') } }, icon('apps'), t('overlay.excluded.manage'));
     const activateHint = h('p.hint');
     dim.body.append(
       h('div', { cls: 'row col' }, cv, h('div.add-row', null, status, h('span.grow'), highBtn)),
-      settingRow('Intensità massima', 'Quanto si scuriscono icone, etichette e loghi fermi.', strength.el, { wide: true }),
-      settingRow('Inizia quando è fermo da', null, delay.el, { wide: true }),
-      settingRow('Durata della discesa', 'La luminosità scende piano, senza scatti.', ramp.el, { wide: true }),
-      settingRow('Cosa si scurisce nelle finestre', null, winMode.el),
-      settingRow('Torna normale la finestra', null, activate.el),
+      settingRow(t('overlay.strength'), t('overlay.strength.desc'), strength.el, { wide: true }),
+      settingRow(t('overlay.delay'), null, delay.el, { wide: true }),
+      settingRow(t('overlay.ramp'), t('overlay.ramp.desc'), ramp.el, { wide: true }),
+      settingRow(t('overlay.win'), null, winMode.el),
+      settingRow(t('overlay.act'), null, activate.el),
       activateHint,
       ...rowsLarge,
-      settingRow('App escluse', 'Con queste app in primo piano l\'oscuramento si sospende.', exLink));
+      settingRow(t('overlay.excluded'), t('overlay.excluded.desc'), exLink));
 
     root.append(h('div.page', null, h('div.cols.even', null, h('div.stack', null, shift.el, vig.el), h('div.stack', null, dim.el))));
 
@@ -409,7 +408,7 @@ PAGES.overlay = {
             mini.style.gridTemplateColumns = `repeat(${side}, 0.6rem)`;
             for (let i = 0; i < side * side; i++) mini.append(h('i', { cls: i === (side * side - 1) / 2 ? 'now' : null }));
           }
-          setText(click, `${side * side} posizioni · sfasamento medio dei clic ~${meanClickOffset(c.amplitude_px).toFixed(1).replace('.', ',')} px`);
+          setText(click, t('overlay.positions.desc', { n: side * side, px: fmtNumber(meanClickOffset(c.amplitude_px), 1) }));
           dwell.set(c.dwell_min_s, c.dwell_max_s);
           trans.set(c.transition_min_s, c.transition_max_s);
           vigToggle.set(c.vignette_enabled);
@@ -426,14 +425,14 @@ PAGES.overlay = {
           const video = c.dim_window_mode === 'video';
           rowsLarge.forEach((r) => r.classList.toggle('off', !video));
           setText(activateHint, c.dim_activate === 'never'
-            ? 'Nessuna finestra torna normale da sola: tutte si scuriscono allo stesso modo.'
-            : 'La finestra che usi resta normale; quando la lasci, il conteggio riparte da zero.');
+            ? t('overlay.act.never_hint')
+            : t('overlay.act.hint'));
         }
         if (store.dim !== lastDim) {
           lastDim = store.dim;
           drawDimMap(cv);
           const d = store.dim;
-          setText(status, d ? `${dimStatusText()}${d.cells ? ` · ${fmtPct(d.dimmed_pct, 1)} dello schermo` : ''}` : '');
+          setText(status, d ? `${dimStatusText()}${d.cells ? ` · ${t('dim.of_screen', { pct: fmtPct(d.dimmed_pct, 1) })}` : ''}` : '');
         }
         view.tick();
       },
@@ -441,7 +440,7 @@ PAGES.overlay = {
         const left = highlightLeft();
         highBtn.disabled = !canHighlight();
         highBtn.classList.toggle('on', left > 0);
-        setText(highBtn.lastChild, left > 0 ? `Evidenziate · ${Math.ceil(left / 1000)} s` : 'Evidenzia sullo schermo · 15 s');
+        setText(highBtn.lastChild, left > 0 ? t('dim.highlighted', { s: Math.ceil(left / 1000) }) : t('overlay.highlight'));
       },
     };
     return view;
@@ -461,7 +460,7 @@ PAGES.monitor = {
     const name = h('b.accent');
     const countLabel = h('span.muted');
     const head = h('section.panel', null, h('div.mon-head', null,
-      h('b', null, 'Protezione su ', name), countLabel, h('span.grow'), h('span.muted', { text: 'Scelta automatica' }), autoToggle.el));
+      h('b', null, t('monitor.protecting'), ' ', name), countLabel, h('span.grow'), h('span.muted', { text: t('monitor.auto') }), autoToggle.el));
     const list = h('div.stack');
     root.append(h('div.page', null, head, list));
 
@@ -471,29 +470,29 @@ PAGES.monitor = {
       const m = store.monitors;
       list.innerHTML = '';
       bright = null;
-      if (!m || !m.monitors.length) { list.append(h('div.empty', { text: 'Nessuno schermo trovato.' })); return; }
+      if (!m || !m.monitors.length) { list.append(h('div.empty', { text: t('monitor.none') })); return; }
       const protectedName = (m.monitors.find((x) => x.protected) || {}).name;
       m.monitors.forEach((mon, i) => {
         const tg = toggle((v) => {
           if (v) send({ cmd: 'setMonitor', device: mon.device });
-          else toast('Per cambiare schermo accendi l\'interruttore di un altro, oppure la scelta automatica.');
+          else toast(t('monitor.switch_hint'));
         });
         tg.set(mon.protected);
         const pills = h('div.pills', null,
-          mon.primary ? pill('Primary', 'accent') : null,
+          mon.primary ? pill(t('monitor.primary'), 'accent') : null,
           pill(mon.hdr ? 'HDR' : 'SDR', mon.hdr ? 'info' : null),
-          mon.connection ? pill(mon.connection) : null);
+          mon.connection ? pill(mon.connection === 'internal' ? t('monitor.connection.internal') : mon.connection) : null);
         const top = h('div.mon-top', null, tg.el,
-          h('div.grow', null, h('h4', { text: `Schermo ${i + 1}` }), h('p', { text: [mon.name, `${mon.width} × ${mon.height}`, mon.refresh_hz ? `${mon.refresh_hz} Hz` : null].filter(Boolean).join(' · ') })),
+          h('div.grow', null, h('h4', { text: t('monitor.n', { n: i + 1 }) }), h('p', { text: [mon.name, `${mon.width} × ${mon.height}`, mon.refresh_hz ? `${mon.refresh_hz} Hz` : null].filter(Boolean).join(' · ') })),
           pills);
         let right;
         if (mon.protected) {
           bright = slider({ min: 20, max: 100, step: 1, format: (v) => `${v}%`, onInput: sendBrightness });
           right = h('div', null,
-            settingRow('Luminosità', 'Scurisce l\'immagine via software. Funziona mentre la protezione è attiva.', bright.el, { wide: true }),
-            h('p.hint.box', { text: 'Contrasto e nitidezza non sono disponibili: la TV non accetta questi comandi dal PC (DDC/CI).' }));
+            settingRow(t('monitor.brightness'), t('monitor.brightness.desc'), bright.el, { wide: true }),
+            h('p.hint.box', { text: t('monitor.ddc_hint') }));
         } else {
-          right = h('p.hint', { text: `Non protetto. Accendi l'interruttore per proteggere questo schermo al posto di ${protectedName || 'quello attuale'}.` });
+          right = h('p.hint', { text: t('monitor.not_protected', { name: protectedName || t('monitor.current') }) });
         }
         list.append(h('section.panel.mon', { cls: mon.protected ? null : 'off' }, top,
           h('div.mon-body', null, h('div.mon-thumb', { text: `${mon.width} × ${mon.height}` }), right)));
@@ -508,8 +507,8 @@ PAGES.monitor = {
         }
         if (m) {
           const p = m.monitors.find((x) => x.protected);
-          setText(name, p ? p.name : 'nessuno schermo');
-          setText(countLabel, `${m.monitors.length} ${m.monitors.length === 1 ? 'schermo collegato' : 'schermi collegati'}`);
+          setText(name, p ? p.name : t('monitor.nothing'));
+          setText(countLabel, tp('monitor.connected', m.monitors.length));
           autoToggle.set(m.setting === 'auto');
         }
         if (bright && c) bright.set(c.brightness_pct);
@@ -535,14 +534,15 @@ function wearColor(t) {
   return 'rgb(224,96,91)';
 }
 
+// Tipi di contenuto nello stesso ordine dello storico: [chiave del testo, colore].
 const CONTENT_KINDS = [
-  ['Interfaccia ferma e lavoro', 'var(--accent)'],
-  ['Video e animazioni', 'var(--info)'],
-  ['Giochi e schermo intero', '#b28cff'],
-  ['Assente', '#5fdc8f'],
-  ['Pausa manuale', 'var(--warn)'],
+  ['stats.content.work', 'var(--accent)'],
+  ['stats.content.video', 'var(--info)'],
+  ['stats.content.games', '#b28cff'],
+  ['stats.content.away', '#5fdc8f'],
+  ['stats.content.manual', 'var(--warn)'],
 ];
-const RANGES = { '6h': 72, '24h': 288, '7g': 2016 };
+const RANGES = { '6h': 72, '24h': 288, '7d': 2016 };
 
 // Grafico del rischio: area ambra, griglia 25/50/75%, vuoti dove non ci sono misure.
 function drawRiskChart(box, values, endLocalS, bucketS) {
@@ -570,8 +570,8 @@ function drawRiskChart(box, values, endLocalS, bucketS) {
   for (let k = 0; k <= 4; k++) {
     const i = Math.round((k / 4) * (n - 1));
     const d = new Date((endLocalS - (n - 1 - i) * bucketS) * 1000);
-    const text = k === 4 ? 'ora' : (bucketS >= 3600
-      ? d.toLocaleDateString('it-IT', { weekday: 'short', timeZone: 'UTC' })
+    const text = k === 4 ? t('stats.chart.now') : (bucketS >= 3600
+      ? d.toLocaleDateString(store.lang, { weekday: 'short', timeZone: 'UTC' })
       : `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`);
     labels += `<text class="axis" x="${Math.min(W - 24, Math.max(left, x(i) - 14))}" y="${H - 4}">${text}</text>`;
   }
@@ -581,10 +581,10 @@ function drawRiskChart(box, values, endLocalS, bucketS) {
 PAGES.statistiche = {
   build(root) {
     const stat = (label) => { const b = h('b', { text: '-' }), sp = h('span'); return [h('div.stat', null, h('small', { text: label }), b, sp), b, sp]; };
-    const [sTot, vTot, nTot] = stat('Protetto in totale');
-    const [sSes, vSes, nSes] = stat('Sessioni');
-    const [sAvo, vAvo, nAvo] = stat('Usura evitata oggi');
-    const [sStr, vStr, nStr] = stat('Giorni di fila');
+    const [sTot, vTot, nTot] = stat(t('strip.total'));
+    const [sSes, vSes, nSes] = stat(t('stats.sessions'));
+    const [sAvo, vAvo, nAvo] = stat(t('strip.avoided_today'));
+    const [sStr, vStr, nStr] = stat(t('stats.streak'));
     vTot.className = 'accent';
     vSes.className = 'info';
     vAvo.className = 'accent';
@@ -592,54 +592,54 @@ PAGES.statistiche = {
 
     // Mappa di usura
     const mapSub = h('span.sub');
-    const wear = panel('Mappa di usura del pannello');
+    const wear = panel(t('stats.wear'));
     wear.el.querySelector('.panel-head').insertBefore(mapSub, wear.el.querySelector('.panel-head .grow'));
     wear.body.classList.add('pad');
     const grid = h('div.wear-grid');
     const cells = [];
     for (let i = 0; i < 576; i++) { const c = h('i'); cells.push(c); grid.append(c); }
-    const legend = h('div.legend', null, h('span', { text: 'sinistra' }), h('span.grow'), h('span', { text: 'meno' }),
+    const legend = h('div.legend', null, h('span', { text: t('stats.wear.left') }), h('span.grow'), h('span', { text: t('stats.wear.less') }),
       ...[0.1, 0.35, 0.6, 0.78, 0.95].map((t) => { const i = h('i'); i.style.background = wearColor(t); return i; }),
-      h('span', { text: 'più' }), h('span.grow'), h('span', { text: 'destra' }));
+      h('span', { text: t('stats.wear.more') }), h('span.grow'), h('span', { text: t('stats.wear.right') }));
     const wkv = (label) => { const b = h('b', { text: '-' }), s = h('span'); return [h('div.wear-stat', null, h('small', { text: label }), b, s), b, s]; };
-    const [w1, w1b, w1s] = wkv('Misurato');
-    const [w2, w2b, w2s] = wkv('Zona peggiore');
-    const [w3, w3b, w3s] = wkv('Concentrazione');
-    const [w4, w4b, w4s] = wkv('Zone oltre il doppio');
-    const wearEmpty = h('div.empty', { text: 'Nessuna misura ancora: la mappa si riempie mentre la protezione è attiva.' });
+    const [w1, w1b, w1s] = wkv(t('stats.wear.measured'));
+    const [w2, w2b, w2s] = wkv(t('stats.wear.worst'));
+    const [w3, w3b, w3s] = wkv(t('stats.wear.concentration'));
+    const [w4, w4b, w4s] = wkv(t('stats.wear.over_double'));
+    const wearEmpty = h('div.empty', { text: t('stats.wear.empty') });
     wear.body.append(grid, legend, h('div.wear-stats', null, w1, w2, w3, w4), wearEmpty,
-      h('p.hint', { text: 'Luce arrivata al pannello × tempo, dopo oscuramento, luminosità e bordi. Il tempo in pausa (giochi, video a tutto schermo) non è misurato.' }));
+      h('p.hint', { text: t('stats.wear.hint') }));
 
     // Grafico del rischio
     let range = '24h';
-    const rangeSeg = segmented([['6h', '6 h'], ['24h', '24 h'], ['7g', '7 g']], (v) => { range = v; lastHistory = null; view.update(); });
-    const chartPanel = panel('Rischio nel tempo', null, rangeSeg.el);
+    const rangeSeg = segmented([['6h', t('stats.range.6h')], ['24h', t('stats.range.24h')], ['7d', t('stats.range.7d')]], (v) => { range = v; lastHistory = null; view.update(); });
+    const chartPanel = panel(t('stats.chart'), null, rangeSeg.el);
     chartPanel.body.classList.add('pad');
     const chartInfo = h('div.mono.muted.chart-info');
     const chart = h('div.chart');
     chartPanel.body.append(chartInfo, chart);
 
     // App piu' usate
-    const appsPanel = panel('App più usate', '7 giorni');
+    const appsPanel = panel(t('stats.apps'), t('stats.days7'));
     const appsList = h('div.top-apps');
     appsPanel.body.append(appsList);
 
     // Contenuti
-    const contentPanel = panel('Usura per contenuto', '7 giorni');
+    const contentPanel = panel(t('stats.content'), t('stats.days7'));
     contentPanel.body.classList.add('pad');
     const contentBar = h('div.content-bar');
     const contentLegend = h('div.content-legend');
     contentPanel.body.append(contentBar, contentLegend);
 
     // Parti del progetto 1: posizioni dello spostamento e pause di oggi.
-    const heatPanel = panel('Posizioni dello spostamento', 'tempo su ogni posizione · totale');
+    const heatPanel = panel(t('overview.radar_label'), t('stats.heat.sub'));
     heatPanel.body.classList.add('pad');
     const heat = h('div.heat');
     const heatCells = [];
     for (let i = 0; i < 49; i++) { const b = h('b'); const c = h('i', null, b); heatCells.push([c, b]); heat.append(c); }
     const uniform = h('p.hint');
     heatPanel.body.append(heat, uniform);
-    const pausePanel = panel('Pause di oggi', 'per motivo');
+    const pausePanel = panel(t('stats.pauses'), t('stats.pauses.sub'));
     const bars = h('div.bars');
     pausePanel.body.append(bars);
 
@@ -654,16 +654,16 @@ PAGES.statistiche = {
         const hist = store.history, st = store.stats, c = cfg(), s = store.state;
         if (st) {
           setText(vTot, fmtHours(st.total_ms));
-          setText(nTot, hist ? `+${fmtHours(hist.protected_week_s * 1000)} questa settimana` : 'con l\'overlay a schermo');
+          setText(nTot, hist ? t('stats.this_week', { value: fmtHours(hist.protected_week_s * 1000) }) : t('stats.total.sub'));
         }
         if (hist && hist !== lastHistory) {
           lastHistory = hist;
           setText(vSes, String(hist.sessions_total));
-          setText(nSes, `+${hist.sessions_week} questa settimana`);
-          setText(vAvo, hist.avoided_today === null ? 'n/d' : `${Math.round(hist.avoided_today * 100)}%`);
-          setText(nAvo, hist.avoided_total === null ? 'luce tolta alle zone ferme' : `totale ${Math.round(hist.avoided_total * 100)}%`);
-          setText(vStr, `${hist.streak} ${hist.streak === 1 ? 'giorno' : 'giorni'}`);
-          setText(nStr, `record ${hist.streak_best}`);
+          setText(nSes, t('stats.this_week', { value: hist.sessions_week }));
+          setText(vAvo, hist.avoided_today === null ? t('common.na') : fmtPct(hist.avoided_today * 100));
+          setText(nAvo, hist.avoided_total === null ? t('stats.avoided.sub') : t('stats.avoided.total', { pct: fmtPct(hist.avoided_total * 100) }));
+          setText(vStr, tp('stats.days', hist.streak));
+          setText(nStr, t('stats.record', { n: hist.streak_best }));
 
           const w = hist.wear;
           setText(mapSub, w.monitor || '');
@@ -674,20 +674,20 @@ PAGES.statistiche = {
             cell.style.background = has ? wearColor(w.cells[i]) : 'transparent';
             cell.classList.toggle('hot', has && i === w.hottest);
           });
-          const since = has ? new Date(w.since * 1000).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', timeZone: 'UTC' }) : '-';
+          const since = has ? new Date(w.since * 1000).toLocaleDateString(store.lang, { day: '2-digit', month: '2-digit', timeZone: 'UTC' }) : '-';
           setText(w1b, has ? `${Math.round(w.measured_hours)} h` : '-');
-          setText(w1s, has ? `dal ${since}` : '');
+          setText(w1s, has ? t('stats.wear.since', { date: since }) : '');
           setText(w2b, has ? t(w.hottest_key) : '-');
-          setText(w2s, has ? `${w.hottest_hours.toFixed(1).replace('.', ',')} h a bianco pieno` : '');
-          setText(w3b, has ? `${w.concentration.toFixed(2).replace('.', ',')}×` : '-');
-          setText(w3s, 'zona peggiore / media');
+          setText(w2s, has ? t('stats.wear.full_white', { h: fmtNumber(w.hottest_hours, 1) }) : '');
+          setText(w3b, has ? `${fmtNumber(w.concentration, 2)}×` : '-');
+          setText(w3s, t('stats.wear.ratio'));
           setText(w4b, has ? `${w.over_double}/576` : '-');
-          setText(w4s, has ? `${fmtPct((w.over_double / 576) * 100, 1)} del pannello` : '');
+          setText(w4s, has ? t('stats.wear.of_panel', { pct: fmtPct((w.over_double / 576) * 100, 1) }) : '');
 
           const n = RANGES[range];
           let vals = hist.timeline.slice(-n);
           let bucketS = 300;
-          if (range === '7g') {  // a ore
+          if (range === '7d') {  // a ore
             const hourly = [];
             for (let i = 0; i < vals.length; i += 12) {
               const part = vals.slice(i, i + 12).filter((v) => v !== null);
@@ -701,14 +701,14 @@ PAGES.statistiche = {
           const m = vals.filter((v) => v !== null);
           const cur = [...vals].reverse().find((v) => v !== null);
           setText(chartInfo, m.length
-            ? `picco ${Math.round(Math.max(...m) * 100)}% · media ${Math.round((m.reduce((a, b) => a + b, 0) / m.length) * 100)}% · attuale ${cur === undefined ? '-' : Math.round(cur * 100) + '%'}`
-            : 'nessuna misura in questo intervallo');
+            ? t('stats.chart.info', { peak: fmtPct(Math.max(...m) * 100), mean: fmtPct((m.reduce((a, b) => a + b, 0) / m.length) * 100), now: cur === undefined ? '-' : fmtPct(cur * 100) })
+            : t('stats.chart.empty'));
 
           appsList.innerHTML = '';
-          if (!hist.top_apps.length) appsList.append(h('div.empty', { text: 'Ancora nessuna app registrata.' }));
+          if (!hist.top_apps.length) appsList.append(h('div.empty', { text: t('stats.apps.empty') }));
           const topTotal = Math.max(1, ...hist.top_apps.map((a) => a.protected_s + a.paused_s));
           for (const a of hist.top_apps) {
-            const info = RULE_INFO[a.rule] || RULE_INFO.auto;
+            const info = ruleInfo(a.rule);
             const prot = h('i.prot'), paus = h('i.paus');
             prot.style.width = `${(a.protected_s / topTotal) * 100}%`;
             paus.style.width = `${(a.paused_s / topTotal) * 100}%`;
@@ -716,19 +716,19 @@ PAGES.statistiche = {
               h('div.grow', null, h('div.top-app-name', null, h('b', { text: a.exe }), pill(info[2], info[3])), h('div.split-bar', null, prot, paus)),
               h('span.mono', { text: fmtClock((a.protected_s + a.paused_s) * 1000) })));
           }
-          if (hist.top_apps.length) appsList.append(h('div.legend.left', null, h('i.prot'), h('span', { text: 'protetto' }), h('i.paus'), h('span', { text: 'in pausa' })));
+          if (hist.top_apps.length) appsList.append(h('div.legend.left', null, h('i.prot'), h('span', { text: t('stats.apps.protected') }), h('i.paus'), h('span', { text: t('signals.paused') })));
 
           contentBar.innerHTML = '';
           contentLegend.innerHTML = '';
           const total = hist.content.reduce((a, b) => a + b, 0);
-          if (total <= 0) contentLegend.append(h('div.empty', { text: 'Ancora nessun dato.' }));
+          if (total <= 0) contentLegend.append(h('div.empty', { text: t('stats.content.empty') }));
           hist.content.forEach((share, k) => {
             const [label, color] = CONTENT_KINDS[k];
             if (share > 0) { const seg = h('i'); seg.style.width = `${share * 100}%`; seg.style.background = color; contentBar.append(seg); }
             if (total > 0) {
               const dot = h('i');
               dot.style.background = color;
-              contentLegend.append(h('div', null, dot, h('span', { text: label }), h('b', { text: `${Math.round(share * 100)}%` })));
+              contentLegend.append(h('div', null, dot, h('span', { text: t(label) }), h('b', { text: fmtPct(share * 100) })));
             }
           });
         }
@@ -743,10 +743,10 @@ PAGES.statistiche = {
             cell.classList.toggle('out', !inside);
             fill.style.opacity = inside && max > 0 ? (0.1 + 0.9 * st.cells[i] / max).toFixed(2) : '0';
           });
-          setText(uniform, st.uniformity === null ? 'Uniformità: servono 10 minuti di dati.' : `Uniformità ${fmtPct(st.uniformity, 1)}: 100% = usura identica su tutte le posizioni.`);
+          setText(uniform, st.uniformity === null ? t('stats.uniformity.pending') : t('stats.uniformity', { pct: fmtPct(st.uniformity, 1) }));
           bars.innerHTML = '';
           const entries = Object.entries(st.pauses_by_reason || {}).sort((x, y) => y[1] - x[1]);
-          if (!entries.length) bars.append(h('div.empty', { text: 'Nessuna pausa oggi.' }));
+          if (!entries.length) bars.append(h('div.empty', { text: t('stats.pauses.empty') }));
           const top = entries.length ? entries[0][1] : 1;
           for (const [reason, n] of entries) {
             const fill = h('i');
@@ -764,16 +764,14 @@ PAGES.statistiche = {
 
 // ------------------------------------------------------------------ profili app
 
-const RULE_INFO = {
-  always: ['Metti in pausa', 'La protezione si ferma quando l\'app è in primo piano', 'Sempre pausa', 'warn'],
-  auto: ['Automatico', 'Pausa solo se è a schermo intero o un gioco', 'Automatico', 'accent'],
-  never: ['Non mettere mai in pausa', 'Protezione attiva anche a schermo intero', 'Mai pausa', 'info'],
-};
-const RULE_EXPLAIN = {
-  always: 'Quando quest\'app è in primo piano la protezione si mette in pausa, anche se è in finestra.',
-  auto: 'La protezione si mette in pausa solo se quest\'app va a schermo intero o è un gioco DirectX esclusivo.',
-  never: 'La protezione resta attiva anche quando quest\'app è a schermo intero (utile per video e browser).',
-};
+// Regole per app: [titolo, descrizione, etichetta breve, tono]; testi nella lingua attiva.
+const RULE_TONES = { always: 'warn', auto: 'accent', never: 'info' };
+const RULES = ['always', 'auto', 'never'];
+function ruleInfo(rule) {
+  const r = RULES.includes(rule) ? rule : 'auto';
+  return [t(`rule.${r}.title`), t(`rule.${r}.desc`), t(`rule.${r}.short`), RULE_TONES[r]];
+}
+function ruleExplain(rule) { return RULES.includes(rule) ? t(`rule.${rule}.explain`) : ''; }
 
 PAGES.profili = {
   build(root) {
@@ -826,7 +824,7 @@ PAGES.profili = {
     editPanel.body.classList.add('pad');
     const editName = h('div.edit-name');
     const editInfo = h('p.hint');
-    const rules = choiceCards(Object.entries(RULE_INFO).map(([k, v]) => [k, v[0], v[1]]), (rule) => selected && send({ cmd: 'setAppRule', exe: selected, rule }));
+    const rules = choiceCards(RULES.map((r) => { const v = ruleInfo(r); return [r, v[0], v[1]]; }), (rule) => selected && send({ cmd: 'setAppRule', exe: selected, rule }));
     const explain = h('p.hint.box');
     const dimEx = toggle((v) => selected && send({ cmd: 'setDimExclude', exe: selected, on: v }));
     const editBody = h('div', null,
@@ -848,7 +846,7 @@ PAGES.profili = {
       setText(count, `${apps().length}`);
       if (!shown.length) list.append(h('div.empty', { text: filter ? 'Nessuna app corrisponde alla ricerca.' : 'Nessuna app ancora: aggiungine una qui sotto.' }));
       for (const a of shown) {
-        const info = RULE_INFO[a.rule] || RULE_INFO.auto;
+        const info = ruleInfo(a.rule);
         const trash = h('button.trash', { type: 'button', title: 'Elimina', on: { click: (e) => { e.stopPropagation(); if (selected === a.exe) selected = null; send({ cmd: 'removeApp', exe: a.exe }); } } }, icon('trash'));
         const row = h('button.app', { type: 'button', cls: a.exe === selected ? 'on' : null, on: { click: () => { selected = a.exe; renderList(); renderEdit(); } } },
           avatar(a.exe),
@@ -868,7 +866,7 @@ PAGES.profili = {
       editName.append(avatar(a.exe), h('span', { text: a.exe }));
       setText(editInfo, a.reason_key ? `Ultima pausa: ${t(a.reason_key).toLowerCase()} · ${fmtWhen(a.last_seen_s * 1000)}` : 'Aggiunta a mano: non ha ancora messo in pausa la protezione.');
       rules.set(a.rule);
-      setText(explain, RULE_EXPLAIN[a.rule] || '');
+      setText(explain, ruleExplain(a.rule));
       dimEx.set(a.dim_exclude);
     }
 
