@@ -14,8 +14,13 @@ statistiche d'uso.
 E' nata per una TV LG OLED 4K a 143 Hz con l'HDR sempre attivo, dove lo spostamento
 integrato della TV non era un'opzione.
 
-<!-- Screenshot: aggiungere qui le pagine Panoramica e Statistiche, per esempio
-![Panoramica](docs/screenshots/overview.png) -->
+![Pagina Panoramica](docs/screenshots/overview.png)
+
+| Statistiche | Impostazioni dell'overlay |
+| --- | --- |
+| ![Pagina Statistiche con la mappa di usura e il grafico del rischio](docs/screenshots/statistics.png) | ![Spostamento, oscuramento e bordi scuriti](docs/screenshots/overlay.png) |
+
+*Schermate dell'interfaccia in modalita' anteprima, con dati dimostrativi.*
 
 ## Funzioni
 

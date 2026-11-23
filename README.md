@@ -13,8 +13,13 @@ that stay bright for a long time, and shows live signals and usage statistics.
 It was built for a 4K 143 Hz LG OLED TV with HDR always on, where the TV's own
 pixel shift wasn't an option.
 
-<!-- Screenshots: add the Overview and Statistics pages here, e.g.
-![Overview](docs/screenshots/overview.png) -->
+![Overview page](docs/screenshots/overview.png)
+
+| Statistics | Overlay settings |
+| --- | --- |
+| ![Statistics page with the panel wear map and risk chart](docs/screenshots/statistics.png) | ![Pixel shift, dimming and edge settings](docs/screenshots/overlay.png) |
+
+*Screenshots of the interface in preview mode, with demo data. The interface is in Italian.*
 
 ## Features
 
