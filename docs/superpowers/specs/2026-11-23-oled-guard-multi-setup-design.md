@@ -179,6 +179,15 @@ scartata: solo inglese e italiano (l'utente vuole 4-5 lingue principali).
   installandole sul suo PC); si mettono solo i nomi verificati.
 - Config: `pause_on_protected_window` (bool, default `true`). Interfaccia: un
   interruttore nella pagina Profili app accanto alle altre pause automatiche.
+- **Esito del task 1 (2026-11-23)**: `GetWindowDisplayAffinity` legge correttamente le
+  finestre di altri processi (finestre di prova con `0x11` e `0x01` riportate esatte da un
+  processo diverso). Anche l'overlay di OLED Guard risulta `0x11`: va escluso per
+  processo. Nomi delle app di streaming: le fonti trovate non bastano a verificarli
+  (Netflix: probabilmente `Netflix.exe`; Prime Video forse un involucro di Edge; Disney+
+  e Apple TV senza nome documentato) e non sono installate sul PC dell'utente. Per la
+  regola "solo nomi verificati" l'**elenco predefinito resta vuoto**: a schermo intero
+  basta la pausa automatica, in finestra l'utente aggiunge una regola (le app UWP ora
+  hanno il nome vero). Il README lo spiega.
 - Video protetti dentro un browser: non rilevabili. Il README e la pagina Informazioni
   dicono che a schermo intero la pausa scatta da sola e che in finestra si usa la pausa
   manuale o una regola per il browser.
