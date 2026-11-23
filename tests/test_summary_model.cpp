@@ -121,9 +121,9 @@ TEST(summary_light_removed_and_zones) {
 }
 
 TEST(summary_motion_caption) {
-  CHECK_EQ(std::string(oled::MotionCaption(0.01)), std::string("interfaccia ferma"));
-  CHECK_EQ(std::string(oled::MotionCaption(0.1)), std::string("lavoro"));
-  CHECK_EQ(std::string(oled::MotionCaption(0.2)), std::string("video o animazioni"));
+  CHECK_EQ(std::string(oled::MotionCaptionKey(0.01)), std::string("signals.caption.still"));
+  CHECK_EQ(std::string(oled::MotionCaptionKey(0.1)), std::string("signals.caption.work"));
+  CHECK_EQ(std::string(oled::MotionCaptionKey(0.2)), std::string("signals.caption.video"));
 }
 
 // Buffer del riassunto scritto da CSSummary: totali in 64 slot, poi due parole per zona.

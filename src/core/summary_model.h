@@ -45,7 +45,8 @@ inline constexpr int kSummaryWords = kSummaryZoneBase + kZones * 2;
 // Zona 32x18 di una cella della griglia cols x rows.
 int ZoneOf(int cx, int cy, int cols, int rows);
 FrameSummary ComputeSummary(const DimModel& m, double now_s, const ShadeParams& shade);
-std::string_view MotionCaption(double motion);
+// Chiave della didascalia del movimento ("signals.caption.still" | "work" | "video").
+std::string_view MotionCaptionKey(double motion);
 // Dal buffer dello shader; dimensione sbagliata o total_px <= 0: riassunto vuoto.
 FrameSummary DecodeSummary(const std::vector<uint32_t>& words, double total_px);
 

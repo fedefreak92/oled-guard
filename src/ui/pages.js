@@ -149,7 +149,7 @@ PAGES.panoramica = {
       for (const e of store.activity.slice(0, 30)) {
         list.append(h('div.act', { cls: e.kind },
           h('span.ai', null, icon(ACTIVITY_ICONS[e.kind] || 'info')),
-          h('span', { text: e.text + (e.count > 1 ? ` ×${e.count}` : '') }),
+          h('span', { text: t(e.key, e.params) + (e.count > 1 ? ` ×${e.count}` : '') }),
           h('time', { text: fmtWhen(e.t) })));
       }
     };
@@ -677,7 +677,7 @@ PAGES.statistiche = {
           const since = has ? new Date(w.since * 1000).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', timeZone: 'UTC' }) : '-';
           setText(w1b, has ? `${Math.round(w.measured_hours)} h` : '-');
           setText(w1s, has ? `dal ${since}` : '');
-          setText(w2b, has ? w.hottest_label : '-');
+          setText(w2b, has ? t(w.hottest_key) : '-');
           setText(w2s, has ? `${w.hottest_hours.toFixed(1).replace('.', ',')} h a bianco pieno` : '');
           setText(w3b, has ? `${w.concentration.toFixed(2).replace('.', ',')}×` : '-');
           setText(w3s, 'zona peggiore / media');
@@ -751,7 +751,7 @@ PAGES.statistiche = {
           for (const [reason, n] of entries) {
             const fill = h('i');
             fill.style.width = `${(n / top) * 100}%`;
-            bars.append(h('div.bar-row', null, h('span', { text: reason }), h('b', { text: String(n) }), h('div.bar', null, fill)));
+            bars.append(h('div.bar-row', null, h('span', { text: t(reason) }), h('b', { text: String(n) }), h('div.bar', null, fill)));
           }
         }
         const now = s && !s.paused ? (s.offset[1] + 3) * 7 + s.offset[0] + 3 : -1;
@@ -864,7 +864,7 @@ PAGES.profili = {
       if (!a) return;
       editName.innerHTML = '';
       editName.append(avatar(a.exe), h('span', { text: a.exe }));
-      setText(editInfo, a.reason ? `Ultima pausa: ${a.reason.toLowerCase()} · ${fmtWhen(a.last_seen_s * 1000)}` : 'Aggiunta a mano: non ha ancora messo in pausa la protezione.');
+      setText(editInfo, a.reason_key ? `Ultima pausa: ${t(a.reason_key).toLowerCase()} · ${fmtWhen(a.last_seen_s * 1000)}` : 'Aggiunta a mano: non ha ancora messo in pausa la protezione.');
       rules.set(a.rule);
       setText(explain, RULE_EXPLAIN[a.rule] || '');
       dimEx.set(a.dim_exclude);
@@ -1102,10 +1102,10 @@ PAGES.windows = {
           let action;
           if (it.managed) action = pill('Gestito dal sistema');
           else if (it.ok) action = pill('Fatto', 'accent');
-          else action = h('button.btn.small', { type: 'button', title: 'Applica il valore consigliato', on: { click: () => send({ cmd: 'windowsApply', id: it.id }) } }, it.recommended);
+          else action = h('button.btn.small', { type: 'button', title: 'Applica il valore consigliato', on: { click: () => send({ cmd: 'windowsApply', id: it.id }) } }, t(it.recommended_key, it.recommended_params));
           list.body.append(h('div.row', null,
             h('span.check', { cls: it.ok ? 'ok' : null }, it.ok ? icon('check') : null),
-            h('div.label', null, h('b', { text: it.label }), h('p', { text: `Ora: ${it.current}` })),
+            h('div.label', null, h('b', { text: t(`windows.${it.id}.label`) }), h('p', { text: `Ora: ${t(it.current_key, it.current_params)}` })),
             h('div.control', null, action)));
         }
       },

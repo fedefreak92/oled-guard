@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:">
@@ -7,7 +7,7 @@
 <title>OLED Guard</title>
 <link rel="stylesheet" href="app.css">
 </head>
-<body>
+<body class="loading">
 <div class="shell">
   <aside class="side">
     <div class="brand">
@@ -16,41 +16,41 @@
     </div>
     <nav class="nav" id="nav"></nav>
     <div class="side-foot">
-      <button id="btnNews" title="Novità e informazioni"><span id="newsIcon"></span>Novità</button>
+      <button id="btnNews" data-i18n-title="shell.news_title"><span id="newsIcon"></span><span data-i18n="shell.news"></span></button>
       <span class="version" id="footVersion">v-</span>
     </div>
   </aside>
 
   <section class="main">
     <header class="top">
-      <button class="iconbtn" id="btnTopPause" title="Pausa manuale"></button>
+      <button class="iconbtn" id="btnTopPause"></button>
       <span class="status" id="topStatus"><i class="dot"></i><span>...</span></span>
-      <span class="session">Sessione · <b id="topSession">-</b></span>
+      <span class="session"><span data-i18n="shell.session"></span> · <b id="topSession">-</b></span>
       <span class="fill"></span>
-      <button class="ghost-icon" id="btnTopStats" title="Statistiche"></button>
-      <button class="ghost-icon" id="btnTopSettings" title="Impostazioni"></button>
+      <button class="ghost-icon" id="btnTopStats" data-i18n-title="nav.statistiche"></button>
+      <button class="ghost-icon" id="btnTopSettings" data-i18n-title="nav.impostazioni"></button>
       <span class="version" id="topVersion">v-</span>
-      <button class="wb" data-win="minimize" title="Riduci a icona"></button>
-      <button class="wb" data-win="maximize" title="Ingrandisci"></button>
-      <button class="wb close" data-win="close" title="Chiudi"></button>
+      <button class="wb" data-win="minimize" data-i18n-title="shell.minimize"></button>
+      <button class="wb" data-win="maximize" data-i18n-title="shell.maximize"></button>
+      <button class="wb close" data-win="close" data-i18n-title="shell.close"></button>
     </header>
 
     <div class="content" id="content"></div>
 
     <footer class="strip">
       <div class="strip-head">
-        <h6><i class="dot"></i>SEGNALI DAL VIVO · ULTIMI 60 S</h6>
-        <button class="link" id="btnOpenStats">Apri statistiche ›</button>
+        <h6><i class="dot"></i><span data-i18n="strip.title"></span></h6>
+        <button class="link" id="btnOpenStats" data-i18n="strip.open_stats"></button>
       </div>
       <div class="sig-tiles">
-        <div class="sig risk"><div class="sig-top"><small>Rischio</small><b id="sigRisk">-</b></div><div class="spark" id="sparkRisk"></div><span id="sigRiskSub">-</span></div>
-        <div class="sig motion"><div class="sig-top"><small>Movimento</small><b id="sigMotion">-</b></div><div class="spark" id="sparkMotion"></div><span id="sigMotionSub">-</span></div>
-        <div class="sig bright"><div class="sig-top"><small>Luminosità</small><b id="sigBright">-</b></div><div class="spark" id="sparkBright"></div><span id="sigBrightSub">-</span></div>
+        <div class="sig risk"><div class="sig-top"><small data-i18n="strip.risk"></small><b id="sigRisk">-</b></div><div class="spark" id="sparkRisk"></div><span id="sigRiskSub">-</span></div>
+        <div class="sig motion"><div class="sig-top"><small data-i18n="strip.motion"></small><b id="sigMotion">-</b></div><div class="spark" id="sparkMotion"></div><span id="sigMotionSub">-</span></div>
+        <div class="sig bright"><div class="sig-top"><small data-i18n="strip.brightness"></small><b id="sigBright">-</b></div><div class="spark" id="sparkBright"></div><span id="sigBrightSub">-</span></div>
         <div class="sig sum">
-          <div><b class="accent" id="sSession">-</b><small>Sessione</small></div>
-          <div><b id="sTotal">-</b><small>Protetto in totale</small></div>
-          <div><b id="sPeak">-</b><small>Picco rischio · 24 h</small></div>
-          <div><b class="accent" id="sAvoided">-</b><small>Usura evitata oggi</small></div>
+          <div><b class="accent" id="sSession">-</b><small data-i18n="shell.session"></small></div>
+          <div><b id="sTotal">-</b><small data-i18n="strip.total"></small></div>
+          <div><b id="sPeak">-</b><small data-i18n="strip.peak24"></small></div>
+          <div><b class="accent" id="sAvoided">-</b><small data-i18n="strip.avoided_today"></small></div>
         </div>
       </div>
     </footer>

@@ -68,10 +68,10 @@ FrameSummary DecodeSummary(const std::vector<uint32_t>& words, double total_px) 
   return s;
 }
 
-std::string_view MotionCaption(double motion) {
-  if (motion < 0.02) return "interfaccia ferma";
-  if (motion <= 0.15) return "lavoro";
-  return "video o animazioni";
+std::string_view MotionCaptionKey(double motion) {
+  if (motion < 0.02) return "signals.caption.still";
+  if (motion <= 0.15) return "signals.caption.work";
+  return "signals.caption.video";
 }
 
 }  // namespace oled

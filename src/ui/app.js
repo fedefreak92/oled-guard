@@ -13,7 +13,8 @@ const preview = !webview;
 const store = {
   state: null, stats: null, config: null, apps: null, windows: null, dim: null,
   monitors: null, activity: [], about: null, history: null,
-  signals: [], signalCaption: '', signalsVersion: 0,
+  signals: [], signalCaptionKey: '', signalsVersion: 0,
+  lang: 'en', strings: {},
   nextMoveAt: 0, highlightUntil: 0,
 };
 const listeners = {};
@@ -29,8 +30,49 @@ function send(cmd) {
   else if (window.Mock) window.Mock.command(cmd);
 }
 
+// ------------------------------------------------------------------ traduzioni
+
+// Il dizionario arriva dall'app (messaggio "strings"): inglese gia' sovrascritto dalla
+// lingua attiva. I segnaposto {nome} prendono i valori di `params`; un parametro che
+// finisce in "_key" e' a sua volta una chiave e riempie {nome-senza-_key}.
+const missingWarned = new Set();
+function t(key, params) {
+  if (!key) return '';
+  let text = store.strings[key];
+  if (text === undefined) {
+    if (!missingWarned.has(key) && Object.keys(store.strings).length) { missingWarned.add(key); console.warn('testo mancante:', key); }
+    text = key;
+  }
+  if (params) {
+    for (const [name, value] of Object.entries(params)) {
+      const isKey = name.endsWith('_key');
+      const slot = isKey ? name.slice(0, -4) : name;
+      text = text.split(`{${slot}}`).join(isKey ? t(value) : String(value));
+    }
+  }
+  return text;
+}
+function tp(key, n, params) {
+  const form = new Intl.PluralRules(store.lang).select(n) === 'one' ? '_one' : '_other';
+  return t(key + form, { n: fmtNumber(n), ...params });
+}
+// Testi fissi di index.html: data-i18n (contenuto) e data-i18n-title (suggerimento).
+function applyStaticStrings() {
+  document.documentElement.lang = store.lang;
+  document.querySelectorAll('[data-i18n]').forEach((el) => setText(el, t(el.dataset.i18n)));
+  document.querySelectorAll('[data-i18n-title]').forEach((el) => { el.title = t(el.dataset.i18nTitle); });
+}
+
 function receive(msg) {
   switch (msg.type) {
+    case 'strings':
+      store.lang = msg.lang;
+      store.strings = msg.strings || {};
+      applyStaticStrings();
+      buildNav();
+      if (current) showPage(current.id);
+      document.body.classList.remove('loading');
+      break;
     case 'state':
       store.state = msg;
       store.nextMoveAt = performance.now() + msg.next_move_ms;
@@ -45,7 +87,8 @@ function receive(msg) {
       if (msg.events) store.activity = msg.events;
       else if (msg.add) {
         const a = msg.add, first = store.activity[0];
-        if (first && first.kind === a.kind && first.text === a.text && a.count > 1) store.activity[0] = a;
+        const same = first && first.kind === a.kind && first.key === a.key && JSON.stringify(first.params) === JSON.stringify(a.params);
+        if (same && a.count > 1) store.activity[0] = a;
         else store.activity = [a, ...store.activity].slice(0, 100);
       }
       break;
@@ -54,11 +97,11 @@ function receive(msg) {
         store.signals = msg.history.map((s) => (s ? { measured: true, risk: s[0], motion: s[1], brightness: s[2] } : { measured: false }));
       } else {
         store.signals = [...store.signals, msg].slice(-60);
-        store.signalCaption = msg.caption || '';
+        store.signalCaptionKey = msg.caption_key || '';
       }
       store.signalsVersion++;
       break;
-    case 'notice': toast(msg.text); return;
+    case 'notice': toast(t(msg.key, msg.params)); return;
     case 'processes': case 'browsed': break;
     default: store[msg.type] = msg;
   }
@@ -87,6 +130,14 @@ const throttledConfig = (key, map = (v) => v) => throttle((v) => setConfig({ [ke
 // ------------------------------------------------------------------ formati
 
 const pad2 = (n) => String(n).padStart(2, '0');
+// Numeri, percentuali e date nella lingua attiva.
+function fmtNumber(v, digits = 0) {
+  return new Intl.NumberFormat(store.lang, { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(v);
+}
+// v in punti percentuali (12.5 -> "12,5%" in italiano).
+const fmtPct = (v, digits = 0) =>
+  new Intl.NumberFormat(store.lang, { style: 'percent', minimumFractionDigits: digits, maximumFractionDigits: digits }).format(v / 100);
+const fmtMin = (s) => t('unit.min', { n: fmtNumber(Math.round(s / 6) / 10, Number.isInteger(Math.round(s / 6) / 10) ? 0 : 1) });
 function fmtClock(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
@@ -94,19 +145,17 @@ function fmtClock(ms) {
 }
 function fmtHours(ms) {
   const h = ms / 3600000;
-  if (h < 1) return `${Math.round(ms / 60000)} min`;
-  return `${h < 10 ? h.toFixed(1).replace('.', ',') : Math.round(h)} h`;
+  if (h < 1) return t('unit.min', { n: fmtNumber(Math.round(ms / 60000)) });
+  return t('unit.h', { n: h < 10 ? fmtNumber(h, 1) : fmtNumber(Math.round(h)) });
 }
 function fmtWhen(unixMs) {
-  if (!unixMs) return 'mai';
+  if (!unixMs) return t('time.never');
   const d = new Date(unixMs), now = new Date();
-  const hm = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-  if (d.toDateString() === now.toDateString()) return (now - d < 120000) ? 'adesso' : `oggi ${hm}`;
-  if (new Date(now - 86400000).toDateString() === d.toDateString()) return `ieri ${hm}`;
-  return d.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' }) + ` ${hm}`;
+  const time = d.toLocaleTimeString(store.lang, { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === now.toDateString()) return (now - d < 120000) ? t('time.now') : t('time.today_at', { time });
+  if (new Date(now - 86400000).toDateString() === d.toDateString()) return t('time.yesterday_at', { time });
+  return t('time.date_at', { date: d.toLocaleDateString(store.lang, { day: 'numeric', month: 'short' }), time });
 }
-const fmtPct = (v, digits = 0) => `${v.toFixed(digits).replace('.', ',')}%`;
-const fmtMin = (s) => `${String(Math.round(s / 6) / 10).replace('.', ',')} min`;
 
 // ------------------------------------------------------------------ DOM
 
@@ -350,10 +399,12 @@ function applyLook() {
 
 // ------------------------------------------------------------------ guscio e pagine
 
+// Gruppi e pagine della barra laterale: [chiave del gruppo, [[id, icona], ...]]; il testo
+// di ogni voce e' la chiave "nav.<id>".
 const NAV = [
-  ['PROTEGGI', [['panoramica', 'Panoramica', 'grid'], ['overlay', 'Overlay', 'circle'], ['monitor', 'Monitor', 'monitor'], ['statistiche', 'Statistiche', 'chart']]],
-  ['CONFIGURA', [['profili', 'Profili app', 'apps'], ['tasti', 'Tasti rapidi', 'keyboard'], ['impostazioni', 'Impostazioni', 'gear'], ['windows', 'Windows per OLED', 'windows']]],
-  ['AIUTO', [['avanzate', 'Avanzate', 'doc'], ['informazioni', 'Informazioni', 'info']]],
+  ['nav.group.protect', [['panoramica', 'grid'], ['overlay', 'circle'], ['monitor', 'monitor'], ['statistiche', 'chart']]],
+  ['nav.group.configure', [['profili', 'apps'], ['tasti', 'keyboard'], ['impostazioni', 'gear'], ['windows', 'windows']]],
+  ['nav.group.help', [['avanzate', 'doc'], ['informazioni', 'info']]],
 ];
 const PAGES = {};  // id -> { build(root) -> { update() } }, definiti in pages.js
 let current = null;  // { id, view }
@@ -371,17 +422,23 @@ function showPage(id) {
   renderNow();
 }
 
-function buildShell() {
-  $('brandLogo').append(logo());
+function buildNav() {
   const nav = $('nav');
+  nav.innerHTML = '';
   for (const [group, items] of NAV) {
-    nav.append(h('h6', { text: group }));
-    for (const [id, label, ic] of items) {
-      const b = h('button', { type: 'button', on: { click: () => showPage(id) } }, icon(ic), h('span', { text: label }));
+    nav.append(h('h6', { text: t(group) }));
+    for (const [id, ic] of items) {
+      const b = h('button', { type: 'button', on: { click: () => showPage(id) } }, icon(ic), h('span', { text: t('nav.' + id) }));
       b.dataset.page = id;
+      b.classList.toggle('on', !!current && current.id === id);
       nav.append(b);
     }
   }
+}
+
+function buildShell() {
+  $('brandLogo').append(logo());
+  buildNav();
   $('newsIcon').append(icon('book'));
   $('btnNews').addEventListener('click', () => showPage('informazioni'));
   $('btnTopStats').append(icon('chart'));
@@ -432,7 +489,8 @@ function renderSignals() {
   lastSignalsVersion = store.signalsVersion;
   const last = store.signals[store.signals.length - 1];
   const live = !!(last && last.measured);
-  const pct = (v) => `${Math.round(v * 100)}%`;
+  const pct = (v) => fmtPct(v * 100);
+  const n = (v) => fmtNumber(Math.round(v * 100));
   const risk = channel('risk'), motion = channel('motion'), bright = channel('brightness');
   sparkline($('sparkRisk'), risk.vals, 1);
   sparkline($('sparkMotion'), motion.vals, 1);
@@ -440,17 +498,18 @@ function renderSignals() {
   setText($('sigRisk'), live ? pct(last.risk) : '–');
   setText($('sigMotion'), live ? pct(last.motion) : '–');
   setText($('sigBright'), live ? pct(last.brightness) : '–');
-  setText($('sigRiskSub'), live ? `picco ${Math.round(risk.peak * 100)} · media ${Math.round(risk.mean * 100)}` : 'in pausa');
-  setText($('sigMotionSub'), live ? `media ${Math.round(motion.mean * 100)} · ${store.signalCaption}` : 'in pausa');
-  setText($('sigBrightSub'), live ? `media ${Math.round(bright.mean * 100)} (APL)` : 'in pausa');
+  const paused = t('signals.paused');
+  setText($('sigRiskSub'), live ? t('signals.peak_mean', { peak: n(risk.peak), mean: n(risk.mean) }) : paused);
+  setText($('sigMotionSub'), live ? t('signals.mean_caption', { mean: n(motion.mean), caption_key: store.signalCaptionKey }) : paused);
+  setText($('sigBrightSub'), live ? t('signals.mean_apl', { mean: n(bright.mean) }) : paused);
 }
 
 function statusInfo(s) {
   if (!s) return { cls: 'paused', text: '...' };
-  if (s.testing_shift) return { cls: 'test', text: 'Prova in corso' };
-  if (s.paused) return { cls: 'paused', text: `In pausa · ${s.reason}` };
-  if (s.away) return { cls: 'away', text: 'Assente · schermo scurito' };
-  return { cls: '', text: 'Protetto' };
+  if (s.testing_shift) return { cls: 'test', text: t('status.test') };
+  if (s.paused) return { cls: 'paused', text: t('status.paused', { reason_key: s.reason_key }) };
+  if (s.away) return { cls: 'away', text: t('status.away') };
+  return { cls: '', text: t('status.protected') };
 }
 
 function renderShell() {
@@ -465,8 +524,8 @@ function renderShell() {
     pauseBtn.innerHTML = '';
     pauseBtn.append(icon(manual ? 'play' : 'pause'));
     pauseBtn.dataset.icon = String(manual);
-    pauseBtn.title = manual ? 'Riprendi la protezione' : 'Pausa manuale';
   }
+  pauseBtn.title = manual ? t('shell.resume') : t('shell.pause_manual');
   pauseBtn.classList.toggle('on', manual);
   const session = s ? fmtClock(s.session_ms) : '-';
   setText($('topSession'), session);
@@ -476,8 +535,8 @@ function renderShell() {
   if (st) setText($('sTotal'), fmtHours(st.total_ms));
   const hist = store.history;
   if (hist) {
-    setText($('sPeak'), `${Math.round(hist.risk_peak_24h * 100)}%`);
-    setText($('sAvoided'), hist.avoided_today === null ? 'n/d' : `${Math.round(hist.avoided_today * 100)}%`);
+    setText($('sPeak'), fmtPct(hist.risk_peak_24h * 100));
+    setText($('sAvoided'), hist.avoided_today === null ? t('common.na') : fmtPct(hist.avoided_today * 100));
   }
   renderSignals();
 }

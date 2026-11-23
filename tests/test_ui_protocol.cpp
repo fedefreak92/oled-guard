@@ -36,7 +36,8 @@ TEST(ui_state_message_fields) {
   if (v.type() != JsonValue::Type::Object) return;
   CHECK_EQ(v.Find("type")->AsString(), std::string("state"));
   CHECK(v.Find("paused")->AsBool());
-  CHECK_EQ(v.Find("reason")->AsString(), std::string("Finestra a tutto schermo"));
+  CHECK_EQ(v.Find("reason_key")->AsString(), std::string("pause.reason.fullscreen_window"));
+  CHECK(v.Find("reason") == nullptr);
   CHECK_EQ(v.Find("trail")->AsArray().size(), size_t{2});
   CHECK(v.Find("hdr")->AsBool());
   CHECK_NEAR(v.Find("width")->AsNumber(), 3840, 1e-9);
@@ -65,6 +66,8 @@ TEST(ui_apps_message_includes_rules) {
   if (apps.size() != 2) return;
   CHECK_EQ(apps[0].Find("exe")->AsString(), std::string("game.exe"));
   CHECK_EQ(apps[0].Find("rule")->AsString(), std::string("always"));
+  CHECK_EQ(apps[0].Find("reason_key")->AsString(), std::string("pause.reason.fullscreen_window"));
+  CHECK(apps[0].Find("reason") == nullptr);
   CHECK_NEAR(apps[0].Find("count")->AsNumber(), 1, 1e-9);
   CHECK_EQ(apps[1].Find("exe")->AsString(), std::string("mpv.exe"));
   CHECK_EQ(apps[1].Find("rule")->AsString(), std::string("never"));
@@ -272,8 +275,8 @@ TEST(ui_stats_pauses_by_reason) {
   CHECK(by && by->type() == JsonValue::Type::Object);
   if (!by || by->type() != JsonValue::Type::Object) return;
   CHECK_EQ(by->AsObject().size(), size_t{2});
-  const std::string full(oled::PauseReasonText(oled::PauseReason::FullscreenWindow));
-  const std::string notif(oled::PauseReasonText(oled::PauseReason::NotificationState));
+  const std::string full(oled::PauseReasonKey(oled::PauseReason::FullscreenWindow));
+  const std::string notif(oled::PauseReasonKey(oled::PauseReason::NotificationState));
   CHECK(by->Find(full) && std::abs(by->Find(full)->AsNumber() - 2) < 1e-9);
   CHECK(by->Find(notif) && std::abs(by->Find(notif)->AsNumber() - 1) < 1e-9);
 }
@@ -411,7 +414,7 @@ TEST(ui_signals_messages) {
   CHECK_NEAR(v.Find("risk")->AsNumber(), 0.24, 1e-9);
   CHECK_NEAR(v.Find("motion")->AsNumber(), 0.1, 1e-9);
   CHECK_NEAR(v.Find("brightness")->AsNumber(), 0.41, 1e-9);
-  CHECK_EQ(v.Find("caption")->AsString(), std::string("lavoro"));
+  CHECK_EQ(v.Find("caption_key")->AsString(), std::string("signals.caption.work"));
   oled::SignalRing ring;
   ring.Push(s);
   ring.Push(oled::SignalSample{});

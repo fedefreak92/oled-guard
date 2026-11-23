@@ -27,6 +27,8 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 body { transition: filter 1s ease; user-select: none; font-size: 1rem; }
 /* Attenuazione dopo 60 s senza interazione: la finestra non deve "bruciare" il pannello. */
 body.dim { filter: brightness(0.3); }
+/* Fino all'arrivo dei testi tradotti (messaggio "strings") il guscio resta nascosto. */
+body.loading .shell { visibility: hidden; }
 button { font-family: inherit; font-size: inherit; color: inherit; cursor: pointer; }
 button:disabled { cursor: default; opacity: 0.45; }
 input { font-family: inherit; font-size: inherit; color: inherit; }

@@ -53,7 +53,7 @@ std::string StateMessage(const UiState& s) {
   o.Set("paused", JsonValue(s.paused));
   o.Set("manual_pause", JsonValue(s.manual_pause));
   o.Set("testing_shift", JsonValue(s.testing_shift));
-  o.Set("reason", JsonValue(std::string(PauseReasonText(s.reason))));
+  o.Set("reason_key", JsonValue(std::string(PauseReasonKey(s.reason))));
   o.Set("foreground", JsonValue(s.foreground_process));
   o.Set("offset", Point(s.offset));
   JsonValue trail = JsonValue::MakeArray();
@@ -88,7 +88,7 @@ std::string StatsMessage(const WearStats& stats, int amplitude) {
   for (int r = 0; r < WearStats::kReasons; ++r) {
     const auto reason = static_cast<PauseReason>(r);
     const int n = stats.TodayPauses(reason);
-    if (n > 0) by_reason.Set(std::string(PauseReasonText(reason)), JsonValue(n));
+    if (n > 0) by_reason.Set(std::string(PauseReasonKey(reason)), JsonValue(n));
   }
   o.Set("pauses_by_reason", by_reason);
   return Compact(o);
@@ -111,7 +111,7 @@ std::string AppsMessage(const AppHistory& history, const Config& config) {
   for (const AppEntry& e : history.Entries()) {
     JsonValue a = JsonValue::MakeObject();
     a.Set("exe", JsonValue(e.exe));
-    a.Set("reason", JsonValue(std::string(PauseReasonText(e.reason))));
+    a.Set("reason_key", JsonValue(std::string(PauseReasonKey(e.reason))));
     a.Set("last_seen_s", JsonValue(static_cast<double>(e.last_seen_s)));
     a.Set("count", JsonValue(e.count));
     a.Set("rule", JsonValue(RuleName(RuleFor(config, e.exe))));
@@ -125,7 +125,7 @@ std::string AppsMessage(const AppHistory& history, const Config& config) {
       if (std::find(listed.begin(), listed.end(), exe) != listed.end()) continue;
       JsonValue a = JsonValue::MakeObject();
       a.Set("exe", JsonValue(exe));
-      a.Set("reason", JsonValue(""));
+      a.Set("reason_key", JsonValue(""));
       a.Set("last_seen_s", JsonValue(0));
       a.Set("count", JsonValue(0));
       a.Set("rule", JsonValue(RuleName(RuleFor(config, exe))));
@@ -307,7 +307,7 @@ std::string SignalsMessage(const SignalSample& s) {
   o.Set("risk", JsonValue(s.risk));
   o.Set("motion", JsonValue(s.motion));
   o.Set("brightness", JsonValue(s.brightness));
-  o.Set("caption", JsonValue(std::string(MotionCaption(s.motion))));
+  o.Set("caption_key", JsonValue(std::string(MotionCaptionKey(s.motion))));
   return Compact(o);
 }
 

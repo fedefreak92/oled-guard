@@ -21,38 +21,49 @@ if (preview) {
       alert_enabled: true, alert_threshold: 'medium', alert_after_min: 60, app_stats_enabled: true,
     },
     history: [
-      { exe: 'cyberpunk2077.exe', reason: 'Gioco o app a schermo intero', last_seen_s: now() / 1000 - 30, count: 12 },
-      { exe: 'chrome.exe', reason: 'Finestra a tutto schermo', last_seen_s: now() / 1000 - 86400 - 3000, count: 4 },
-      { exe: 'vlc.exe', reason: 'Finestra a tutto schermo', last_seen_s: now() / 1000 - 90000, count: 2 },
-      { exe: 'netflix.exe', reason: 'Pausa manuale', last_seen_s: now() / 1000 - 400000, count: 1 },
+      { exe: 'cyberpunk2077.exe', reason_key: 'pause.reason.notification_state', last_seen_s: now() / 1000 - 30, count: 12 },
+      { exe: 'chrome.exe', reason_key: 'pause.reason.fullscreen_window', last_seen_s: now() / 1000 - 86400 - 3000, count: 4 },
+      { exe: 'vlc.exe', reason_key: 'pause.reason.fullscreen_window', last_seen_s: now() / 1000 - 90000, count: 2 },
+      { exe: 'netflix.exe', reason_key: 'pause.reason.manual', last_seen_s: now() / 1000 - 400000, count: 1 },
     ],
     monitorList: [
       { device: '\\\\.\\DISPLAY1', name: 'LG TV SSCR2', width: 3840, height: 2160, refresh_hz: 144, hdr: true, primary: true, connection: 'HDMI' },
       { device: '\\\\.\\DISPLAY2', name: 'DELL U2723QE', width: 2560, height: 1440, refresh_hz: 60, hdr: false, primary: false, connection: 'DP' },
     ],
     windows: [
-      ['dark_theme', 'Tema scuro di sistema e app', 'scuro', 'Scuro', true],
-      ['taskbar_autohide', 'Barra delle applicazioni a scomparsa', 'sempre visibile', 'Applica', false],
-      ['display_timeout', 'Spegni lo schermo dopo', 'mai', '5 min', false],
-      ['screensaver', 'Salvaschermo nero', 'dopo 10 min', '10 min', true],
-      ['desktop_icons', 'Icone del desktop nascoste', 'visibili', 'Nascondi', false],
-      ['transparency', 'Effetti di trasparenza disattivati', 'disattivati', 'Disattiva', true],
-      ['black_wallpaper', 'Sfondo nero', 'tinta unita nera', 'Nero', true],
-      ['mouse_vanish', 'Nascondi il puntatore mentre scrivi', 'attivo', 'Attiva', true],
-      ['accent_titlebar', 'Colore d\'accento sulle barre del titolo', 'spento', 'Spegni', true],
+      // [id, valore attuale, consigliato (chiave e segnaposto), gia' a posto]
+      ['dark_theme', ['windows.value.dark'], ['windows.action.dark'], true],
+      ['taskbar_autohide', ['windows.value.always_visible'], ['windows.action.apply'], false],
+      ['display_timeout', ['windows.value.never'], ['windows.value.minutes', { n: '5' }], false],
+      ['screensaver', ['windows.value.black_after_min', { n: '10' }], ['windows.value.minutes', { n: '10' }], true],
+      ['desktop_icons', ['windows.value.visible'], ['windows.action.hide'], false],
+      ['transparency', ['windows.value.off'], ['windows.action.turn_off'], true],
+      ['black_wallpaper', ['windows.value.solid_black'], ['windows.action.black'], true],
+      ['mouse_vanish', ['windows.value.on'], ['windows.action.turn_on'], true],
+      ['accent_titlebar', ['windows.value.off'], ['windows.action.turn_off'], true],
     ],
     offset: [0, 0], trail: [[0, 0]], paused: false, manual: false, testing: 0, next: 6000, t0: now(),
     away: false, highlightUntil: 0, dimT: 0,
     cells: Array.from({ length: 49 }, (_, i) => { const x = i % 7 - 3, y = Math.floor(i / 7) - 3; return Math.abs(x) <= 2 && Math.abs(y) <= 2 ? 3e6 + Math.random() * 1.2e6 : 0; }),
     activity: [],
 
-    start() {
-      this.log('resume', 'Protezione attiva', now() - 3600000);
-      this.log('pause', 'In pausa: Gioco o app a schermo intero · cyberpunk2077.exe', now() - 3000000);
-      this.log('resume', 'Protezione attiva', now() - 1500000);
-      this.log('test', 'Prova dello spostamento (30 s)', now() - 600000);
+    // Testi come li manderebbe l'app: inglese sovrascritto dalla lingua (?lang=, default it).
+    async loadStrings(lang) {
+      const read = (l) => fetch(`i18n/${l}.json`).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+      const [en, active] = await Promise.all([read('en'), lang === 'en' ? Promise.resolve({}) : read(lang)]);
+      const strings = { ...en, ...active };
+      delete strings._meta;
+      receive({ type: 'strings', lang, strings });
+    },
+    async start() {
+      const lang = new URLSearchParams(location.search).get('lang') || 'it';
+      await this.loadStrings(lang);
+      this.log('resume', 'activity.resumed', {}, now() - 3600000);
+      this.log('pause', 'activity.paused_app', { reason_key: 'pause.reason.notification_state', app: 'cyberpunk2077.exe' }, now() - 3000000);
+      this.log('resume', 'activity.resumed', {}, now() - 1500000);
+      this.log('test', 'activity.test_shift', { s: '30' }, now() - 600000);
       receive({ type: 'config', config: this.config });
-      receive({ type: 'about', version: '1.1.0', config_path: 'C:\\Users\\utente\\AppData\\Roaming\\oled-guard\\config.json', log_dir: 'C:\\Users\\utente\\AppData\\Roaming\\oled-guard\\logs' });
+      receive({ type: 'about', version: '1.2.0', config_path: 'C:\\Users\\utente\\AppData\\Roaming\\oled-guard\\config.json', log_dir: 'C:\\Users\\utente\\AppData\\Roaming\\oled-guard\\logs' });
       receive({ type: 'activity', events: this.activity });
       this.sendApps();
       this.sendMonitors();
@@ -67,8 +78,8 @@ if (preview) {
       setInterval(() => this.sendStats(), 5000);
       setInterval(() => this.sendDim(), 1000);
     },
-    log(kind, text, t = now()) {
-      const e = { t, kind, text, count: 1 };
+    log(kind, key, params = {}, t = now()) {
+      const e = { t, kind, key, params, count: 1 };
       this.activity = [e, ...this.activity].slice(0, 100);
       receive({ type: 'activity', add: e });
     },
@@ -84,7 +95,7 @@ if (preview) {
         for (const exe of list) {
           if (seen.has(exe)) continue;
           seen.add(exe);
-          apps.push({ exe, reason: '', last_seen_s: 0, count: 0, rule: this.rule(exe), dim_exclude: c.dim_exclude.includes(exe) });
+          apps.push({ exe, reason_key: '', last_seen_s: 0, count: 0, rule: this.rule(exe), dim_exclude: c.dim_exclude.includes(exe) });
         }
       }
       receive({ type: 'apps', apps });
@@ -98,11 +109,13 @@ if (preview) {
       receive({ type: 'monitors', setting: this.config.monitor, monitors: this.monitorList.map((m) => ({ ...m, protected: m.device === dev })) });
     },
     sendWindows() {
-      const items = this.windows.map(([id, label, current, recommended, ok]) => ({ id, label, current, recommended, ok, restorable: false, managed: false }));
+      const items = this.windows.map(([id, [ck, cp = {}], [rk, rp = {}], ok]) => ({
+        id, current_key: ck, current_params: cp, recommended_key: rk, recommended_params: rp, ok, restorable: false, managed: false,
+      }));
       receive({ type: 'windows', items, score: items.filter((i) => i.ok).length, total: items.length });
     },
     sendStats() {
-      const by = { 'Gioco o app a schermo intero': 2, 'Finestra a tutto schermo': 1 };
+      const by = { 'pause.reason.notification_state': 2, 'pause.reason.fullscreen_window': 1 };
       receive({ type: 'stats', cells: this.cells, uniformity: 96.2, today_ms: 22320000 + (now() - this.t0), total_ms: 511200000, pauses_today: 3, pauses_by_reason: by });
     },
     signalAt(t) {
@@ -111,10 +124,10 @@ if (preview) {
       return { risk: 0.22 + 0.04 * Math.sin(s / 7), motion, brightness: 0.41 + 0.03 * Math.sin(s / 5) };
     },
     sendSignal() {
-      if (this.paused) { receive({ type: 'signals', measured: false, risk: 0, motion: 0, brightness: 0, caption: '' }); return; }
+      if (this.paused) { receive({ type: 'signals', measured: false, risk: 0, motion: 0, brightness: 0, caption_key: '' }); return; }
       const v = this.signalAt(now());
-      const caption = v.motion < 0.02 ? 'interfaccia ferma' : (v.motion <= 0.15 ? 'lavoro' : 'video o animazioni');
-      receive({ type: 'signals', measured: true, ...v, caption });
+      const caption_key = v.motion < 0.02 ? 'signals.caption.still' : (v.motion <= 0.15 ? 'signals.caption.work' : 'signals.caption.video');
+      receive({ type: 'signals', measured: true, ...v, caption_key });
     },
     sendSignalsHistory() {
       const t = now();
@@ -152,7 +165,7 @@ if (preview) {
         type: 'history', timeline, timeline_end: end, risk_peak_24h: 0.82,
         wear: {
           monitor: 'LG TV SSCR2', cells: cells.map((v) => v / max), hottest: 0, hottest_hours: 38.5,
-          hottest_label: 'in alto a sinistra', concentration: 1.86, over_double: 14, measured_hours: 142,
+          hottest_key: 'wear.zone.top_left', concentration: 1.86, over_double: 14, measured_hours: 142,
           since: end - 45 * 86400,
         },
         top_apps: [
@@ -203,11 +216,12 @@ if (preview) {
       const paused = this.manual;
       if (paused !== this.paused) {
         this.paused = paused;
-        this.log(paused ? 'manual' : 'resume', paused ? 'In pausa: Pausa manuale' : 'Protezione attiva');
+        if (paused) this.log('manual', 'activity.paused', { reason_key: 'pause.reason.manual' });
+        else this.log('resume', 'activity.resumed');
       }
       receive({
         type: 'state', paused: this.paused, manual_pause: this.manual, testing_shift: this.testing > t,
-        reason: this.paused ? 'Pausa manuale' : 'Nessuna', foreground: 'chrome.exe', offset: this.offset, trail: this.trail,
+        reason_key: this.paused ? 'pause.reason.manual' : 'pause.reason.none', foreground: 'chrome.exe', offset: this.offset, trail: this.trail,
         next_move_ms: this.next, amplitude: this.config.amplitude_px, monitor: 'LG TV SSCR2', width: 3840, height: 2160,
         hdr: true, latency_ms: 6.9, away: this.away, session_ms: t - this.t0 + 2852000,
       });
@@ -224,7 +238,7 @@ if (preview) {
           if ('monitor' in cmd.patch) this.sendMonitors();
           break;
         case 'setManualPause': this.manual = cmd.on; this.step(); break;
-        case 'testShift': this.testing = now() + 30000; this.next = 500; this.log('test', 'Prova dello spostamento (30 s)'); break;
+        case 'testShift': this.testing = now() + 30000; this.next = 500; this.log('test', 'activity.test_shift', { s: '30' }); break;
         case 'setAppRule':
           c.denylist = c.denylist.filter((e) => e !== cmd.exe);
           c.allowlist = c.allowlist.filter((e) => e !== cmd.exe);
@@ -256,18 +270,19 @@ if (preview) {
           c.monitor = cmd.device;
           receive({ type: 'config', config: c });
           this.sendMonitors();
-          this.log('monitor', 'Schermo protetto: ' + (this.monitorList.find((m) => m.device === this.protectedDevice()) || {}).name);
+          this.log('monitor', 'activity.monitor_protected', { name: (this.monitorList.find((m) => m.device === this.protectedDevice()) || {}).name });
           break;
         case 'clearHistory':
           this.clearedHistory = (this.clearedHistory || 0) + 1;
-          receive({ type: 'notice', text: 'Anteprima: storico cancellato.' });
+          receive({ type: 'notice', key: 'preview.history_cleared' });
           break;
         case 'clearActivity': this.activity = []; receive({ type: 'activity', events: [] }); break;
-        case 'openLogFolder': receive({ type: 'notice', text: 'Anteprima: qui si aprirebbe la cartella dei log.' }); break;
-        case 'windowsApply': this.windows = this.windows.map((w) => (w[0] === cmd.id ? [w[0], w[1], w[3], w[3], true] : w)); this.sendWindows(); break;
-        case 'windowsApplyAll': this.windows = this.windows.map((w) => [w[0], w[1], w[3], w[3], true]); this.sendWindows(); break;
-        case 'windowsRestoreAll': receive({ type: 'notice', text: 'Anteprima: impostazioni ripristinate.' }); break;
-        case 'displayOff': receive({ type: 'notice', text: 'Anteprima: lo schermo si spegnerebbe ora.' }); break;
+        case 'openLogFolder': receive({ type: 'notice', key: 'preview.log_folder' }); break;
+        case 'windowsApply': this.windows = this.windows.map((w) => (w[0] === cmd.id ? [w[0], w[2], w[2], true] : w)); this.sendWindows(); break;
+        case 'windowsApplyAll': this.windows = this.windows.map((w) => [w[0], w[2], w[2], true]); this.sendWindows(); break;
+        case 'windowsRestoreAll': receive({ type: 'notice', key: 'preview.windows_restored' }); break;
+        case 'displayOff': receive({ type: 'notice', key: 'preview.display_off' }); break;
+        case 'setLanguage': this.config.language = cmd.id; this.loadStrings(cmd.id === 'auto' ? 'it' : cmd.id); receive({ type: 'config', config: this.config }); break;
         case 'dimHighlight': this.highlightUntil = now() + 15000; this.sendDim(); break;
         default: break;
       }
