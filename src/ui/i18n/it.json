@@ -161,5 +161,8 @@
   "pause.reason.protected_window": "Finestra protetta sullo schermo",
   "activity.pause_protected": "In pausa: finestra protetta · {app}",
   "apps.auto.protected.title": "Finestre protette",
-  "apps.auto.protected.desc": "Finestre che si nascondono dalla cattura dello schermo (video protetti, gestori di password): l'overlay le coprirebbe."
+  "apps.auto.protected.desc": "Finestre che si nascondono dalla cattura dello schermo (video protetti, gestori di password): l'overlay le coprirebbe.",
+  "startup.windows_too_old.body": "OLED Guard richiede Windows 10 versione 2004 o successiva. Aggiorna Windows e riprova.",
+  "notice.webview2_missing.title": "Runtime WebView2 mancante",
+  "notice.webview2_missing.body": "La finestra richiede il runtime Microsoft WebView2: {url}. La protezione resta attiva dalla tray."
 }

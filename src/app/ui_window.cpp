@@ -127,6 +127,14 @@ void UiWindow::CreateWebView(unsigned generation) {
   if (FAILED(hr)) Fail("WebView2 non avviato (" + Hr(hr) + "): il runtime WebView2 e' installato?");
 }
 
+bool WebView2RuntimeAvailable() {
+  LPWSTR version = nullptr;
+  const HRESULT hr = GetAvailableCoreWebView2BrowserVersionString(nullptr, &version);
+  const bool ok = SUCCEEDED(hr) && version != nullptr && version[0] != 0;
+  if (version) CoTaskMemFree(version);
+  return ok;
+}
+
 void UiWindow::Fail(const std::string& reason) {
   LogError("Interfaccia: {}", reason);
   if (on_failed_) on_failed_(reason);

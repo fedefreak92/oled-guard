@@ -1,4 +1,5 @@
-# Compila ed esegue i test unitari e quelli GPU (su WARP, senza scheda video).
+# Compila ed esegue i test unitari e quelli GPU (su WARP, senza scheda video), poi
+# controlla che l'exe non dipenda dal runtime di Visual C++ e prepara lo zip di release.
 name: CI
 
 on:
@@ -20,15 +21,13 @@ jobs:
         shell: powershell
         run: powershell -ExecutionPolicy Bypass -File build.ps1
 
-      - name: Raccolta dell'app
+      - name: Controllo dell'exe e zip di release
         shell: powershell
-        run: |
-          New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item build\oled-guard.exe dist\
-          Copy-Item -Recurse build\ui dist\ui
-          Copy-Item LICENSE, THIRD_PARTY_NOTICES.md, README.md dist\
+        run: powershell -ExecutionPolicy Bypass -File tools\package-release.ps1 -BuildDir build -OutDir dist
 
       - uses: actions/upload-artifact@v4
         with:
           name: oled-guard-windows-x64
-          path: dist
+          path: |
+            dist/*.zip
+            dist/*.zip.sha256

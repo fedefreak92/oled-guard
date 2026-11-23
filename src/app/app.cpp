@@ -168,7 +168,12 @@ int App::Run(HINSTANCE instance) {
   tray_.Create(main_, WM_APP_TRAY, icon_);
   tray_ready_ = true;
   ui_.SetFailedHandler([this](const std::string&) {
-    ShowNotice("notice.ui_unavailable.title", "notice.ui_unavailable.body");
+    if (!WebView2RuntimeAvailable()) {
+      ShowNotice("notice.webview2_missing.title", "notice.webview2_missing.body",
+                 {{"url", "https://developer.microsoft.com/microsoft-edge/webview2/"}});
+    } else {
+      ShowNotice("notice.ui_unavailable.title", "notice.ui_unavailable.body");
+    }
   });
   // Avvisi nati prima che la tray esistesse (config, hotkey di emergenza).
   for (const auto& [title, text] : pending_notices_) tray_.ShowBalloon(title, text);

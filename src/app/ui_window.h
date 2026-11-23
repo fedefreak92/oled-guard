@@ -62,4 +62,7 @@ class UiWindow {
   unsigned generation_ = 0;  // scarta le callback di una finestra gia' chiusa
 };
 
+// true se il runtime WebView2 e' installato (su Windows 10 puo' mancare).
+bool WebView2RuntimeAvailable();
+
 }  // namespace oled

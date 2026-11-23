@@ -161,5 +161,8 @@
   "pause.reason.protected_window": "Protected window on screen",
   "activity.pause_protected": "Paused: protected window · {app}",
   "apps.auto.protected.title": "Protected windows",
-  "apps.auto.protected.desc": "Windows that hide themselves from screen capture (protected video, password managers): the overlay would cover them."
+  "apps.auto.protected.desc": "Windows that hide themselves from screen capture (protected video, password managers): the overlay would cover them.",
+  "startup.windows_too_old.body": "OLED Guard needs Windows 10 version 2004 or later. Update Windows and try again.",
+  "notice.webview2_missing.title": "WebView2 runtime missing",
+  "notice.webview2_missing.body": "The window needs the Microsoft WebView2 runtime: {url}. Protection stays active from the tray."
 }

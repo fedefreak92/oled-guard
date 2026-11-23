@@ -4,6 +4,19 @@ project(oled_guard VERSION 1.2.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+# Runtime C++ statico: l'exe parte anche dove manca il Visual C++ Redistributable.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
+# Commit della build, mostrato nella diagnostica ("unknown" fuori da git).
+set(OLED_GUARD_COMMIT "unknown")
+find_package(Git QUIET)
+if(GIT_FOUND)
+  execute_process(COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                  OUTPUT_VARIABLE oled_commit OUTPUT_STRIP_TRAILING_WHITESPACE RESULT_VARIABLE oled_commit_rc ERROR_QUIET)
+  if(oled_commit_rc EQUAL 0 AND oled_commit)
+    set(OLED_GUARD_COMMIT "${oled_commit}")
+  endif()
+endif()
 
 if(MSVC)
   add_compile_options(/W4 /WX /permissive- /utf-8 /EHsc)
@@ -71,6 +84,7 @@ add_executable(oled-guard-tests
   tests/test_history.cpp
   tests/test_alert_model.cpp
   tests/test_i18n.cpp
+  tests/test_winver.cpp
 )
 target_include_directories(oled-guard-tests PRIVATE tests)
 target_link_libraries(oled-guard-tests PRIVATE oled_core)
@@ -156,7 +170,7 @@ add_executable(oled-guard WIN32
 target_include_directories(oled-guard SYSTEM PRIVATE third_party/webview2/include)
 target_link_libraries(oled-guard PRIVATE ${CMAKE_SOURCE_DIR}/third_party/webview2/x64/WebView2LoaderStatic.lib shcore)
 # Versione mostrata nell'interfaccia (Informazioni, barra laterale).
-target_compile_definitions(oled-guard PRIVATE OLED_GUARD_VERSION="${PROJECT_VERSION}")
+target_compile_definitions(oled-guard PRIVATE OLED_GUARD_VERSION="${PROJECT_VERSION}" OLED_GUARD_COMMIT="${OLED_GUARD_COMMIT}")
 
 # Interfaccia HTML/CSS/JS copiata accanto all'eseguibile.
 add_custom_command(TARGET oled-guard POST_BUILD
