@@ -15,6 +15,7 @@
 
 #include "ascii.h"
 #include "history_file.h"
+#include "i18n_files.h"
 #include "autostart.h"
 #include "clock.h"
 #include "diagnostics.h"
@@ -166,8 +167,8 @@ int App::Run(HINSTANCE instance) {
   icon_ = CreateAppIcon(GetSystemMetrics(SM_CXSMICON));
   tray_.Create(main_, WM_APP_TRAY, icon_);
   tray_ready_ = true;
-  ui_.SetFailedHandler([this](const std::string& reason) {
-    ShowNotice(L"Interfaccia non disponibile", Widen(reason));
+  ui_.SetFailedHandler([this](const std::string&) {
+    ShowNotice("notice.ui_unavailable.title", "notice.ui_unavailable.body");
   });
   // Avvisi nati prima che la tray esistesse (config, hotkey di emergenza).
   for (const auto& [title, text] : pending_notices_) tray_.ShowBalloon(title, text);
@@ -229,6 +230,7 @@ void App::LoadInitialConfig() {
   if (!result.parse_failed) config_ = NormalizedConfig(result.config);
   LogSetLevel(debug_ ? LogLevel::Debug : ParseLogLevel(config_.log_level));
   LogInfo("Configurazione: {}", Narrow(config_file_.Path().wstring()));
+  ApplyLanguage();
   ReportConfigWarnings(result, /*at_startup=*/true);
 }
 
@@ -240,7 +242,20 @@ Config App::NormalizedConfig(Config config) {
   return config;
 }
 
-void App::ShowNotice(const std::wstring& title, const std::wstring& text) {
+std::wstring App::T(std::string_view key, const I18nParams& params) const { return Widen(tr_.Format(key, params)); }
+
+void App::ApplyLanguage() {
+  const std::string lang = PickLanguage(config_.language, PreferredUiLanguages());
+  tr_ = LoadTranslations(UiDirectory(), lang);
+  const size_t missing = tr_.MissingKeys().size();
+  LogInfo("Lingua: {} (impostazione {}, {} testi mancanti)", lang, config_.language, missing);
+  if (ui_.IsReady()) ui_.Post(StringsMessage(tr_));
+  if (tray_ready_) UpdateTrayTooltip();
+}
+
+void App::ShowNotice(std::string_view title_key, std::string_view body_key, const I18nParams& params) {
+  const std::wstring title = T(title_key);
+  const std::wstring text = T(body_key, params);
   LogDebug("Notifica{}: {} - {}", tray_ready_ ? "" : " (in attesa della tray)", Narrow(title), Narrow(text));
   if (tray_ready_) {
     tray_.ShowBalloon(title, text);
@@ -261,15 +276,11 @@ void App::ReportConfigWarnings(const ConfigLoadResult& result, bool at_startup) 
   if (result.parse_failed) Record("config", "activity.config_invalid");
   else if (!result.warnings.empty()) Record("config", "activity.config_warnings", {{"n", std::to_string(result.warnings.size())}});
   if (result.parse_failed && at_startup) {
-    ShowNotice(L"Configurazione non valida",
-               L"Il file non si legge: uso i valori predefiniti finché non lo correggi. Dettagli nel log.");
+    ShowNotice("notice.config_invalid.title", "notice.config_unreadable.body");
   } else if (result.parse_failed) {
-    ShowNotice(L"Configurazione non valida",
-                      L"Il file non è un JSON valido: tengo i valori precedenti. Dettagli nel log.");
+    ShowNotice("notice.config_invalid.title", "notice.config_bad_json.body");
   } else if (!result.warnings.empty()) {
-    ShowNotice(L"Configurazione",
-                      std::to_wstring(result.warnings.size()) + L" avvisi: alcuni valori sono stati sostituiti "
-                                                                L"con i predefiniti. Dettagli nel log.");
+    ShowNotice("notice.config.title", "notice.config_warnings.body", {{"n", std::to_string(result.warnings.size())}});
   }
 }
 
@@ -295,6 +306,7 @@ void App::ApplyConfig(const Config& next) {
   LogSetLevel(debug_ ? LogLevel::Debug : ParseLogLevel(config_.log_level));
   shift_->Reconfigure(config_.amplitude_px, EffectiveTiming(), NowMs());
   hysteresis_.SetDelays(config_.pause_enter_delay_ms, config_.resume_delay_ms);
+  if (previous.language != config_.language) ApplyLanguage();
   if (previous.hotkey_toggle != config_.hotkey_toggle) RegisterToggleHotkey();
   if (previous.hotkey_emergency_exit != config_.hotkey_emergency_exit) StartEmergencyGuard();
   if (previous.hotkey_display_off != config_.hotkey_display_off) RegisterDisplayOffHotkey();
@@ -327,13 +339,15 @@ void App::BrowseExe() {
   if (browsing_) return;  // una finestra "Apri" alla volta
   browsing_ = true;
   const HWND target = main_;
-  RunShellAction([target] {
+  const std::wstring filter_name = T("dialog.choose_app.filter");
+  const std::wstring title = T("dialog.choose_app.title");
+  RunShellAction([target, filter_name, title] {
     auto result = std::make_unique<std::string>();
     Microsoft::WRL::ComPtr<IFileOpenDialog> dialog;
     if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog)))) {
-      const COMDLG_FILTERSPEC filter[] = {{L"Programmi (*.exe)", L"*.exe"}};
+      const COMDLG_FILTERSPEC filter[] = {{filter_name.c_str(), L"*.exe"}};
       dialog->SetFileTypes(1, filter);
-      dialog->SetTitle(L"Scegli l'app");
+      dialog->SetTitle(title.c_str());
       Microsoft::WRL::ComPtr<IShellItem> item;
       PWSTR path = nullptr;
       if (SUCCEEDED(dialog->Show(nullptr)) && SUCCEEDED(dialog->GetResult(&item)) &&
@@ -371,11 +385,10 @@ void App::SaveConfig() {
   // Un file che non si legge e' probabilmente in modifica: non lo si sovrascrive.
   if (!config_file_.OnDiskIsValid()) {
     LogWarn("Configurazione non salvata: il file su disco contiene errori");
-    ShowNotice(L"Configurazione non salvata",
-               L"Il file contiene errori: la modifica vale fino alla chiusura. Correggi il file per salvarla.");
+    ShowNotice("notice.config_not_saved.title", "notice.config_not_saved.body");
     return;
   }
-  if (!config_file_.Save(config_)) ShowNotice(L"Configurazione", L"Impossibile salvare il file.");
+  if (!config_file_.Save(config_)) ShowNotice("notice.config.title", "notice.config_save_failed.body");
 }
 
 void App::RegisterToggleHotkey() {
@@ -386,8 +399,7 @@ void App::RegisterToggleHotkey() {
   toggle_hotkey_registered_ = RegisterHotKey(main_, kToggleHotkeyId, key->modifiers | MOD_NOREPEAT, key->vk) != FALSE;
   if (!toggle_hotkey_registered_) {
     LogWarn("Hotkey {} non registrata: gia' in uso", config_.hotkey_toggle);
-    ShowNotice(L"Hotkey non disponibile", L"La combinazione " + Widen(config_.hotkey_toggle) +
-                                                     L" è già usata da un'altra app.");
+    ShowNotice("notice.hotkey_unavailable.title", "notice.hotkey_toggle_taken.body", {{"keys", config_.hotkey_toggle}});
   }
 }
 
@@ -400,8 +412,8 @@ void App::RegisterDisplayOffHotkey() {
       RegisterHotKey(main_, kDisplayOffHotkeyId, key->modifiers | MOD_NOREPEAT, key->vk) != FALSE;
   if (!display_off_hotkey_registered_) {
     LogWarn("Hotkey {} non registrata: gia' in uso", config_.hotkey_display_off);
-    ShowNotice(L"Hotkey non disponibile",
-               L"La combinazione " + Widen(config_.hotkey_display_off) + L" per spegnere lo schermo è già in uso.");
+    ShowNotice("notice.hotkey_unavailable.title", "notice.hotkey_display_off_taken.body",
+               {{"keys", config_.hotkey_display_off}});
   }
 }
 
@@ -477,11 +489,9 @@ void App::UpdateStatistics(double now) {
   if (alert_.Update(now, unprotected, alert)) {
     const int minutes = static_cast<int>(alert_.AboveForMs(now) / 60000.0 + 0.5);
     const int pct = static_cast<int>(summary->risk_unprotected * 100 + 0.5);
-    const std::string text = "Da " + std::to_string(minutes) + " minuti il " + std::to_string(pct) +
-                             "% dello schermo è fermo, luminoso e non protetto. Una pausa o \"Spegni schermo\" "
-                             "aiutano il pannello.";
     LogInfo("Avviso: rischio non protetto {}% da {} min", pct, minutes);
-    tray_.ShowBalloon(L"OLED Guard", Widen(text));
+    tray_.ShowBalloon(L"OLED Guard",
+                      T("notice.alert.body", {{"min", std::to_string(minutes)}, {"pct", std::to_string(pct)}}));
     Record("alert", "activity.alert", {{"min", std::to_string(minutes)}});
   }
 
@@ -572,8 +582,8 @@ void App::StartEmergencyGuard() {
   const auto key = ParseHotkey(config_.hotkey_emergency_exit);
   if (!key) return;
   if (!guard_.Start(*key)) {
-    ShowNotice(L"Hotkey di emergenza non disponibile",
-                      L"La combinazione " + Widen(config_.hotkey_emergency_exit) + L" è già in uso.");
+    ShowNotice("notice.hotkey_emergency_unavailable.title", "notice.hotkey_emergency_taken.body",
+               {{"keys", config_.hotkey_emergency_exit}});
   }
   guard_.BeatMain();
   if (overlay_shown_) guard_.SetOverlayActive(true);
@@ -959,9 +969,8 @@ void App::SetManualPause(bool paused) {
 }
 
 void App::UpdateTrayTooltip() {
-  std::wstring text = L"OLED Guard — ";
-  text += last_paused_ ? L"In pausa: " + Widen(PauseReasonText(last_reason_)) : L"Attivo";
-  tray_.SetTooltip(text);
+  tray_.SetTooltip(last_paused_ ? T("tray.tooltip.paused", {{"reason", tr_.Get(PauseReasonKey(last_reason_))}})
+                                 : T("tray.tooltip.active"));
 }
 
 void App::OnTrayEvent(UINT event) {
@@ -1008,6 +1017,7 @@ void App::OnUiMessage(const std::string& json) {
     case UiCommandType::Ready:
       ui_.MarkReady();
       LogInfo("Interfaccia pronta");
+      ui_.Post(StringsMessage(tr_));  // prima dello stato: la pagina disegna gia' tradotta
       PushAllToUi();
       break;
     case UiCommandType::SetConfig: {
@@ -1126,6 +1136,13 @@ void App::OnUiMessage(const std::string& json) {
     case UiCommandType::OpenLogFolder:
       OpenLogFolder();
       break;
+    case UiCommandType::SetLanguage: {
+      Config next = config_;
+      next.language = command->id;
+      ApplyConfig(next);
+      SaveConfig();
+      break;
+    }
     case UiCommandType::ClearHistory:
       history_.Clear();
       SaveHistoryNow();
@@ -1165,7 +1182,7 @@ void App::ShowTrayMenu() {
 
   HMENU monitor_menu = CreatePopupMenu();
   AppendMenuW(monitor_menu, MF_STRING | (auto_monitor ? MF_CHECKED : MF_UNCHECKED), kCmdMonitorAuto,
-              L"Automatico (LG TV, altrimenti principale)");
+              T("tray.monitor_auto").c_str());
   AppendMenuW(monitor_menu, MF_SEPARATOR, 0, nullptr);
   for (size_t i = 0; i < monitors.size(); ++i) {
     const auto& m = monitors[i];
@@ -1178,23 +1195,24 @@ void App::ShowTrayMenu() {
 
   HMENU menu = CreatePopupMenu();
   // Riga di sola informazione: lo stato reale, con il motivo della pausa automatica.
-  const std::wstring state = last_paused_ ? L"Stato: in pausa (" + Widen(PauseReasonText(last_reason_)) + L")"
-                                          : std::wstring(L"Stato: attivo");
-  AppendMenuW(menu, MF_STRING, kCmdOpenUi, L"Apri OLED Guard");
+  const std::wstring state = last_paused_ ? T("tray.state.paused", {{"reason", tr_.Get(PauseReasonKey(last_reason_))}})
+                                          : T("tray.state.active");
+  AppendMenuW(menu, MF_STRING, kCmdOpenUi, T("tray.open").c_str());
   SetMenuDefaultItem(menu, kCmdOpenUi, FALSE);
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
   AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, state.c_str());
   // La pausa manuale e' una voce a parte: cliccare durante una pausa automatica non
   // lascia una pausa manuale attiva dopo la fine del gioco.
   AppendMenuW(menu, MF_STRING | (manual_pause_ ? MF_CHECKED : MF_UNCHECKED), kCmdToggle,
-              (L"Pausa manuale\t" + Widen(config_.hotkey_toggle)).c_str());
+              (T("tray.manual_pause") + L"\t" + Widen(config_.hotkey_toggle)).c_str());
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-  AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(monitor_menu), L"Monitor");
-  AppendMenuW(menu, MF_STRING, kCmdOpenConfig, L"Apri configurazione");
-  AppendMenuW(menu, MF_STRING, kCmdOpenLogs, L"Apri cartella log");
-  AppendMenuW(menu, MF_STRING | (config_.autostart ? MF_CHECKED : MF_UNCHECKED), kCmdAutostart, L"Avvio automatico");
+  AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(monitor_menu), T("tray.monitor").c_str());
+  AppendMenuW(menu, MF_STRING, kCmdOpenConfig, T("tray.open_config").c_str());
+  AppendMenuW(menu, MF_STRING, kCmdOpenLogs, T("tray.open_logs").c_str());
+  AppendMenuW(menu, MF_STRING | (config_.autostart ? MF_CHECKED : MF_UNCHECKED), kCmdAutostart,
+              T("tray.autostart").c_str());
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-  AppendMenuW(menu, MF_STRING, kCmdExit, L"Esci");
+  AppendMenuW(menu, MF_STRING, kCmdExit, T("tray.exit").c_str());
 
   POINT pt;
   GetCursorPos(&pt);
@@ -1344,7 +1362,7 @@ LRESULT App::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
       return 0;
     case WM_APP_SECOND_INSTANCE:
       LogInfo("Avvio di una seconda istanza ignorato");
-      tray_.ShowBalloon(L"OLED Guard", L"OLED Guard è già in esecuzione: lo trovi nell'area di notifica.");
+      tray_.ShowBalloon(L"OLED Guard", T("notice.already_running.body"));
       return 0;
     case WM_WTSSESSION_CHANGE:
       pause_monitor_.OnSessionChange(wp);

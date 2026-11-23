@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "app_history.h"
+#include "i18n.h"
 #include "config.h"
 #include "config_file.h"
 #include "ui_protocol.h"
@@ -61,7 +62,12 @@ class App {
   static Config NormalizedConfig(Config config);
   void SyncAutostart();
   // Notifica nella tray; se la tray non esiste ancora la mostra appena creata.
-  void ShowNotice(const std::wstring& title, const std::wstring& text);
+  // Notifica nella tray: titolo e testo sono chiavi di traduzione.
+  void ShowNotice(std::string_view title_key, std::string_view body_key, const I18nParams& params = {});
+  // Testo tradotto nella lingua attiva.
+  std::wstring T(std::string_view key, const I18nParams& params = {}) const;
+  // Sceglie la lingua (config + Windows), ricarica i testi e li manda alla pagina e alla tray.
+  void ApplyLanguage();
   ShiftTiming EffectiveTiming() const;
   void RegisterToggleHotkey();
   void RegisterDisplayOffHotkey();
@@ -131,6 +137,7 @@ class App {
   SingleInstance single_instance_;
   ConfigFile config_file_{ConfigPath()};
   Config config_;
+  Translations tr_;
   bool initial_config_failed_ = false;
   bool tray_ready_ = false;
   std::vector<std::pair<std::wstring, std::wstring>> pending_notices_;
