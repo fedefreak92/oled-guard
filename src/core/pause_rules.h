@@ -29,6 +29,10 @@ struct PauseInputs {
   NotificationState notification_state = NotificationState::AcceptsNotifications;
   bool foreground_covers_monitor = false;
   std::string foreground_process;  // nome .exe, UTF-8
+  // Una finestra esclusa dalla cattura (DRM, gestori di password...) e' visibile sullo
+  // schermo protetto: l'overlay ci disegnerebbe sopra e l'utente non la vedrebbe.
+  bool protected_window = false;
+  std::string protected_process;   // nome .exe della prima trovata, UTF-8
 };
 
 enum class PauseReason {
@@ -43,11 +47,15 @@ enum class PauseReason {
   Denylisted,
   NotificationState,
   FullscreenWindow,
+  ProtectedWindow,  // ultimo: i numeri dei motivi finiscono in stats.json
 };
+
+inline constexpr int kPauseReasonCount = static_cast<int>(PauseReason::ProtectedWindow) + 1;
 
 struct PauseRulesConfig {
   bool pause_on_notification_state = true;
   bool pause_on_fullscreen_window = true;
+  bool pause_on_protected_window = true;
   std::vector<std::string> denylist;
   std::vector<std::string> allowlist;
 };
@@ -65,6 +73,9 @@ struct ScreenRect {
 // monitor e non e' una normale finestra massimizzata con barra del titolo (caso della
 // barra delle applicazioni a scomparsa).
 bool IsFullscreenWindow(ScreenRect window, ScreenRect monitor, bool maximized, bool has_caption);
+
+// La finestra conta se la sua parte sullo schermo e' almeno min_side x min_side.
+bool OverlapsEnough(ScreenRect window, ScreenRect monitor, long min_side = 64);
 
 // Motivi per cui la pausa scatta subito, senza ritardo di entrata.
 bool IsImmediate(PauseReason reason);

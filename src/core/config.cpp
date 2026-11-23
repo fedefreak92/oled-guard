@@ -194,6 +194,7 @@ ConfigLoadResult ConfigFromJson(std::string_view raw) {
     else if (key == "transition_max_s") r.Double(key, v, 0.5, 30, c.transition_max_s);
     else if (key == "pause_on_notification_state") r.Bool(key, v, c.pause_on_notification_state);
     else if (key == "pause_on_fullscreen_window") r.Bool(key, v, c.pause_on_fullscreen_window);
+    else if (key == "pause_on_protected_window") r.Bool(key, v, c.pause_on_protected_window);
     else if (key == "pause_enter_delay_ms") r.Int(key, v, 0, 10000, c.pause_enter_delay_ms);
     else if (key == "resume_delay_ms") r.Int(key, v, 0, 10000, c.resume_delay_ms);
     else if (key == "denylist") r.List(key, v, c.denylist);
@@ -279,6 +280,7 @@ std::string ConfigToJson(const Config& c) {
   o.Set("transition_max_s", JsonValue(c.transition_max_s));
   o.Set("pause_on_notification_state", JsonValue(c.pause_on_notification_state));
   o.Set("pause_on_fullscreen_window", JsonValue(c.pause_on_fullscreen_window));
+  o.Set("pause_on_protected_window", JsonValue(c.pause_on_protected_window));
   o.Set("pause_enter_delay_ms", JsonValue(c.pause_enter_delay_ms));
   o.Set("resume_delay_ms", JsonValue(c.resume_delay_ms));
   o.Set("denylist", list(c.denylist));
@@ -327,6 +329,7 @@ PauseRulesConfig ToPauseRules(const Config& c) {
   PauseRulesConfig rules;
   rules.pause_on_notification_state = c.pause_on_notification_state;
   rules.pause_on_fullscreen_window = c.pause_on_fullscreen_window;
+  rules.pause_on_protected_window = c.pause_on_protected_window;
   rules.denylist = c.denylist;
   rules.allowlist = c.allowlist;
   return rules;

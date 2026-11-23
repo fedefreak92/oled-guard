@@ -157,5 +157,6 @@
   "preview.history_cleared": "Preview: history cleared.",
   "preview.log_folder": "Preview: the log folder would open here.",
   "preview.windows_restored": "Preview: settings restored.",
-  "preview.display_off": "Preview: the screen would turn off now."
+  "preview.display_off": "Preview: the screen would turn off now.",
+  "pause.reason.protected_window": "Protected window on screen"
 }

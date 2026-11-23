@@ -15,7 +15,7 @@ class WearStats {
  public:
   static constexpr int kRadius = 3;
   static constexpr int kSide = 2 * kRadius + 1;
-  static constexpr int kReasons = static_cast<int>(PauseReason::FullscreenWindow) + 1;
+  static constexpr int kReasons = kPauseReasonCount;
 
   // Tempo con l'overlay a schermo nella posizione `at` (fuori da +-3: ignorato).
   void AddProtectedTime(Offset at, double ms);

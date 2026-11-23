@@ -19,6 +19,7 @@ struct Config {
   double transition_max_s = 5;
   bool pause_on_notification_state = true;
   bool pause_on_fullscreen_window = true;
+  bool pause_on_protected_window = true;  // pausa con finestre escluse dalla cattura visibili
   int pause_enter_delay_ms = 300;
   int resume_delay_ms = 2500;
   std::vector<std::string> denylist;

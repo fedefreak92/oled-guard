@@ -67,7 +67,7 @@ AppHistory AppHistory::FromJson(const JsonValue& v) {
       continue;
     }
     const double r = reason->AsNumber();
-    if (r < 0 || r > static_cast<double>(PauseReason::FullscreenWindow) || std::floor(r) != r) continue;
+    if (r < 0 || r >= kPauseReasonCount || std::floor(r) != r) continue;
     if (count->AsNumber() < 1 || seen->AsNumber() < 0) continue;
     h.entries_.push_back(AppEntry{ToLowerAscii(exe->AsString()), static_cast<PauseReason>(static_cast<int>(r)),
                                   static_cast<int64_t>(seen->AsNumber()), static_cast<int>(count->AsNumber())});

@@ -383,3 +383,17 @@ TEST(config_language_roundtrip_and_invalid) {
   CHECK_EQ(bad.config.language, std::string("auto"));
   CHECK(AnyContains(bad.warnings, "language"));
 }
+
+TEST(config_protected_window_default_and_denylist) {
+  auto d = ConfigFromJson("{}");
+  CHECK(d.config.pause_on_protected_window);
+  CHECK(d.config.denylist.empty());  // nessun nome di app di streaming verificato (task 1)
+  auto r = ConfigFromJson(R"({"pause_on_protected_window": false})");
+  CHECK(r.warnings.empty());
+  CHECK(!r.config.pause_on_protected_window);
+  CHECK(ConfigFromJson(ConfigToJson(r.config)).config == r.config);
+  CHECK(!ToPauseRules(r.config).pause_on_protected_window);
+  auto bad = ConfigFromJson(R"({"pause_on_protected_window": "si"})");
+  CHECK(bad.config.pause_on_protected_window);
+  CHECK(AnyContains(bad.warnings, "pause_on_protected_window"));
+}

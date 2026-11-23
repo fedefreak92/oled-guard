@@ -157,5 +157,6 @@
   "preview.history_cleared": "Anteprima: storico cancellato.",
   "preview.log_folder": "Anteprima: qui si aprirebbe la cartella dei log.",
   "preview.windows_restored": "Anteprima: impostazioni ripristinate.",
-  "preview.display_off": "Anteprima: lo schermo si spegnerebbe ora."
+  "preview.display_off": "Anteprima: lo schermo si spegnerebbe ora.",
+  "pause.reason.protected_window": "Finestra protetta sullo schermo"
 }

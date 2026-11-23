@@ -238,9 +238,40 @@ TEST(pause_reason_keys_exist) {
   for (PauseReason r : {PauseReason::None, PauseReason::Manual, PauseReason::SessionLocked, PauseReason::SessionInactive,
                         PauseReason::SecureDesktop, PauseReason::CaptureFailed, PauseReason::DisplayRotated,
                         PauseReason::MonitorMissing, PauseReason::Denylisted, PauseReason::NotificationState,
-                        PauseReason::FullscreenWindow}) {
+                        PauseReason::FullscreenWindow, PauseReason::ProtectedWindow}) {
     const std::string key(PauseReasonKey(r));
     CHECK(key.rfind("pause.reason.", 0) == 0);
     if (!en.value->Find(key)) ::oled::test::ReportFailure(__FILE__, __LINE__, "chiave mancante in en.json: " + key);
   }
+}
+
+TEST(pause_protected_window) {
+  PauseRulesConfig cfg;
+  PauseInputs in;
+  in.protected_window = true;
+  in.protected_process = "keepassxc.exe";
+  CHECK(EvaluatePause(in, cfg) == PauseReason::ProtectedWindow);
+  in.foreground_process = "keepassxc.exe";
+  cfg.allowlist = {"keepassxc.exe"};
+  CHECK(EvaluatePause(in, cfg) == PauseReason::ProtectedWindow);  // l'allowlist non la scavalca
+  cfg.pause_on_protected_window = false;
+  CHECK(EvaluatePause(in, cfg) == PauseReason::None);
+  in.manual = true;
+  cfg.pause_on_protected_window = true;
+  CHECK(EvaluatePause(in, cfg) == PauseReason::Manual);  // le regole prima restano prima
+}
+
+TEST(pause_protected_window_is_immediate_not_app) {
+  CHECK(IsImmediate(PauseReason::ProtectedWindow));
+  CHECK(!CausedByApp(PauseReason::ProtectedWindow));
+  CHECK_EQ(kPauseReasonCount, static_cast<int>(PauseReason::ProtectedWindow) + 1);
+}
+
+TEST(pause_protected_window_needs_overlap) {
+  const ScreenRect monitor{0, 0, 3840, 2160};
+  CHECK(!OverlapsEnough({-500, 100, -10, 600}, monitor));        // fuori dallo schermo
+  CHECK(!OverlapsEnough({3777, 100, 3900, 300}, monitor));       // 63 x 200 dentro
+  CHECK(OverlapsEnough({3776, 2096, 3900, 2300}, monitor));      // 64 x 64 dentro
+  CHECK(OverlapsEnough({100, 100, 900, 700}, monitor));
+  CHECK(!OverlapsEnough({100, 100, 100, 700}, monitor));         // larghezza zero
 }

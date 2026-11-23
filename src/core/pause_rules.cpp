@@ -38,6 +38,8 @@ PauseReason EvaluatePause(const PauseInputs& in, const PauseRulesConfig& config)
   if (in.capture_failed) return PauseReason::CaptureFailed;
   if (in.display_rotated) return PauseReason::DisplayRotated;
   if (in.monitor_missing) return PauseReason::MonitorMissing;
+  // Prima delle regole per app: riguarda cio' che si vede, non l'app in primo piano.
+  if (config.pause_on_protected_window && in.protected_window) return PauseReason::ProtectedWindow;
 
   if (InList(config.allowlist, in.foreground_process)) return PauseReason::None;
   if (InList(config.denylist, in.foreground_process)) return PauseReason::Denylisted;
@@ -54,6 +56,12 @@ bool IsFullscreenWindow(ScreenRect window, ScreenRect monitor, bool maximized, b
   return covers && !(maximized && has_caption);
 }
 
+bool OverlapsEnough(ScreenRect window, ScreenRect monitor, long min_side) {
+  const long w = std::min(window.right, monitor.right) - std::max(window.left, monitor.left);
+  const long h = std::min(window.bottom, monitor.bottom) - std::max(window.top, monitor.top);
+  return w >= min_side && h >= min_side;
+}
+
 bool IsImmediate(PauseReason reason) {
   switch (reason) {
     case PauseReason::Manual:
@@ -63,6 +71,7 @@ bool IsImmediate(PauseReason reason) {
     case PauseReason::CaptureFailed:
     case PauseReason::DisplayRotated:
     case PauseReason::MonitorMissing:
+    case PauseReason::ProtectedWindow:
       return true;
     default:
       return false;
@@ -94,6 +103,7 @@ std::string_view PauseReasonKey(PauseReason reason) {
     case PauseReason::Denylisted: return "pause.reason.denylisted";
     case PauseReason::NotificationState: return "pause.reason.notification_state";
     case PauseReason::FullscreenWindow: return "pause.reason.fullscreen_window";
+    case PauseReason::ProtectedWindow: return "pause.reason.protected_window";
   }
   return "pause.reason.none";
 }
@@ -111,6 +121,7 @@ std::string_view PauseReasonText(PauseReason reason) {
     case PauseReason::Denylisted: return "Processo in denylist";
     case PauseReason::NotificationState: return "Gioco o app a schermo intero";
     case PauseReason::FullscreenWindow: return "Finestra a tutto schermo";
+    case PauseReason::ProtectedWindow: return "Finestra protetta dalla cattura";
   }
   return "?";
 }
