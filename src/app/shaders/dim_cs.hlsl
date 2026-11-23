@@ -25,7 +25,9 @@ cbuffer DimConstants : register(b0) {
   float4 shade_spread;  // sinistra, destra, alto, basso
   float shade_brightness;
   float shade_strength;
-  uint2 pad2;
+  // Griglia delle zone della mappa di usura (GridForSize, src/core/summary_model.cpp).
+  uint zone_cols;
+  uint zone_rows;
 };
 
 static const uint kFlagSdr = 1;
@@ -274,8 +276,6 @@ static const uint kSumLuma = 3;
 static const uint kSumStillBefore = 4;
 static const uint kSumStillRemoved = 5;
 static const float kSummaryScale = 64.0;
-static const uint kZoneCols = 32;
-static const uint kZoneRows = 18;
 static const float kStillS = 60.0;
 static const float kMovingS = 10.0;
 static const float kProtectedLevel = 0.05;
@@ -328,9 +328,9 @@ void CSSummary(uint3 id : SV_DispatchThreadID) {
     AddTotal(slot, kSumStillBefore, (uint)(luma * scale + 0.5));
     AddTotal(slot, kSumStillRemoved, (uint)(max(0.0, luma - arrived) * scale + 0.5));
   }
-  const uint zx = min(kZoneCols - 1, id.x * kZoneCols / cols);
-  const uint zy = min(kZoneRows - 1, id.y * kZoneRows / rows);
-  const uint zone_base = (kSummarySlots * kSummaryTotals + (zy * kZoneCols + zx) * 2) * 4;
+  const uint zx = min(zone_cols - 1, id.x * zone_cols / cols);
+  const uint zy = min(zone_rows - 1, id.y * zone_rows / rows);
+  const uint zone_base = (kSummarySlots * kSummaryTotals + (zy * zone_cols + zx) * 2) * 4;
   const uint light = (uint)(arrived * scale + 0.5);
   if (light != 0) summary_out.InterlockedAdd(zone_base, light);
   summary_out.InterlockedAdd(zone_base + 4, px);

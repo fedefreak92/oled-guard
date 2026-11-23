@@ -437,7 +437,11 @@ double SummaryDiff(const oled::FrameSummary& a, const oled::FrameSummary& b) {
   double d = std::max({rel(a.risk, b.risk), rel(a.risk_unprotected, b.risk_unprotected), rel(a.motion, b.motion),
                        rel(a.brightness, b.brightness), rel(a.light_still_before, b.light_still_before),
                        rel(a.light_still_removed, b.light_still_removed)});
-  for (int z = 0; z < oled::kZones; ++z) d = std::max(d, rel(a.zone_light[z], b.zone_light[z]));
+  if (!(a.grid == b.grid)) {
+    std::printf("    griglia gpu/modello: %dx%d / %dx%d\n", a.grid.cols, a.grid.rows, b.grid.cols, b.grid.rows);
+    return 1.0;
+  }
+  for (int z = 0; z < b.grid.Count(); ++z) d = std::max(d, rel(a.zone_light[z], b.zone_light[z]));
   if (d > 1e-3) {
     std::printf("    riassunto gpu/modello: rischio %.4f/%.4f non protetto %.4f/%.4f movimento %.4f/%.4f "
                 "luminosita' %.4f/%.4f prima %.4f/%.4f tolta %.4f/%.4f\n",
@@ -516,6 +520,36 @@ TEST(gpu_summary_with_dim_and_shade) {
   CHECK(ref.risk_unprotected < ref.risk);
   CHECK(SummaryDiff(gpu, ref) <= 1e-3);
 }
+
+namespace {
+// Riassunto GPU contro modello su uno schermo w x h non 16:9: zone luminose ferme,
+// una cella parziale nell'angolo e movimento recente.
+void CheckSummaryOnSize(int w, int h) {
+  const int cols = (w + 15) / 16, rows = (h + 15) / 16;
+  Sim sim(w, h, kSdr, 1.0f, Zones(kShell, cols, rows));
+  CHECK(sim.Ok());
+  if (!sim.Ok()) return;
+  LumaImage img = Black(w, h);
+  Fill(img, 0, 0, w / 5, h / 4, 1.0f);              // in alto a sinistra
+  Fill(img, w - 40, h - 20, w, h, 0.8f);            // angolo in basso a destra, celle parziali
+  sim.Frame(img, 0);
+  sim.Run(img, 0.5, 90, [w, h](LumaImage& im, double t) {
+    if (t < 85) return false;
+    Fill(im, w / 2, h / 3, w / 2 + 48, h / 3 + 32, static_cast<float>(std::fmod(t, 1.0)));
+    return true;
+  });
+  oled::FrameSummary gpu;
+  CHECK(sim.GpuSummary(90, {}, gpu));
+  const oled::FrameSummary ref = sim.ModelSummary(90, {});
+  CHECK(ref.grid == oled::GridForSize(w, h));
+  CHECK(ref.risk > 0.01 && ref.motion > 0.0);
+  CHECK(SummaryDiff(gpu, ref) <= 1e-3);
+}
+}  // namespace
+
+TEST(gpu_summary_matches_model_ultrawide) { CheckSummaryOnSize(430, 180); }
+TEST(gpu_summary_matches_model_superwide) { CheckSummaryOnSize(512, 144); }
+TEST(gpu_summary_matches_model_16_10_odd) { CheckSummaryOnSize(321, 201); }
 
 TEST(gpu_summary_never_waits) {
   Sim sim(kW, kH, kSdr, 1.0f, Zones(kShell));

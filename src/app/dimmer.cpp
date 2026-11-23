@@ -37,7 +37,8 @@ struct DimConstants {
   float shade_spread[4];
   float shade_brightness;
   float shade_strength;
-  unsigned pad2[2];
+  unsigned zone_cols;  // griglia della mappa di usura (GridForSize)
+  unsigned zone_rows;
 };
 static_assert(sizeof(DimConstants) == 112);
 
@@ -229,6 +230,9 @@ void Dimmer::SetConstants(double now_s, double dt_s, const DimParams& p, float s
   c.rows = rows_;
   c.width = width_;
   c.height = height_;
+  const ZoneGrid grid = GridForSize(width_, height_);
+  c.zone_cols = static_cast<unsigned>(grid.cols);
+  c.zone_rows = static_cast<unsigned>(grid.rows);
   context_->UpdateSubresource(constants_.Get(), 0, nullptr, &c, 0, 0);
 }
 
