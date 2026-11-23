@@ -53,6 +53,7 @@ std::string StateMessage(const UiState& s) {
   o.Set("paused", JsonValue(s.paused));
   o.Set("manual_pause", JsonValue(s.manual_pause));
   o.Set("testing_shift", JsonValue(s.testing_shift));
+  o.Set("setup_pending", JsonValue(s.setup_pending));
   o.Set("reason_key", JsonValue(std::string(PauseReasonKey(s.reason))));
   o.Set("foreground", JsonValue(s.foreground_process));
   o.Set("offset", Point(s.offset));
@@ -454,6 +455,15 @@ std::optional<UiCommand> ParseUiCommand(std::string_view json) {
     if (lang != "auto" && std::find(kLanguages.begin(), kLanguages.end(), lang) == kLanguages.end()) return std::nullopt;
     c.type = UiCommandType::SetLanguage;
     c.id = lang;
+  } else if (name == "identifyMonitors") {
+    c.type = UiCommandType::IdentifyMonitors;
+  } else if (name == "finishSetup") {
+    const JsonValue* device = Field(o, "device", JsonValue::Type::String);
+    const JsonValue* autostart = Field(o, "autostart", JsonValue::Type::Bool);
+    if (!device || !autostart || device->AsString().empty() || device->AsString().size() > kMaxExeLength) return std::nullopt;
+    c.type = UiCommandType::FinishSetup;
+    c.id = device->AsString();
+    c.on = autostart->AsBool();
   } else if (name == "clearActivity") {
     c.type = UiCommandType::ClearActivity;
   } else if (name == "setMonitor") {

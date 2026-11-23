@@ -9,7 +9,7 @@ std::optional<size_t> SelectMonitor(std::span<const MonitorDesc> monitors, std::
 
   if (EqualsIgnoreCase(TrimAscii(setting), "auto")) {
     for (size_t i = 0; i < monitors.size(); ++i)
-      if (ContainsIgnoreCase(monitors[i].friendly_name, "LG TV")) return i;
+      if (monitors[i].hdr && monitors[i].connection == "HDMI") return i;
     for (size_t i = 0; i < monitors.size(); ++i)
       if (monitors[i].primary) return i;
     return 0;

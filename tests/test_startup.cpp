@@ -1,0 +1,48 @@
+#include "startup.h"
+#include "test_framework.h"
+
+using oled::DecideStartup;
+using oled::MissingMonitorNotifier;
+
+TEST(startup_first_run_waits_for_setup) {
+  const auto d = DecideStartup(/*config_exists=*/false, /*ui_available=*/true);
+  CHECK(d.setup_pending);
+  CHECK(!d.start_protection);
+  CHECK(!d.notify_auto_choice);
+}
+
+TEST(startup_without_ui_starts_protection) {
+  const auto d = DecideStartup(false, false);
+  CHECK(!d.setup_pending);
+  CHECK(d.start_protection);
+  CHECK(d.notify_auto_choice);
+}
+
+TEST(startup_existing_config) {
+  for (bool ui : {true, false}) {
+    const auto d = DecideStartup(true, ui);
+    CHECK(!d.setup_pending);
+    CHECK(d.start_protection);
+    CHECK(!d.notify_auto_choice);
+  }
+}
+
+TEST(missing_monitor_notifies_once) {
+  MissingMonitorNotifier n;
+  const double up = 120000;  // app avviata da 2 minuti
+  CHECK(!n.Update(true, up, 0));
+  CHECK(!n.Update(true, up + 29000, 29000));
+  CHECK(n.Update(true, up + 30000, 30000));
+  CHECK(!n.Update(true, up + 90000, 90000));  // una volta sola
+  CHECK(!n.Update(false, up + 91000, 91000));  // tornato: si riarma
+  CHECK(!n.Update(true, up + 92000, 92000));
+  CHECK(n.Update(true, up + 122000, 122000));
+}
+
+TEST(missing_monitor_waits_for_uptime) {
+  MissingMonitorNotifier n;
+  // Mancante fin dall'avvio (TV che si accende con Windows): niente avviso nei primi 60 s.
+  CHECK(!n.Update(true, 0, 0));
+  CHECK(!n.Update(true, 50000, 50000));
+  CHECK(n.Update(true, 60000, 60000));
+}

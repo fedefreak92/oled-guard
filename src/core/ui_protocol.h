@@ -38,6 +38,7 @@ struct UiState {
   double latency_ms = 0;
   bool away = false;
   double session_ms = 0;  // da quando l'app e' partita
+  bool setup_pending = false;  // procedura di primo avvio in corso
 };
 
 struct MonitorItem {
@@ -151,6 +152,8 @@ enum class UiCommandType {
   SetDimExclude,  // exe, on
   ClearHistory,
   SetLanguage,    // id = codice di lingua o "auto"
+  IdentifyMonitors,
+  FinishSetup,    // id = device o "auto", on = avvio automatico
 };
 
 struct UiCommand {

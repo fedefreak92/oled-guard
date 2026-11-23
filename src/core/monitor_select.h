@@ -13,9 +13,11 @@ struct MonitorDesc {
   std::string device_name;    // es. \\.\DISPLAY1 (UTF-8)
   std::string friendly_name;  // es. LG TV SSCR2 (UTF-8)
   bool primary = false;
+  bool hdr = false;
+  std::string connection;     // "HDMI" | "DP" | "DVI" | "internal" | ""
 };
 
-// "auto": primo con "LG TV" nel nome, poi il primario, poi il primo.
+// "auto": primo in HDR collegato via HDMI (tipico delle TV), poi il primario, poi il primo.
 // Altrimenti nome amichevole o device name (senza distinzione maiuscole).
 std::optional<size_t> SelectMonitor(std::span<const MonitorDesc> monitors, std::string_view setting);
 

@@ -484,3 +484,26 @@ TEST(ui_parse_clear_history) {
   auto c = oled::ParseUiCommand(R"({"cmd":"clearHistory"})");
   CHECK(c && c->type == UiCommandType::ClearHistory);
 }
+
+TEST(ui_parse_setup_commands) {
+  const std::string identify = R"({"cmd":"identifyMonitors"})";
+  auto a = oled::ParseUiCommand(identify);
+  CHECK(a && a->type == oled::UiCommandType::IdentifyMonitors);
+  const std::string finish = R"({"cmd":"finishSetup","device":"\\\\.\\DISPLAY2","autostart":true})";
+  auto f = oled::ParseUiCommand(finish);
+  CHECK(f && f->type == oled::UiCommandType::FinishSetup && f->id == "\\\\.\\DISPLAY2" && f->on);
+  const std::string finish_auto = R"({"cmd":"finishSetup","device":"auto","autostart":false})";
+  auto g = oled::ParseUiCommand(finish_auto);
+  CHECK(g && g->id == "auto" && !g->on);
+  const std::string missing = R"({"cmd":"finishSetup","device":"auto"})";
+  CHECK(!oled::ParseUiCommand(missing).has_value());
+  const std::string empty = R"({"cmd":"finishSetup","device":"","autostart":true})";
+  CHECK(!oled::ParseUiCommand(empty).has_value());
+}
+
+TEST(ui_state_setup_pending) {
+  oled::UiState s;
+  s.setup_pending = true;
+  const JsonValue v = Parse(oled::StateMessage(s));
+  CHECK(v.Find("setup_pending") && v.Find("setup_pending")->AsBool());
+}
