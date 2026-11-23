@@ -182,6 +182,13 @@ std::string NoticeMessage(std::string_view key, const I18nParams& params) {
   return Compact(o);
 }
 
+std::string NavigateMessage(std::string_view page) {
+  JsonValue o = JsonValue::MakeObject();
+  o.Set("type", JsonValue("navigate"));
+  o.Set("page", JsonValue(std::string(page)));
+  return Compact(o);
+}
+
 std::string StringsMessage(const Translations& t) {
   JsonValue o = JsonValue::MakeObject();
   o.Set("type", JsonValue("strings"));

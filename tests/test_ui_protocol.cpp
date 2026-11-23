@@ -507,3 +507,9 @@ TEST(ui_state_setup_pending) {
   const JsonValue v = Parse(oled::StateMessage(s));
   CHECK(v.Find("setup_pending") && v.Find("setup_pending")->AsBool());
 }
+
+TEST(ui_navigate_message) {
+  const JsonValue v = Parse(oled::NavigateMessage("monitor"));
+  CHECK_EQ(v.Find("type")->AsString(), std::string("navigate"));
+  CHECK_EQ(v.Find("page")->AsString(), std::string("monitor"));
+}

@@ -19,7 +19,9 @@ class ConfigFile {
 
   const std::filesystem::path& Path() const { return path_; }
   // Se il file manca lo crea con i valori predefiniti.
-  ConfigLoadResult Load();
+  // create_if_missing: un file assente viene creato con i valori predefiniti. Al primo
+  // avvio no: il file nasce alla fine della procedura (se resta a meta', riparte).
+  ConfigLoadResult Load(bool create_if_missing = true);
   bool Save(const Config& config);
   // true se il file e' cambiato dall'ultima Load/Save (data di modifica).
   bool ChangedOnDisk() const;

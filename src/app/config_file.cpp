@@ -15,11 +15,11 @@ std::optional<std::filesystem::file_time_type> ConfigFile::WriteTime() const {
   return t;
 }
 
-ConfigLoadResult ConfigFile::Load() {
+ConfigLoadResult ConfigFile::Load(bool create_if_missing) {
   std::error_code ec;
   if (!std::filesystem::exists(path_, ec)) {
     ConfigLoadResult result;
-    if (Save(result.config)) LogInfo("Creato il file di configurazione con i valori predefiniti");
+    if (create_if_missing && Save(result.config)) LogInfo("Creato il file di configurazione con i valori predefiniti");
     return result;
   }
   // La data va letta prima del contenuto: una scrittura che arriva in mezzo verra'

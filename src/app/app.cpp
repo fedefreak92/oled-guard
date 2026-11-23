@@ -16,6 +16,7 @@
 #include "ascii.h"
 #include "history_file.h"
 #include "i18n_files.h"
+#include "identify_window.h"
 #include "autostart.h"
 #include "clock.h"
 #include "diagnostics.h"
@@ -127,6 +128,15 @@ int App::Run(HINSTANCE instance) {
   }
 
   LogInfo("OLED Guard avviato");
+  std::error_code exists_ec;
+  const bool config_exists = std::filesystem::exists(ConfigPath(), exists_ec);
+  const bool ui_available =
+      WebView2RuntimeAvailable() && std::filesystem::exists(UiDirectory() / L"index.html", exists_ec);
+  const StartupDecision startup = DecideStartup(config_exists, ui_available);
+  setup_pending_ = startup.setup_pending;
+  notify_auto_choice_ = startup.notify_auto_choice;
+  if (setup_pending_) LogInfo("Primo avvio: procedura nell'interfaccia, protezione in attesa");
+  if (notify_auto_choice_) LogInfo("Primo avvio senza interfaccia: schermo scelto in automatico");
   LoadInitialConfig();
   if (fast_shift_) LogInfo("Modalita' --fast-shift attiva");
   {
@@ -186,7 +196,7 @@ int App::Run(HINSTANCE instance) {
   config_file_.StartWatching(main_, WM_APP_CONFIG_CHANGED);
 
   Tick();
-  if (HasArg(L"--open-ui")) OpenUi();
+  if (HasArg(L"--open-ui") || setup_pending_) OpenUi();
 
   MSG msg;
   while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
@@ -230,7 +240,7 @@ bool App::CreateMainWindow() {
 // ---------------------------------------------------------------- configurazione
 
 void App::LoadInitialConfig() {
-  ConfigLoadResult result = config_file_.Load();
+  ConfigLoadResult result = config_file_.Load(/*create_if_missing=*/!setup_pending_);
   initial_config_failed_ = result.parse_failed;
   if (!result.parse_failed) config_ = NormalizedConfig(result.config);
   LogSetLevel(debug_ ? LogLevel::Debug : ParseLogLevel(config_.log_level));
@@ -387,6 +397,7 @@ void App::PushMonitorsToUi() {
 }
 
 void App::SaveConfig() {
+  if (setup_pending_) return;  // il file nasce alla fine della procedura di primo avvio
   // Un file che non si legge e' probabilmente in modifica: non lo si sovrascrive.
   if (!config_file_.OnDiskIsValid()) {
     LogWarn("Configurazione non salvata: il file su disco contiene errori");
@@ -688,7 +699,17 @@ void App::Tick() {
     last_wear_ms_ = 0;
   }
 
-  if (!paused && !overlay_running_) {
+  if (notify_auto_choice_ && monitor_) {
+    notify_auto_choice_ = false;
+    ShowNotice("notice.auto_choice.title", "notice.auto_choice.body", {{"name", Narrow(monitor_->friendly_name)}});
+  }
+  if (missing_notifier_.Update(in.monitor_missing && !setup_pending_, now - app_start_ms_, now)) {
+    LogWarn("Schermo scelto non trovato da {} s", MissingMonitorNotifier::kMissingMs / 1000);
+    ShowNotice("notice.monitor_missing.title", "notice.monitor_missing.body", {{"name", config_.monitor}});
+    balloon_page_ = "monitor";
+  }
+
+  if (!paused && !overlay_running_ && !setup_pending_) {
     if (!StartOverlay()) capture_failed_until_ms_ = now + kCaptureRetryMs;
   } else if (paused && overlay_running_) {
     StopOverlay();
@@ -701,6 +722,7 @@ UiState App::BuildUiState(double now) {
   s.paused = last_paused_;
   s.manual_pause = manual_pause_;
   s.testing_shift = testing_shift_until_ms_ > now;
+  s.setup_pending = setup_pending_;
   s.reason = last_reason_;
   s.foreground_process = last_foreground_;
   s.offset = current_offset_;
@@ -984,6 +1006,17 @@ void App::UpdateTrayTooltip() {
 void App::OnTrayEvent(UINT event) {
   // Clic sinistro (o Invio da tastiera): apre l'interfaccia. Clic destro: menu.
   if (event == NIN_SELECT || event == NIN_KEYSELECT) OpenUi();
+  // Clic su una notifica che rimanda a una pagina (es. schermo mancante).
+  if (event == NIN_BALLOONUSERCLICK && !balloon_page_.empty()) {
+    pending_page_ = balloon_page_;
+    balloon_page_.clear();
+    OpenUi();
+    if (ui_.IsReady()) {
+      ui_.Post(NavigateMessage(pending_page_));
+      pending_page_.clear();
+    }
+  }
+  if (event == NIN_BALLOONTIMEOUT || event == NIN_BALLOONHIDE) balloon_page_.clear();
   if (event == WM_CONTEXTMENU) ShowTrayMenu();
 }
 
@@ -1006,6 +1039,7 @@ void App::OpenUi() {
           RegisterDisplayOffHotkey();
         }
         SaveStatsNow();
+        if (setup_pending_) ShowNotice("notice.setup_unfinished.title", "notice.setup_unfinished.body");
       },
       debug_, ui_rect_);
   if (ok) {
@@ -1027,6 +1061,10 @@ void App::OnUiMessage(const std::string& json) {
       LogInfo("Interfaccia pronta");
       ui_.Post(StringsMessage(tr_));  // prima dello stato: la pagina disegna gia' tradotta
       PushAllToUi();
+      if (!pending_page_.empty()) {
+        ui_.Post(NavigateMessage(pending_page_));
+        pending_page_.clear();
+      }
       break;
     case UiCommandType::SetConfig: {
       const ConfigLoadResult result = ApplyConfigPatch(config_, command->patch);
@@ -1151,6 +1189,29 @@ void App::OnUiMessage(const std::string& json) {
       SaveConfig();
       break;
     }
+    case UiCommandType::IdentifyMonitors:
+      ShowMonitorIdentifiers(instance_, EnumerateMonitors());
+      break;
+    case UiCommandType::FinishSetup: {
+      if (!setup_pending_) break;
+      Config next = config_;
+      if (command->id == "auto") {
+        next.monitor = "auto";
+      } else {
+        std::vector<MonitorDesc> descs;
+        for (const auto& m : EnumerateMonitors()) descs.push_back({Narrow(m.device_name), Narrow(m.friendly_name), m.primary});
+        next.monitor = MonitorSettingForDevice(descs, command->id);
+      }
+      next.autostart = command->on;
+      setup_pending_ = false;
+      ApplyConfig(next);
+      SaveConfig();
+      LogInfo("Primo avvio completato: schermo {}, avvio automatico {}", config_.monitor, config_.autostart);
+      Record("config", "activity.setup_done");
+      monitor_valid_ = false;
+      Tick();
+      break;
+    }
     case UiCommandType::ClearHistory:
       history_.Clear();
       SaveHistoryNow();
@@ -1185,6 +1246,23 @@ void App::OnUiMessage(const std::string& json) {
 }
 
 void App::ShowTrayMenu() {
+  if (setup_pending_) {
+    // Durante il primo avvio: solo aprire la procedura o uscire.
+    HMENU menu = CreatePopupMenu();
+    AppendMenuW(menu, MF_STRING, kCmdOpenUi, T("tray.open").c_str());
+    SetMenuDefaultItem(menu, kCmdOpenUi, FALSE);
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, kCmdExit, T("tray.exit").c_str());
+    POINT pt;
+    GetCursorPos(&pt);
+    SetForegroundWindow(main_);
+    const UINT cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY, pt.x, pt.y, 0, main_, nullptr);
+    PostMessageW(main_, WM_NULL, 0, 0);
+    DestroyMenu(menu);
+    if (cmd == kCmdOpenUi) OpenUi();
+    else if (cmd == kCmdExit) Quit();
+    return;
+  }
   const auto monitors = EnumerateMonitors();
   const bool auto_monitor = EqualsIgnoreCase(config_.monitor, "auto");
 

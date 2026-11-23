@@ -412,3 +412,21 @@ i.paus { background: var(--warn); }
 .content-legend i { width: 0.75rem; height: 0.75rem; border-radius: 3px; flex: none; }
 .content-legend span { flex: 1; color: #c9d4d7; }
 .content-legend b { font-family: var(--mono); font-weight: 500; }
+
+/* Procedura di primo avvio: copre l'interfaccia finche' non e' finita. */
+.setup { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 1.5rem; overflow: auto; }
+.setup[hidden] { display: none; }
+.setup-card { width: min(44rem, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.6rem 1.8rem; }
+.setup-head { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1.2rem; color: var(--muted); }
+.setup-head svg { width: 1.8rem; height: 1.8rem; }
+.setup-head b { color: var(--text); font-size: 1.05rem; }
+.setup-card h2 { margin: 0 0 0.4rem; font-size: 1.45rem; font-weight: 600; }
+.setup-card .lead { margin: 0 0 1.2rem; color: var(--muted); line-height: 1.5; }
+.setup-langs { grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); }
+.setup-monitors { display: grid; gap: 0.6rem; }
+.setup-monitor { display: grid; grid-template-columns: 2.4rem 1fr; grid-template-rows: auto auto; column-gap: 0.8rem; align-items: center; }
+.setup-monitor .setup-num { grid-row: 1 / 3; width: 2.4rem; height: 2.4rem; border-radius: 50%; background: var(--panel-3); border: 1px solid var(--line-2); display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-weight: 600; }
+.setup-monitor.on .setup-num { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.setup-points { margin: 0 0 1rem; padding-left: 1.2rem; line-height: 1.6; color: var(--muted); }
+.setup-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1.4rem; }
+.setup-actions .grow { flex: 1; }

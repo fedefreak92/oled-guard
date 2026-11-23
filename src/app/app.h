@@ -16,6 +16,7 @@
 
 #include "app_history.h"
 #include "i18n.h"
+#include "startup.h"
 #include "config.h"
 #include "config_file.h"
 #include "ui_protocol.h"
@@ -139,6 +140,12 @@ class App {
   Config config_;
   Translations tr_;
   bool initial_config_failed_ = false;
+  // Primo avvio: procedura nell'interfaccia, protezione ferma e config non salvata.
+  bool setup_pending_ = false;
+  bool notify_auto_choice_ = false;      // schermo scelto in automatico senza procedura
+  MissingMonitorNotifier missing_notifier_;
+  std::string balloon_page_;             // pagina da aprire al clic sull'ultima notifica
+  std::string pending_page_;             // pagina da mostrare appena l'interfaccia e' pronta
   bool tray_ready_ = false;
   std::vector<std::pair<std::wstring, std::wstring>> pending_notices_;
   unsigned render_generation_ = 0;

@@ -56,7 +56,9 @@ if (preview) {
       receive({ type: 'strings', lang, strings });
     },
     async start() {
-      const lang = new URLSearchParams(location.search).get('lang') || 'it';
+      const params = new URLSearchParams(location.search);
+      const lang = params.get('lang') || 'it';
+      this.setupPending = params.get('setup') === '1';
       await this.loadStrings(lang);
       this.log('resume', 'activity.resumed', {}, now() - 3600000);
       this.log('pause', 'activity.paused_app', { reason_key: 'pause.reason.notification_state', app: 'cyberpunk2077.exe' }, now() - 3000000);
@@ -220,7 +222,7 @@ if (preview) {
         else this.log('resume', 'activity.resumed');
       }
       receive({
-        type: 'state', paused: this.paused, manual_pause: this.manual, testing_shift: this.testing > t,
+        type: 'state', paused: this.paused, manual_pause: this.manual, testing_shift: this.testing > t, setup_pending: !!this.setupPending,
         reason_key: this.paused ? 'pause.reason.manual' : 'pause.reason.none', foreground: 'chrome.exe', offset: this.offset, trail: this.trail,
         next_move_ms: this.next, amplitude: this.config.amplitude_px, monitor: 'LG TV SSCR2', width: 3840, height: 2160,
         hdr: true, latency_ms: 6.9, away: this.away, session_ms: t - this.t0 + 2852000,
@@ -284,6 +286,16 @@ if (preview) {
         case 'displayOff': receive({ type: 'notice', key: 'preview.display_off' }); break;
         case 'setLanguage': this.config.language = cmd.id; this.loadStrings(cmd.id === 'auto' ? 'it' : cmd.id); receive({ type: 'config', config: this.config }); break;
         case 'dimHighlight': this.highlightUntil = now() + 15000; this.sendDim(); break;
+        case 'identifyMonitors': receive({ type: 'notice', key: 'preview.identify' }); break;
+        case 'finishSetup':
+          this.setupPending = false;
+          c.monitor = cmd.device;
+          c.autostart = cmd.autostart;
+          receive({ type: 'config', config: c });
+          this.sendMonitors();
+          this.log('config', 'activity.setup_done');
+          this.step();
+          break;
         default: break;
       }
     },

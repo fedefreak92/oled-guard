@@ -103,6 +103,9 @@ std::string HistoryMessage(const HistoryPayload& p);
 // Avviso breve mostrato dalla pagina: chiave di traduzione e segnaposto.
 std::string NoticeMessage(std::string_view key, const I18nParams& params = {});
 
+// Chiede alla pagina di mostrare una pagina (es. "monitor" dal clic su una notifica).
+std::string NavigateMessage(std::string_view page);
+
 // Dizionario della lingua attiva per la pagina.
 std::string StringsMessage(const Translations& t);
 

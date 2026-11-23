@@ -28,7 +28,7 @@ std::vector<MonitorInfo> EnumerateMonitors();
 struct MonitorDetails {
   MonitorInfo info;
   int refresh_hz = 0;      // 0 se sconosciuta
-  std::string connection;  // "HDMI" | "DP" | "DVI" | "Interno" | ""
+  std::string connection;  // "HDMI" | "DP" | "DVI" | "internal" | ""
 };
 std::vector<MonitorDetails> ListMonitorDetails();
 std::optional<MonitorInfo> FindMonitor(std::string_view setting);

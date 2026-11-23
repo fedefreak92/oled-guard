@@ -102,6 +102,7 @@ function receive(msg) {
       store.signalsVersion++;
       break;
     case 'notice': toast(t(msg.key, msg.params)); return;
+    case 'navigate': showPage(msg.page); return;
     case 'processes': case 'browsed': break;
     default: store[msg.type] = msg;
   }
@@ -550,6 +551,7 @@ function scheduleRender() {
 }
 function renderNow() {
   renderQueued = false;
+  renderSetup();
   renderShell();
   if (current && current.view.update) current.view.update();
 }

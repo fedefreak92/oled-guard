@@ -56,7 +56,7 @@ std::string ConnectionName(DISPLAYCONFIG_VIDEO_OUTPUT_TECHNOLOGY tech) {
     case DISPLAYCONFIG_OUTPUT_TECHNOLOGY_DVI: return "DVI";
     case DISPLAYCONFIG_OUTPUT_TECHNOLOGY_INTERNAL:
     case DISPLAYCONFIG_OUTPUT_TECHNOLOGY_DISPLAYPORT_EMBEDDED:
-    case DISPLAYCONFIG_OUTPUT_TECHNOLOGY_UDI_EMBEDDED: return "Interno";
+    case DISPLAYCONFIG_OUTPUT_TECHNOLOGY_UDI_EMBEDDED: return "internal";
     default: return "";
   }
 }
@@ -146,8 +146,15 @@ std::vector<MonitorInfo> EnumerateMonitors() {
 
 std::optional<MonitorInfo> FindMonitor(std::string_view setting) {
   auto monitors = EnumerateMonitors();
+  const auto extras = PathDetails();
   std::vector<MonitorDesc> descs;
-  for (const auto& m : monitors) descs.push_back({Narrow(m.device_name), Narrow(m.friendly_name), m.primary});
+  for (const auto& m : monitors) {
+    MonitorDesc d{Narrow(m.device_name), Narrow(m.friendly_name), m.primary};
+    d.hdr = m.hdr;
+    const auto it = extras.find(m.device_name);
+    if (it != extras.end()) d.connection = it->second.connection;
+    descs.push_back(std::move(d));
+  }
   const auto index = SelectMonitor(descs, setting);
   if (!index) return std::nullopt;
   return monitors[*index];
