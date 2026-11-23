@@ -49,6 +49,8 @@ class RenderThread {
   bool Start(const RenderParams& params);
   void Stop();
   bool Running() const { return thread_.joinable(); }
+  // Ultima finestra di 10 s (frame copiati e ignorati) e sessioni avviate, per la diagnostica.
+  std::string StatsLine() const;
 
  private:
   enum class SessionEnd { Stop, Failed };
@@ -65,6 +67,9 @@ class RenderThread {
   std::atomic<bool> stop_{false};
   HANDLE stop_event_ = nullptr;
   int failures_ = 0;
+  std::atomic<uint64_t> last_copied_{0};
+  std::atomic<uint64_t> last_skipped_{0};
+  std::atomic<int> sessions_{0};
 };
 
 }  // namespace oled

@@ -157,6 +157,7 @@ enum class UiCommandType {
   SetLanguage,    // id = codice di lingua o "auto"
   IdentifyMonitors,
   FinishSetup,    // id = device o "auto", on = avvio automatico
+  ExportDiagnostics,
 };
 
 struct UiCommand {

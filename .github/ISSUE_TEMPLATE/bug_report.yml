@@ -1,0 +1,65 @@
+name: Bug report
+description: Something doesn't work on your display or PC
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! OLED Guard has been tested on few setups, so your display and PC details really help.
+        In OLED Guard open **Advanced → Export diagnostics** (or the tray menu) and attach the file below.
+        Read it first: the configuration lists the app names in your rules.
+  - type: input
+    id: display
+    attributes:
+      label: Display (brand and model)
+      placeholder: e.g. LG OLED C3 65", Samsung Odyssey G8 OLED
+    validations:
+      required: true
+  - type: dropdown
+    id: display_kind
+    attributes:
+      label: TV or monitor?
+      options:
+        - TV
+        - Monitor
+        - Laptop screen
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: Graphics card
+      placeholder: e.g. NVIDIA RTX 4070, AMD RX 7800 XT, Intel Arc
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: e.g. Windows 11 24H2, Windows 10 22H2
+    validations:
+      required: true
+  - type: dropdown
+    id: hdr
+    attributes:
+      label: Is HDR on in Windows?
+      options:
+        - "Yes"
+        - "No"
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: What you did, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics file
+      description: Drag the oled-guard-diagnostica-....txt file here.
+    validations:
+      required: true

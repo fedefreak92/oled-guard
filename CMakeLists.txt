@@ -146,6 +146,7 @@ add_executable(oled-guard WIN32
   src/app/history_file.cpp
   src/app/i18n_files.cpp
   src/app/identify_window.cpp
+  src/app/diagnostics_export.cpp
   src/app/logger.cpp
   src/app/paths.cpp
   src/app/emergency.cpp

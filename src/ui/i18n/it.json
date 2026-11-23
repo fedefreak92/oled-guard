@@ -494,5 +494,15 @@
   "about.log": "Log",
   "about.webview2": "Usato per disegnare questa finestra. Licenza di tipo BSD di Microsoft (testo in THIRD_PARTY_NOTICES.md).",
   "about.license": "Licenza",
-  "about.license.desc": "OLED Guard è open source con licenza MIT."
+  "about.license.desc": "OLED Guard è open source con licenza MIT.",
+  "tray.export_diagnostics": "Esporta diagnostica",
+  "notice.diagnostics.title": "Diagnostica",
+  "notice.diagnostics_saved": "Diagnostica salvata: {path}",
+  "notice.diagnostics_failed": "Impossibile scrivere il file di diagnostica. Dettagli nel log.",
+  "advanced.diag": "Segnala un problema",
+  "advanced.diag.sub": "diagnostica per GitHub",
+  "advanced.diag.export": "Esporta diagnostica",
+  "advanced.diag.export.desc": "Salva in Documenti un file di testo con versione di Windows, schede video, schermi, configurazione e la fine del log. Allegalo alla segnalazione su GitHub.",
+  "advanced.diag.button": "Esporta",
+  "advanced.diag.privacy": "Leggi il file prima di condividerlo: la configurazione contiene i nomi delle app nelle tue regole. Non viene inviato nulla in automatico."
 }

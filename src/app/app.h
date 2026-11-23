@@ -69,6 +69,8 @@ class App {
   std::wstring T(std::string_view key, const I18nParams& params = {}) const;
   // Sceglie la lingua (config + Windows), ricarica i testi e li manda alla pagina e alla tray.
   void ApplyLanguage();
+  // Scrive la diagnostica in Documenti, la mostra in Esplora file e lo dice alla pagina.
+  void ExportDiagnosticsNow();
   ShiftTiming EffectiveTiming() const;
   void RegisterToggleHotkey();
   void RegisterDisplayOffHotkey();

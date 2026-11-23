@@ -96,8 +96,14 @@ void RenderThread::Run() {
   }
 }
 
+std::string RenderThread::StatsLine() const {
+  return "render: last 10 s " + std::to_string(last_copied_.load()) + " frames copied, " +
+         std::to_string(last_skipped_.load()) + " skipped; sessions started " + std::to_string(sessions_.load());
+}
+
 RenderThread::SessionEnd RenderThread::RunSession() {
   Beat();
+  ++sessions_;
   ComPtr<IDXGIAdapter1> adapter;
   ComPtr<IDXGIOutput5> output;
   HRESULT hr = OpenOutput(params_.monitor, &adapter, &output);
@@ -426,6 +432,8 @@ RenderThread::SessionEnd RenderThread::RunSession() {
 
     if (now - stats_since >= 10000) {
       LogDebug("Render: ultimi 10 s {} frame copiati, {} ignorati", capture.frames_copied, capture.frames_skipped);
+      last_copied_ = capture.frames_copied;
+      last_skipped_ = capture.frames_skipped;
       capture.frames_copied = 0;
       capture.frames_skipped = 0;
       stats_since = now;

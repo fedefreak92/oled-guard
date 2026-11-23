@@ -290,6 +290,7 @@ if (preview) {
         case 'setLanguage': this.config.language = cmd.id; this.loadStrings(cmd.id === 'auto' ? 'it' : cmd.id); receive({ type: 'config', config: this.config }); break;
         case 'dimHighlight': this.highlightUntil = now() + 15000; this.sendDim(); break;
         case 'identifyMonitors': receive({ type: 'notice', key: 'preview.identify' }); break;
+        case 'exportDiagnostics': receive({ type: 'notice', key: 'notice.diagnostics_saved', params: { path: 'C:\\Users\\utente\\Documents\\oled-guard-diagnostica-20261123-2215.txt' } }); break;
         case 'finishSetup':
           this.setupPending = false;
           c.monitor = cmd.device;

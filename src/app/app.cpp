@@ -16,6 +16,7 @@
 #include "ascii.h"
 #include "history_file.h"
 #include "i18n_files.h"
+#include "diagnostics_export.h"
 #include "identify_window.h"
 #include "autostart.h"
 #include "clock.h"
@@ -56,6 +57,7 @@ constexpr int kDisplayOffHotkeyId = 2;
 constexpr UINT kCmdExit = 100;
 constexpr UINT kCmdToggle = 101;
 constexpr UINT kCmdOpenUi = 105;
+constexpr UINT kCmdExportDiag = 106;
 constexpr UINT kCmdOpenConfig = 102;
 constexpr UINT kCmdOpenLogs = 103;
 constexpr UINT kCmdAutostart = 104;
@@ -1189,6 +1191,9 @@ void App::OnUiMessage(const std::string& json) {
       SaveConfig();
       break;
     }
+    case UiCommandType::ExportDiagnostics:
+      ExportDiagnosticsNow();
+      break;
     case UiCommandType::IdentifyMonitors:
       ShowMonitorIdentifiers(instance_, EnumerateMonitors());
       break;
@@ -1295,6 +1300,7 @@ void App::ShowTrayMenu() {
   AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(monitor_menu), T("tray.monitor").c_str());
   AppendMenuW(menu, MF_STRING, kCmdOpenConfig, T("tray.open_config").c_str());
   AppendMenuW(menu, MF_STRING, kCmdOpenLogs, T("tray.open_logs").c_str());
+  AppendMenuW(menu, MF_STRING, kCmdExportDiag, T("tray.export_diagnostics").c_str());
   AppendMenuW(menu, MF_STRING | (config_.autostart ? MF_CHECKED : MF_UNCHECKED), kCmdAutostart,
               T("tray.autostart").c_str());
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
@@ -1312,6 +1318,7 @@ void App::ShowTrayMenu() {
   else if (cmd == kCmdToggle) SetManualPause(!manual_pause_);
   else if (cmd == kCmdOpenConfig) OpenConfig();
   else if (cmd == kCmdOpenLogs) OpenLogFolder();
+  else if (cmd == kCmdExportDiag) ExportDiagnosticsNow();
   else if (cmd == kCmdAutostart) ToggleAutostart();
   else if (cmd == kCmdMonitorAuto) SelectMonitorSetting("auto");
   else if (cmd >= kCmdMonitorFirst && cmd < kCmdMonitorFirst + monitors.size()) {
@@ -1349,6 +1356,52 @@ void App::OpenConfig() {
       ShellExecuteW(nullptr, L"open", L"notepad.exe", quoted.c_str(), nullptr, SW_SHOWNORMAL);
     }
   });
+}
+
+void App::ExportDiagnosticsNow() {
+  DiagnosticsInput in;
+  in.version = OLED_GUARD_VERSION;
+  in.commit = OLED_GUARD_COMMIT;
+  in.windows_build = WindowsBuildNumber();
+  in.language = tr_.Language();
+  in.system_languages = PreferredUiLanguages();
+  for (const MonitorDetails& d : ListMonitorDetails()) {
+    DiagMonitor m;
+    m.item.device = Narrow(d.info.device_name);
+    m.item.name = Narrow(d.info.friendly_name);
+    m.item.width = d.info.rect.right - d.info.rect.left;
+    m.item.height = d.info.rect.bottom - d.info.rect.top;
+    m.item.refresh_hz = d.refresh_hz;
+    m.item.hdr = d.info.hdr;
+    m.item.primary = d.info.primary;
+    m.item.is_protected = monitor_ && monitor_->device_name == d.info.device_name;
+    m.item.connection = d.connection;
+    // Livello del bianco SDR in scRGB: 1,0 = 80 nit.
+    if (const auto white = QuerySdrWhiteLevel(d.info)) m.sdr_white_nits = *white * 80.0;
+    switch (d.info.rotation) {
+      case DXGI_MODE_ROTATION_ROTATE90: m.rotation_deg = 90; break;
+      case DXGI_MODE_ROTATION_ROTATE180: m.rotation_deg = 180; break;
+      case DXGI_MODE_ROTATION_ROTATE270: m.rotation_deg = 270; break;
+      default: m.rotation_deg = 0; break;
+    }
+    m.adapter = AdapterName(d.info.adapter_luid);
+    in.monitors.push_back(std::move(m));
+  }
+  in.config_json = ConfigToJson(config_);
+  in.render_stats.push_back(std::string("overlay: ") + (overlay_running_ ? "running" : "stopped") +
+                            (overlay_shown_ ? ", on screen" : "") + (last_paused_ ? ", paused: " : "") +
+                            (last_paused_ ? std::string(PauseReasonText(last_reason_)) : std::string()));
+  in.render_stats.push_back(render_.StatsLine());
+  in.render_stats.push_back("added latency estimate: " + std::to_string(latency_ms_) + " ms");
+  const auto file = WriteDiagnostics(std::move(in));
+  if (!file) {
+    if (ui_.IsReady()) ui_.Post(NoticeMessage("notice.diagnostics_failed"));
+    ShowNotice("notice.diagnostics.title", "notice.diagnostics_failed");
+    return;
+  }
+  const std::filesystem::path path = *file;
+  RunShellAction([path] { RevealInExplorer(path); });
+  if (ui_.IsReady()) ui_.Post(NoticeMessage("notice.diagnostics_saved", {{"path", Narrow(path.wstring())}}));
 }
 
 void App::OpenLogFolder() {

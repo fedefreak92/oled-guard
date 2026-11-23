@@ -464,6 +464,8 @@ std::optional<UiCommand> ParseUiCommand(std::string_view json) {
     if (lang != "auto" && std::find(kLanguages.begin(), kLanguages.end(), lang) == kLanguages.end()) return std::nullopt;
     c.type = UiCommandType::SetLanguage;
     c.id = lang;
+  } else if (name == "exportDiagnostics") {
+    c.type = UiCommandType::ExportDiagnostics;
   } else if (name == "identifyMonitors") {
     c.type = UiCommandType::IdentifyMonitors;
   } else if (name == "finishSetup") {

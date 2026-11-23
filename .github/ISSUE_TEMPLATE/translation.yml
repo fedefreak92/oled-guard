@@ -1,0 +1,40 @@
+name: Translation fix
+description: A text in the interface is wrong, awkward or missing in your language
+labels: [translation]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Spanish, German and French were machine translated and are waiting for a native speaker's review.
+        You can also open a pull request on `src/ui/i18n/<language>.json` directly.
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language
+      options:
+        - English
+        - Italian
+        - Spanish
+        - German
+        - French
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where it appears (page, button, notification) or the key
+      placeholder: e.g. Settings → Notifications, or settings.alert.desc
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Current text
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Suggested text
+    validations:
+      required: true

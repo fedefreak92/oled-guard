@@ -1155,7 +1155,12 @@ PAGES.avanzate = {
     });
     const tearing = toggle((v) => setConfig({ allow_tearing: v }));
     p.body.append(settingRow(t('advanced.tearing'), t('advanced.tearing.desc'), tearing.el, { code: 'allow_tearing' }));
-    root.append(h('div.page', null, h('p.hint.box', { text: t('advanced.hint') }), p.el));
+    const diag = panel(t('advanced.diag'), t('advanced.diag.sub'));
+    diag.body.append(
+      settingRow(t('advanced.diag.export'), t('advanced.diag.export.desc'),
+        h('button.btn', { type: 'button', on: { click: () => send({ cmd: 'exportDiagnostics' }) } }, icon('doc'), t('advanced.diag.button'))),
+      h('p.hint.box', { text: t('advanced.diag.privacy') }));
+    root.append(h('div.page', null, h('p.hint.box', { text: t('advanced.hint') }), diag.el, p.el));
     return {
       update() {
         const c = cfg();

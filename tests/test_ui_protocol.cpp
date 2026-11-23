@@ -528,3 +528,9 @@ TEST(ui_history_message_grid) {
   CHECK_NEAR(wear->Find("rows")->AsNumber(), 16, 1e-12);
   CHECK_EQ(wear->Find("cells")->AsArray().size(), size_t{608});
 }
+
+TEST(ui_parse_export_diagnostics) {
+  const std::string json = R"({"cmd":"exportDiagnostics"})";
+  auto c = oled::ParseUiCommand(json);
+  CHECK(c && c->type == oled::UiCommandType::ExportDiagnostics);
+}
