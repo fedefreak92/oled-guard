@@ -54,6 +54,7 @@ add_library(oled_core STATIC
   src/core/alert_model.cpp
   src/core/i18n.cpp
   src/core/startup.cpp
+  src/core/diagnostics_report.cpp
 )
 target_include_directories(oled_core PUBLIC src/core)
 
@@ -87,6 +88,7 @@ add_executable(oled-guard-tests
   tests/test_i18n.cpp
   tests/test_winver.cpp
   tests/test_startup.cpp
+  tests/test_diagnostics_report.cpp
 )
 target_include_directories(oled-guard-tests PRIVATE tests)
 target_link_libraries(oled-guard-tests PRIVATE oled_core)
