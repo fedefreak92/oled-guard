@@ -812,10 +812,12 @@ PAGES.profili = {
     // Pause automatiche globali
     const autoNotif = toggle((v) => setConfig({ pause_on_notification_state: v }));
     const autoFull = toggle((v) => setConfig({ pause_on_fullscreen_window: v }));
+    const autoProtected = toggle((v) => setConfig({ pause_on_protected_window: v }));
     const autoPanel = panel('Pausa automatica', 'per tutte le app');
     autoPanel.body.append(
       settingRow('Giochi e presentazioni', 'Giochi DirectX a schermo intero, presentazioni, schermo assente.', autoNotif.el),
-      settingRow('Qualsiasi finestra a tutto schermo', 'Borderless, video, browser a tutto schermo.', autoFull.el));
+      settingRow('Qualsiasi finestra a tutto schermo', 'Borderless, video, browser a tutto schermo.', autoFull.el),
+      settingRow(t('apps.auto.protected.title'), t('apps.auto.protected.desc'), autoProtected.el));
 
     // Modifica
     const editPanel = panel('Modifica');
@@ -882,7 +884,7 @@ PAGES.profili = {
       leave() { offProcesses(); offBrowsed(); },
       update() {
         const c = cfg();
-        if (c) { autoNotif.set(c.pause_on_notification_state); autoFull.set(c.pause_on_fullscreen_window); }
+        if (c) { autoNotif.set(c.pause_on_notification_state); autoFull.set(c.pause_on_fullscreen_window); autoProtected.set(c.pause_on_protected_window); }
         if (store.apps !== lastApps) {
           lastApps = store.apps;
           if (pendingSelect && apps().some((a) => a.exe === pendingSelect)) { selected = pendingSelect; pendingSelect = null; }

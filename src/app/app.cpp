@@ -638,7 +638,10 @@ void App::Tick() {
               in.foreground_process.empty() ? "-" : in.foreground_process);
       const std::string_view kind = reason == PauseReason::Manual ? "manual" : "pause";
       const std::string reason_key(PauseReasonKey(reason));
-      if (CausedByApp(reason) && !in.foreground_process.empty()) {
+      if (reason == PauseReason::ProtectedWindow) {
+        LogInfo("Finestra protetta dalla cattura: {}", in.protected_process.empty() ? "-" : in.protected_process);
+        Record(kind, "activity.pause_protected", {{"app", in.protected_process}});
+      } else if (CausedByApp(reason) && !in.foreground_process.empty()) {
         Record(kind, "activity.paused_app", {{"reason_key", reason_key}, {"app", in.foreground_process}});
       } else {
         Record(kind, "activity.paused", {{"reason_key", reason_key}});

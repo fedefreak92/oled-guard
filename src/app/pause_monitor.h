@@ -3,6 +3,7 @@
 
 #include <windows.h>
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,15 @@ class PauseMonitor {
   bool locked_ = false;
   bool inactive_ = false;
 };
+
+// Nome .exe (minuscolo, UTF-8) del processo di una finestra. Per le app UWP, che risultano
+// tutte ApplicationFrameHost.exe, quello della finestra figlia Windows.UI.Core.CoreWindow.
+std::string WindowProcessName(HWND hwnd);
+
+// Prima finestra visibile, non ridotta a icona, non "cloaked", non di questo processo, che
+// copre almeno 64x64 px dello schermo e si esclude dalla cattura (GetWindowDisplayAffinity
+// diverso da WDA_NONE). Restituisce il nome del processo, nullopt se non ce ne sono.
+std::optional<std::string> FindProtectedWindow(const RECT& monitor);
 
 // Nomi .exe (minuscoli, unici, ordinati) dei processi con una finestra visibile e con
 // titolo, escluso questo processo. Per scegliere un'app da mettere in regola.

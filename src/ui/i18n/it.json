@@ -158,5 +158,8 @@
   "preview.log_folder": "Anteprima: qui si aprirebbe la cartella dei log.",
   "preview.windows_restored": "Anteprima: impostazioni ripristinate.",
   "preview.display_off": "Anteprima: lo schermo si spegnerebbe ora.",
-  "pause.reason.protected_window": "Finestra protetta sullo schermo"
+  "pause.reason.protected_window": "Finestra protetta sullo schermo",
+  "activity.pause_protected": "In pausa: finestra protetta · {app}",
+  "apps.auto.protected.title": "Finestre protette",
+  "apps.auto.protected.desc": "Finestre che si nascondono dalla cattura dello schermo (video protetti, gestori di password): l'overlay le coprirebbe."
 }

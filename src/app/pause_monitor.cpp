@@ -63,26 +63,85 @@ std::string ProcessName(DWORD pid) {
   return name;
 }
 
+bool IsCloaked(HWND hwnd) {
+  BOOL cloaked = FALSE;  // finestre UWP sospese o su altri desktop virtuali
+  DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
+  return cloaked != FALSE;
+}
+
 }  // namespace
 
+std::string WindowProcessName(HWND hwnd) {
+  DWORD pid = 0;
+  GetWindowThreadProcessId(hwnd, &pid);
+  std::string name = ProcessName(pid);
+  if (name != "applicationframehost.exe") return name;
+  struct Search {
+    DWORD host_pid;
+    DWORD app_pid = 0;
+  } search{pid};
+  EnumChildWindows(
+      hwnd,
+      [](HWND child, LPARAM lp) -> BOOL {
+        auto* s = reinterpret_cast<Search*>(lp);
+        wchar_t cls[64] = {};
+        GetClassNameW(child, cls, ARRAYSIZE(cls));
+        DWORD child_pid = 0;
+        GetWindowThreadProcessId(child, &child_pid);
+        if (wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0 && child_pid != s->host_pid) {
+          s->app_pid = child_pid;
+          return FALSE;
+        }
+        return TRUE;
+      },
+      reinterpret_cast<LPARAM>(&search));
+  if (search.app_pid == 0) return name;
+  std::string app = ProcessName(search.app_pid);
+  return app.empty() ? name : app;
+}
+
+std::optional<std::string> FindProtectedWindow(const RECT& monitor) {
+  struct Search {
+    RECT monitor;
+    HWND found = nullptr;
+  } search{monitor};
+  EnumWindows(
+      [](HWND hwnd, LPARAM lp) -> BOOL {
+        auto* s = reinterpret_cast<Search*>(lp);
+        if (!IsWindowVisible(hwnd) || IsIconic(hwnd) || IsCloaked(hwnd)) return TRUE;
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (pid == GetCurrentProcessId()) return TRUE;  // l'overlay stesso e' escluso dalla cattura
+        DWORD affinity = WDA_NONE;
+        if (!GetWindowDisplayAffinity(hwnd, &affinity) || affinity == WDA_NONE) return TRUE;
+        RECT r{};
+        if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &r, sizeof(r)))) GetWindowRect(hwnd, &r);
+        const RECT& m = s->monitor;
+        if (!OverlapsEnough({r.left, r.top, r.right, r.bottom}, {m.left, m.top, m.right, m.bottom})) return TRUE;
+        s->found = hwnd;
+        return FALSE;
+      },
+      reinterpret_cast<LPARAM>(&search));
+  if (!search.found) return std::nullopt;
+  return WindowProcessName(search.found);
+}
+
 std::vector<std::string> ListWindowedProcesses() {
-  std::vector<DWORD> pids;
+  std::vector<HWND> windows;
   EnumWindows(
       [](HWND hwnd, LPARAM lp) -> BOOL {
         if (!IsWindowVisible(hwnd) || GetWindowTextLengthW(hwnd) == 0 || GetWindow(hwnd, GW_OWNER)) return TRUE;
         if (GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) return TRUE;
-        BOOL cloaked = FALSE;  // finestre UWP sospese o su altri desktop virtuali
-        DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
-        if (cloaked) return TRUE;
+        if (IsCloaked(hwnd)) return TRUE;
         DWORD pid = 0;
         GetWindowThreadProcessId(hwnd, &pid);
-        if (pid != GetCurrentProcessId()) reinterpret_cast<std::vector<DWORD>*>(lp)->push_back(pid);
+        if (pid != GetCurrentProcessId()) reinterpret_cast<std::vector<HWND>*>(lp)->push_back(hwnd);
         return TRUE;
       },
-      reinterpret_cast<LPARAM>(&pids));
+      reinterpret_cast<LPARAM>(&windows));
   std::vector<std::string> names;
-  for (DWORD pid : pids) {
-    std::string name = ProcessName(pid);
+  for (HWND hwnd : windows) {
+    std::string name = WindowProcessName(hwnd);
     if (!name.empty()) names.push_back(std::move(name));
   }
   std::sort(names.begin(), names.end());
@@ -118,7 +177,7 @@ PauseInputs PauseMonitor::Collect(const MonitorInfo* monitor) const {
   DWORD pid = 0;
   if (fg) GetWindowThreadProcessId(fg, &pid);
   if (fg && pid != GetCurrentProcessId() && !IsShellWindow(fg)) {
-    in.foreground_process = ProcessName(pid);
+    in.foreground_process = WindowProcessName(fg);
     RECT bounds{};
     if (monitor && SUCCEEDED(DwmGetWindowAttribute(fg, DWMWA_EXTENDED_FRAME_BOUNDS, &bounds, sizeof(bounds)))) {
       const RECT& m = monitor->rect;
@@ -136,6 +195,12 @@ PauseInputs PauseMonitor::Collect(const MonitorInfo* monitor) const {
           last_logged = fg;
         }
       }
+    }
+  }
+  if (monitor) {
+    if (auto process = FindProtectedWindow(monitor->rect)) {
+      in.protected_window = true;
+      in.protected_process = std::move(*process);
     }
   }
   return in;

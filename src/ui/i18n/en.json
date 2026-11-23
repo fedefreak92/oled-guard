@@ -158,5 +158,8 @@
   "preview.log_folder": "Preview: the log folder would open here.",
   "preview.windows_restored": "Preview: settings restored.",
   "preview.display_off": "Preview: the screen would turn off now.",
-  "pause.reason.protected_window": "Protected window on screen"
+  "pause.reason.protected_window": "Protected window on screen",
+  "activity.pause_protected": "Paused: protected window · {app}",
+  "apps.auto.protected.title": "Protected windows",
+  "apps.auto.protected.desc": "Windows that hide themselves from screen capture (protected video, password managers): the overlay would cover them."
 }
