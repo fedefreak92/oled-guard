@@ -43,7 +43,7 @@ struct WearView {
   std::array<double, kZones> normalized{};  // 0-1 rispetto alla zona peggiore
   int hottest = -1;                         // -1: nessun dato
   double hottest_hours = 0;
-  std::string hottest_label;                // "in alto a sinistra"...
+  std::string hottest_key;                  // "wear.zone.top_left"...
   double concentration = 0;                 // zona peggiore / media
   int over_double = 0;                      // zone oltre il doppio della media
   double measured_hours = 0;

@@ -29,7 +29,7 @@ TEST(activity_caps_at_100) {
   ActivityLog log;
   for (int i = 1; i <= 150; ++i) log.Add(i * 10000, "config", "evento " + std::to_string(i));
   CHECK_EQ(log.Events().size(), size_t{100});
-  CHECK_EQ(log.Events().back().text, std::string("evento 51"));
+  CHECK_EQ(log.Events().back().key, std::string("evento 51"));
 }
 
 TEST(activity_clear) {
@@ -37,4 +37,16 @@ TEST(activity_clear) {
   log.Add(1, "test", "Prova");
   log.Clear();
   CHECK(log.Events().empty());
+}
+
+TEST(activity_stores_key_and_params) {
+  ActivityLog log;
+  log.Add(0, "pause", "activity.paused_app", {{"reason", "pause.reason.fullscreen"}, {"app", "game.exe"}});
+  const auto& merged = log.Add(4000, "pause", "activity.paused_app", {{"reason", "pause.reason.fullscreen"}, {"app", "game.exe"}});
+  CHECK_EQ(log.Events().size(), size_t{1});
+  CHECK_EQ(merged.count, 2);
+  CHECK_EQ(merged.key, std::string("activity.paused_app"));
+  CHECK_EQ(merged.params.size(), size_t{2});
+  log.Add(4500, "pause", "activity.paused_app", {{"reason", "pause.reason.fullscreen"}, {"app", "other.exe"}});
+  CHECK_EQ(log.Events().size(), size_t{2});
 }

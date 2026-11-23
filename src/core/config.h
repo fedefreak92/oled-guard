@@ -73,6 +73,9 @@ struct Config {
   // Statistiche per app (tempo in primo piano), solo sul PC.
   bool app_stats_enabled = true;
 
+  // Lingua dell'interfaccia: "auto" (lingua di Windows) | en | it | es | de | fr
+  std::string language = "auto";
+
   bool operator==(const Config&) const = default;
 };
 

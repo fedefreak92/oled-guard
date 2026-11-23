@@ -230,6 +230,7 @@ ConfigLoadResult ConfigFromJson(std::string_view raw) {
     else if (key == "ui_text_size") r.Choice(key, v, {"small", "normal", "large", "xl"}, c.ui_text_size);
     else if (key == "alert_enabled") r.Bool(key, v, c.alert_enabled);
     else if (key == "alert_threshold") r.Choice(key, v, {"low", "medium", "high"}, c.alert_threshold);
+    else if (key == "language") r.Choice(key, v, {"auto", "en", "it", "es", "de", "fr"}, c.language);
     else if (key == "alert_after_min") r.Int(key, v, 5, 240, c.alert_after_min);
     else if (key == "app_stats_enabled") r.Bool(key, v, c.app_stats_enabled);
     else if (key == "app_list") {
@@ -316,6 +317,7 @@ std::string ConfigToJson(const Config& c) {
   o.Set("app_list", list(c.app_list));
   o.Set("alert_enabled", JsonValue(c.alert_enabled));
   o.Set("alert_threshold", JsonValue(c.alert_threshold));
+  o.Set("language", JsonValue(c.language));
   o.Set("alert_after_min", JsonValue(c.alert_after_min));
   o.Set("app_stats_enabled", JsonValue(c.app_stats_enabled));
   return SerializeJson(o) + "\n";

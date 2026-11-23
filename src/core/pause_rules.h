@@ -73,8 +73,11 @@ bool IsImmediate(PauseReason reason);
 // sole che finiscono nello storico "Giochi e app" e nel conteggio delle pause.
 bool CausedByApp(PauseReason reason);
 
-// Testo italiano (UTF-8) per tray e log.
+// Testo italiano (UTF-8) per il log.
 std::string_view PauseReasonText(PauseReason reason);
+
+// Chiave di traduzione per l'utente ("pause.reason.manual", ...).
+std::string_view PauseReasonKey(PauseReason reason);
 
 class PauseHysteresis {
  public:

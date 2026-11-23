@@ -258,8 +258,8 @@ void App::SyncAutostart() {
 
 void App::ReportConfigWarnings(const ConfigLoadResult& result, bool at_startup) {
   for (const auto& warning : result.warnings) LogWarn("Configurazione: {}", warning);
-  if (result.parse_failed) Record("config", "Configurazione non valida: dettagli nel log");
-  else if (!result.warnings.empty()) Record("config", std::to_string(result.warnings.size()) + " avvisi nella configurazione");
+  if (result.parse_failed) Record("config", "activity.config_invalid");
+  else if (!result.warnings.empty()) Record("config", "activity.config_warnings", {{"n", std::to_string(result.warnings.size())}});
   if (result.parse_failed && at_startup) {
     ShowNotice(L"Configurazione non valida",
                L"Il file non si legge: uso i valori predefiniti finché non lo correggi. Dettagli nel log.");
@@ -311,15 +311,15 @@ void App::ApplyConfig(const Config& next) {
   Tick();
   if (ui_.IsReady()) ui_.Post(ConfigMessage(config_));
   if (previous.monitor != config_.monitor) {
-    Record("monitor", "Schermo protetto: " + (monitor_ ? Narrow(monitor_->friendly_name) : config_.monitor));
+    Record("monitor", "activity.monitor_protected", {{"name", monitor_ ? Narrow(monitor_->friendly_name) : config_.monitor}});
     PushMonitorsToUi();
   }
 }
 
-void App::Record(std::string_view kind, std::string_view text) {
+void App::Record(std::string_view kind, std::string_view key, I18nParams params) {
   const auto now = std::chrono::system_clock::now().time_since_epoch();
   const int64_t t_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
-  const ActivityEvent& e = activity_.Add(t_ms, kind, text);
+  const ActivityEvent& e = activity_.Add(t_ms, kind, key, std::move(params));
   if (ui_.IsReady()) ui_.Post(ActivityAddMessage(e));
 }
 
@@ -482,7 +482,7 @@ void App::UpdateStatistics(double now) {
                              "aiutano il pannello.";
     LogInfo("Avviso: rischio non protetto {}% da {} min", pct, minutes);
     tray_.ShowBalloon(L"OLED Guard", Widen(text));
-    Record("alert", "Avviso: schermo fermo e non protetto da " + std::to_string(minutes) + " min");
+    Record("alert", "activity.alert", {{"min", std::to_string(minutes)}});
   }
 
   if (ui_.IsReady()) {
@@ -523,7 +523,7 @@ void App::RunWindowsTask(std::function<void()> task) {
   // il thread UI non deve mai aspettarle (il watchdog lo considererebbe bloccato).
   if (windows_busy_.exchange(true)) {
     if (task) {
-      ui_.Post(NoticeMessage("Modifica gia' in corso, attendi un istante."));
+      ui_.Post(NoticeMessage("notice.windows_busy"));
     } else {
       windows_refresh_pending_ = true;  // si rilegge appena il lavoro in corso finisce
     }
@@ -535,7 +535,7 @@ void App::RunWindowsTask(std::function<void()> task) {
     if (task) task();
     const auto items = windows_.ReadAll();
     for (const auto& it : items) {
-      LogDebug("Windows per OLED: {} = {} (consigliato: {})", it.id, it.current, it.ok ? "si'" : "no");
+      LogDebug("Windows per OLED: {} = {} (consigliato: {})", it.id, it.current_key, it.ok ? "si'" : "no");
     }
     {
       std::lock_guard lock(windows_msg_mutex_);
@@ -626,12 +626,16 @@ void App::Tick() {
     if (paused) {
       LogInfo("In pausa: {} (processo in primo piano: {})", PauseReasonText(reason),
               in.foreground_process.empty() ? "-" : in.foreground_process);
-      std::string text = "In pausa: " + std::string(PauseReasonText(reason));
-      if (CausedByApp(reason) && !in.foreground_process.empty()) text += " · " + in.foreground_process;
-      Record(reason == PauseReason::Manual ? "manual" : "pause", text);
+      const std::string_view kind = reason == PauseReason::Manual ? "manual" : "pause";
+      const std::string reason_key(PauseReasonKey(reason));
+      if (CausedByApp(reason) && !in.foreground_process.empty()) {
+        Record(kind, "activity.paused_app", {{"reason_key", reason_key}, {"app", in.foreground_process}});
+      } else {
+        Record(kind, "activity.paused", {{"reason_key", reason_key}});
+      }
     } else {
       LogInfo("Attivo");
-      Record("resume", "Protezione attiva");
+      Record("resume", "activity.resumed");
     }
     first_tick_ = false;
     last_paused_ = paused;
@@ -851,10 +855,10 @@ void App::OnSecond() {
   if (away_.Update(in)) {
     if (away_.Away()) {
       LogInfo("Modalita' assente: schermo scurito");
-      Record("away", "Modalità assente: schermo scurito");
+      Record("away", "activity.away");
     } else {
       LogInfo("Modalita' assente: fine");
-      Record("back", "Di nuovo qui: luminosità normale");
+      Record("back", "activity.back");
     }
     PushShadeInputs();
     UpdateTrayTooltip();
@@ -1012,7 +1016,7 @@ void App::OnUiMessage(const std::string& json) {
         // Un valore non valido dalla pagina non sostituisce quello attuale con un default.
         for (const auto& w : result.warnings) LogWarn("Interfaccia: {}", w);
         ui_.Post(ConfigMessage(config_));
-        if (!result.warnings.empty()) ui_.Post(NoticeMessage("Non applicato: " + result.warnings.front()));
+        if (!result.warnings.empty()) ui_.Post(NoticeMessage("notice.setting_rejected"));
         break;
       }
       ApplyConfig(NormalizedConfig(result.config));
@@ -1025,16 +1029,16 @@ void App::OnUiMessage(const std::string& json) {
     case UiCommandType::WindowsApply: {
       const std::string id = command->id;
       RunWindowsTask([this, id] { windows_.Apply(id); });
-      Record("windows", "Impostazione di Windows applicata");
+      Record("windows", "activity.windows_applied");
       break;
     }
     case UiCommandType::WindowsApplyAll:
       RunWindowsTask([this] { windows_.ApplyAll(); });
-      Record("windows", "Applicati tutti i consigli per Windows");
+      Record("windows", "activity.windows_applied_all");
       break;
     case UiCommandType::WindowsRestoreAll:
       RunWindowsTask([this] { windows_.RestoreAll(); });
-      Record("windows", "Impostazioni di Windows ripristinate come prima");
+      Record("windows", "activity.windows_restored");
       break;
     case UiCommandType::DisplayOff:
       LogInfo("Schermo spento dall'interfaccia");
@@ -1068,7 +1072,7 @@ void App::OnUiMessage(const std::string& json) {
       break;
     case UiCommandType::TestShift: {
       if (!overlay_running_) {
-        ui_.Post(NoticeMessage("La prova funziona solo con la protezione attiva: togli prima la pausa."));
+        ui_.Post(NoticeMessage("notice.test_needs_protection"));
         break;
       }
       const double now = NowMs();
@@ -1077,7 +1081,7 @@ void App::OnUiMessage(const std::string& json) {
       shift_->MoveSoon(now);
       SetTimer(main_, kTimerTestShift, kTestShiftMs, nullptr);
       LogInfo("Prova dello spostamento per {} s", kTestShiftMs / 1000);
-      Record("test", "Prova dello spostamento (" + std::to_string(kTestShiftMs / 1000) + " s)");
+      Record("test", "activity.test_shift", {{"s", std::to_string(kTestShiftMs / 1000)}});
       PushUiUpdates(now);
       break;
     }
@@ -1102,7 +1106,7 @@ void App::OnUiMessage(const std::string& json) {
     case UiCommandType::DimHighlight: {
       const bool suspended = DimSuspended();
       if (!config_.dim_enabled || suspended || !overlay_shown_) {
-        ui_.Post(NoticeMessage("Oscuramento spento o sospeso: niente da evidenziare"));
+        ui_.Post(NoticeMessage("notice.nothing_to_highlight"));
         break;
       }
       dim_highlight_until_ms_ = NowMs() + 15000;
@@ -1126,7 +1130,7 @@ void App::OnUiMessage(const std::string& json) {
       history_.Clear();
       SaveHistoryNow();
       LogInfo("Storico delle statistiche cancellato");
-      Record("config", "Storico delle statistiche cancellato");
+      Record("config", "activity.history_cleared");
       PushHistoryToUi();
       break;
     case UiCommandType::ClearActivity:

@@ -81,6 +81,23 @@ bool CausedByApp(PauseReason reason) {
   }
 }
 
+std::string_view PauseReasonKey(PauseReason reason) {
+  switch (reason) {
+    case PauseReason::None: return "pause.reason.none";
+    case PauseReason::Manual: return "pause.reason.manual";
+    case PauseReason::SessionLocked: return "pause.reason.session_locked";
+    case PauseReason::SessionInactive: return "pause.reason.session_inactive";
+    case PauseReason::SecureDesktop: return "pause.reason.secure_desktop";
+    case PauseReason::CaptureFailed: return "pause.reason.capture_failed";
+    case PauseReason::DisplayRotated: return "pause.reason.display_rotated";
+    case PauseReason::MonitorMissing: return "pause.reason.monitor_missing";
+    case PauseReason::Denylisted: return "pause.reason.denylisted";
+    case PauseReason::NotificationState: return "pause.reason.notification_state";
+    case PauseReason::FullscreenWindow: return "pause.reason.fullscreen_window";
+  }
+  return "pause.reason.none";
+}
+
 std::string_view PauseReasonText(PauseReason reason) {
   switch (reason) {
     case PauseReason::None: return "Attivo";

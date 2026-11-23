@@ -1,3 +1,8 @@
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+
+#include "json.h"
 #include "pause_rules.h"
 #include "test_framework.h"
 
@@ -221,4 +226,21 @@ TEST(hysteresis_reason_follows_raw_while_paused) {
   CHECK(h.Reason() == PauseReason::SessionLocked);
   h.Update(PauseReason::None, 200);
   CHECK(h.Reason() == PauseReason::SessionLocked);  // resta l'ultimo motivo noto
+}
+
+TEST(pause_reason_keys_exist) {
+  std::ifstream in(std::filesystem::path(OLED_SOURCE_DIR) / "src" / "ui" / "i18n" / "en.json", std::ios::binary);
+  std::ostringstream ss;
+  ss << in.rdbuf();
+  const auto en = ParseJson(ss.str());
+  CHECK(en.value.has_value());
+  if (!en.value) return;
+  for (PauseReason r : {PauseReason::None, PauseReason::Manual, PauseReason::SessionLocked, PauseReason::SessionInactive,
+                        PauseReason::SecureDesktop, PauseReason::CaptureFailed, PauseReason::DisplayRotated,
+                        PauseReason::MonitorMissing, PauseReason::Denylisted, PauseReason::NotificationState,
+                        PauseReason::FullscreenWindow}) {
+    const std::string key(PauseReasonKey(r));
+    CHECK(key.rfind("pause.reason.", 0) == 0);
+    if (!en.value->Find(key)) ::oled::test::ReportFailure(__FILE__, __LINE__, "chiave mancante in en.json: " + key);
+  }
 }

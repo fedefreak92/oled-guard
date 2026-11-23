@@ -7,6 +7,7 @@
 #include "signals.h"
 #include "app_history.h"
 #include "json.h"
+#include "i18n.h"
 #include "test_framework.h"
 #include "ui_protocol.h"
 #include "wear_stats.h"
@@ -92,10 +93,54 @@ TEST(ui_config_and_processes_messages) {
   CHECK_EQ(p.Find("processes")->AsArray().size(), size_t{2});
 }
 
-TEST(ui_notice_message_escapes_text) {
-  const JsonValue v = Parse(oled::NoticeMessage("amplitude_px: valore \"9\" fuori intervallo"));
+TEST(ui_notice_message_key) {
+  const JsonValue v = Parse(oled::NoticeMessage("notice.test_needs_protection", {{"s", "30"}}));
   CHECK_EQ(v.Find("type")->AsString(), std::string("notice"));
-  CHECK_EQ(v.Find("text")->AsString(), std::string("amplitude_px: valore \"9\" fuori intervallo"));
+  CHECK_EQ(v.Find("key")->AsString(), std::string("notice.test_needs_protection"));
+  CHECK(v.Find("text") == nullptr);
+  CHECK_EQ(v.Find("params")->Find("s")->AsString(), std::string("30"));
+}
+
+TEST(ui_strings_message) {
+  JsonValue en = JsonValue::MakeObject();
+  en.Set("a", JsonValue("A"));
+  en.Set("b", JsonValue("B"));
+  JsonValue de = JsonValue::MakeObject();
+  de.Set("a", JsonValue("D"));
+  const JsonValue v = Parse(oled::StringsMessage(oled::Translations::FromJson("de", de, en)));
+  CHECK_EQ(v.Find("type")->AsString(), std::string("strings"));
+  CHECK_EQ(v.Find("lang")->AsString(), std::string("de"));
+  CHECK_EQ(v.Find("strings")->Find("a")->AsString(), std::string("D"));
+  CHECK_EQ(v.Find("strings")->Find("b")->AsString(), std::string("B"));
+}
+
+TEST(ui_windows_message_keys) {
+  std::vector<oled::WindowsItem> items(1);
+  items[0].id = "screensaver";
+  items[0].current_key = "windows.value.black_after";
+  items[0].current_params = {{"time", "10 min"}};
+  items[0].recommended_key = "windows.value.minutes";
+  items[0].recommended_params = {{"n", "10"}};
+  const JsonValue v = Parse(oled::WindowsMessage(items));
+  const JsonValue& it = v.Find("items")->AsArray().at(0);
+  CHECK(it.Find("label") == nullptr);
+  CHECK_EQ(it.Find("current_key")->AsString(), std::string("windows.value.black_after"));
+  CHECK_EQ(it.Find("current_params")->Find("time")->AsString(), std::string("10 min"));
+  CHECK_EQ(it.Find("recommended_key")->AsString(), std::string("windows.value.minutes"));
+  CHECK_EQ(it.Find("recommended_params")->Find("n")->AsString(), std::string("10"));
+}
+
+TEST(ui_parse_set_language) {
+  const std::string auto_json = R"({"cmd":"setLanguage","id":"auto"})";
+  auto a = oled::ParseUiCommand(auto_json);
+  CHECK(a && a->type == oled::UiCommandType::SetLanguage && a->id == "auto");
+  const std::string de_json = R"({"cmd":"setLanguage","id":"de"})";
+  auto d = oled::ParseUiCommand(de_json);
+  CHECK(d && d->id == "de");
+  const std::string pt_json = R"({"cmd":"setLanguage","id":"pt"})";
+  CHECK(!oled::ParseUiCommand(pt_json).has_value());
+  const std::string none_json = R"({"cmd":"setLanguage"})";
+  CHECK(!oled::ParseUiCommand(none_json).has_value());
 }
 
 TEST(ui_command_parses_known_commands) {
@@ -302,8 +347,8 @@ TEST(ui_monitors_message_none_protected) {
 
 TEST(ui_activity_messages) {
   oled::ActivityLog log;
-  log.Add(1000, "pause", "In pausa");
-  log.Add(2000, "resume", "Attivo");
+  log.Add(1000, "pause", "activity.paused", {{"reason", "pause.reason.manual"}});
+  log.Add(2000, "resume", "activity.resumed");
   const JsonValue all = Parse(oled::ActivityMessage(log));
   CHECK_EQ(all.Find("type")->AsString(), std::string("activity"));
   const auto& events = all.Find("events")->AsArray();
@@ -312,12 +357,14 @@ TEST(ui_activity_messages) {
     CHECK_EQ(events[0].Find("kind")->AsString(), std::string("resume"));
     CHECK_NEAR(events[1].Find("t")->AsNumber(), 1000, 1e-9);
   }
-  const auto& merged = log.Add(3000, "resume", "Attivo");
+  CHECK(events.size() == 2 && events[1].Find("text") == nullptr);
+  CHECK(events.size() == 2 && events[1].Find("params")->Find("reason")->AsString() == "pause.reason.manual");
+  const auto& merged = log.Add(3000, "resume", "activity.resumed");
   const JsonValue add = Parse(oled::ActivityAddMessage(merged));
   CHECK_EQ(add.Find("type")->AsString(), std::string("activity"));
   CHECK(add.Find("add") != nullptr);
   if (!add.Find("add")) return;
-  CHECK_EQ(add.Find("add")->Find("text")->AsString(), std::string("Attivo"));
+  CHECK_EQ(add.Find("add")->Find("key")->AsString(), std::string("activity.resumed"));
   CHECK_NEAR(add.Find("add")->Find("count")->AsNumber(), 2, 1e-9);
 }
 
@@ -385,7 +432,7 @@ TEST(ui_history_message_fields) {
   p.timeline_end_local_s = 123456;
   p.risk_peak_24h = 0.5;
   p.wear.hottest = 3;
-  p.wear.hottest_label = "in alto a sinistra";
+  p.wear.hottest_key = "wear.zone.top_left";
   p.wear.normalized[3] = 1;
   p.wear_monitor = "LG TV SSCR2";
   p.top_apps = {oled::AppView{"code.exe", 100, 20}};
@@ -409,7 +456,7 @@ TEST(ui_history_message_fields) {
   CHECK(wear && wear->Find("cells") && wear->Find("cells")->AsArray().size() == size_t{oled::kZones});
   if (wear) {
     CHECK_EQ(wear->Find("monitor")->AsString(), std::string("LG TV SSCR2"));
-    CHECK_EQ(wear->Find("hottest_label")->AsString(), std::string("in alto a sinistra"));
+    CHECK_EQ(wear->Find("hottest_key")->AsString(), std::string("wear.zone.top_left"));
     CHECK(wear->Find("hottest_hours") && wear->Find("concentration") && wear->Find("over_double") &&
           wear->Find("measured_hours") && wear->Find("since"));
   }

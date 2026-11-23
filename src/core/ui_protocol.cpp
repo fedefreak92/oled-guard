@@ -19,6 +19,12 @@ JsonValue Point(Offset o) {
 
 std::string Compact(const JsonValue& v) { return SerializeJson(v, 0); }
 
+JsonValue ParamsJson(const I18nParams& params) {
+  JsonValue o = JsonValue::MakeObject();
+  for (const auto& [k, v] : params) o.Set(k, JsonValue(v));
+  return o;
+}
+
 const char* RuleName(AppRule rule) {
   switch (rule) {
     case AppRule::AlwaysPause: return "always";
@@ -140,9 +146,10 @@ std::string WindowsMessage(const std::vector<WindowsItem>& items) {
   for (const WindowsItem& it : items) {
     JsonValue i = JsonValue::MakeObject();
     i.Set("id", JsonValue(it.id));
-    i.Set("label", JsonValue(it.label));
-    i.Set("current", JsonValue(it.current));
-    i.Set("recommended", JsonValue(it.recommended));
+    i.Set("current_key", JsonValue(it.current_key));
+    i.Set("current_params", ParamsJson(it.current_params));
+    i.Set("recommended_key", JsonValue(it.recommended_key));
+    i.Set("recommended_params", ParamsJson(it.recommended_params));
     i.Set("ok", JsonValue(it.ok));
     i.Set("restorable", JsonValue(it.restorable));
     i.Set("managed", JsonValue(it.managed));
@@ -166,10 +173,19 @@ std::string ProcessesMessage(const std::vector<std::string>& processes) {
   return Compact(o);
 }
 
-std::string NoticeMessage(std::string_view text) {
+std::string NoticeMessage(std::string_view key, const I18nParams& params) {
   JsonValue o = JsonValue::MakeObject();
   o.Set("type", JsonValue("notice"));
-  o.Set("text", JsonValue(std::string(text)));
+  o.Set("key", JsonValue(std::string(key)));
+  o.Set("params", ParamsJson(params));
+  return Compact(o);
+}
+
+std::string StringsMessage(const Translations& t) {
+  JsonValue o = JsonValue::MakeObject();
+  o.Set("type", JsonValue("strings"));
+  o.Set("lang", JsonValue(t.Language()));
+  o.Set("strings", t.Dictionary());
   return Compact(o);
 }
 
@@ -241,7 +257,8 @@ JsonValue EventJson(const ActivityEvent& e) {
   JsonValue o = JsonValue::MakeObject();
   o.Set("t", JsonValue(static_cast<double>(e.t_ms)));
   o.Set("kind", JsonValue(e.kind));
-  o.Set("text", JsonValue(e.text));
+  o.Set("key", JsonValue(e.key));
+  o.Set("params", ParamsJson(e.params));
   o.Set("count", JsonValue(e.count));
   return o;
 }
@@ -328,7 +345,7 @@ std::string HistoryMessage(const HistoryPayload& p) {
   wear.Set("cells", cells);
   wear.Set("hottest", JsonValue(p.wear.hottest));
   wear.Set("hottest_hours", JsonValue(p.wear.hottest_hours));
-  wear.Set("hottest_label", JsonValue(p.wear.hottest_label));
+  wear.Set("hottest_key", JsonValue(p.wear.hottest_key));
   wear.Set("concentration", JsonValue(p.wear.concentration));
   wear.Set("over_double", JsonValue(p.wear.over_double));
   wear.Set("measured_hours", JsonValue(p.wear.measured_hours));
@@ -430,6 +447,13 @@ std::optional<UiCommand> ParseUiCommand(std::string_view json) {
     c.type = UiCommandType::BrowseExe;
   } else if (name == "clearHistory") {
     c.type = UiCommandType::ClearHistory;
+  } else if (name == "setLanguage") {
+    const JsonValue* id = Field(o, "id", JsonValue::Type::String);
+    if (!id) return std::nullopt;
+    const std::string& lang = id->AsString();
+    if (lang != "auto" && std::find(kLanguages.begin(), kLanguages.end(), lang) == kLanguages.end()) return std::nullopt;
+    c.type = UiCommandType::SetLanguage;
+    c.id = lang;
   } else if (name == "clearActivity") {
     c.type = UiCommandType::ClearActivity;
   } else if (name == "setMonitor") {

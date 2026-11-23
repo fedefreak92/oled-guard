@@ -92,11 +92,21 @@ bool WriteDisplayTimeout(DWORD seconds) {
   return ok;
 }
 
-std::string Minutes(DWORD seconds) {
-  if (seconds == 0) return "mai";
-  if (seconds < 60) return std::to_string(seconds) + " s";
-  return std::to_string(seconds / 60) + " min";
+// Durata come chiave di traduzione: mai, secondi o minuti.
+void SetDuration(std::string& key, I18nParams& params, DWORD seconds) {
+  params.clear();
+  if (seconds == 0) {
+    key = "windows.value.never";
+  } else if (seconds < 60) {
+    key = "windows.value.seconds";
+    params.emplace_back("n", std::to_string(seconds));
+  } else {
+    key = "windows.value.minutes";
+    params.emplace_back("n", std::to_string(seconds / 60));
+  }
 }
+
+bool KnownId(const std::string& id);
 
 // --- icone del desktop ---------------------------------------------------------
 
@@ -161,25 +171,23 @@ WindowsItem ReadItem(const std::string& id) {
   if (id == "dark_theme") {
     const DWORD apps = ReadDword(kPersonalize, L"AppsUseLightTheme", 1);
     const DWORD sys = ReadDword(kPersonalize, L"SystemUsesLightTheme", 1);
-    it.label = "Tema scuro di sistema e app";
-    it.current = apps == 0 && sys == 0 ? "scuro" : (apps != 0 && sys != 0 ? "chiaro" : "misto");
-    it.recommended = "Scuro";
+    it.current_key = apps == 0 && sys == 0 ? "windows.value.dark"
+                                           : (apps != 0 && sys != 0 ? "windows.value.light" : "windows.value.mixed");
+    it.recommended_key = "windows.action.dark";
     it.ok = apps == 0 && sys == 0;
   } else if (id == "taskbar_autohide") {
     const bool autohide = (TaskbarState() & ABS_AUTOHIDE) != 0;
-    it.label = "Barra delle applicazioni a scomparsa";
-    it.current = autohide ? "a scomparsa" : "sempre visibile";
-    it.recommended = "Applica";
+    it.current_key = autohide ? "windows.value.autohide" : "windows.value.always_visible";
+    it.recommended_key = "windows.action.apply";
     it.ok = autohide;
   } else if (id == "display_timeout") {
     DWORD seconds = 0;
-    it.label = "Spegni lo schermo dopo";
-    it.recommended = Minutes(kDisplayTimeoutS);
+    SetDuration(it.recommended_key, it.recommended_params, kDisplayTimeoutS);
     if (ReadDisplayTimeout(seconds)) {
-      it.current = Minutes(seconds);
+      SetDuration(it.current_key, it.current_params, seconds);
       it.ok = seconds > 0 && seconds <= kDisplayTimeoutS;
     } else {
-      it.current = "non leggibile";
+      it.current_key = "windows.value.unreadable";
       it.managed = true;
     }
   } else if (id == "screensaver") {
@@ -189,41 +197,42 @@ WindowsItem ReadItem(const std::string& id) {
     SystemParametersInfoW(SPI_GETSCREENSAVETIMEOUT, 0, &timeout, 0);
     const std::string exe = ToLowerAscii(Narrow(ReadString(kDesktop, L"SCRNSAVE.EXE")));
     const bool blank = exe.size() >= 12 && exe.substr(exe.size() - 12) == "scrnsave.scr";
-    it.label = "Salvaschermo nero";
-    it.current = !active || exe.empty() ? "nessuno" : (blank ? "nero, dopo " + Minutes(timeout) : "altro salvaschermo");
-    it.recommended = Minutes(kScreensaverTimeoutS);
+    if (!active || exe.empty()) {
+      it.current_key = "windows.value.none";
+    } else if (blank) {
+      it.current_key = "windows.value.black_after_min";
+      it.current_params = {{"n", std::to_string(timeout / 60)}};
+    } else {
+      it.current_key = "windows.value.other_screensaver";
+    }
+    SetDuration(it.recommended_key, it.recommended_params, kScreensaverTimeoutS);
     it.ok = active && blank && timeout > 0 && timeout <= kScreensaverTimeoutS;
   } else if (id == "desktop_icons") {
     const bool visible = DesktopIconsVisible();
-    it.label = "Icone del desktop nascoste";
-    it.current = visible ? "visibili" : "nascoste";
-    it.recommended = "Nascondi";
+    it.current_key = visible ? "windows.value.visible" : "windows.value.hidden";
+    it.recommended_key = "windows.action.hide";
     it.ok = !visible;
   } else if (id == "transparency") {
     const bool on = ReadDword(kPersonalize, L"EnableTransparency", 1) != 0;
-    it.label = "Effetti di trasparenza disattivati";
-    it.current = on ? "attivi" : "disattivati";
-    it.recommended = "Disattiva";
+    it.current_key = on ? "windows.value.on" : "windows.value.off";
+    it.recommended_key = "windows.action.turn_off";
     it.ok = !on;
   } else if (id == "black_wallpaper") {
     const bool no_image = WallpaperPath().empty();
     const bool black = GetSysColor(COLOR_DESKTOP) == RGB(0, 0, 0);
-    it.label = "Sfondo nero";
-    it.current = no_image ? (black ? "tinta unita nera" : "tinta unita") : "immagine";
-    it.recommended = "Nero";
+    it.current_key = no_image ? (black ? "windows.value.solid_black" : "windows.value.solid") : "windows.value.image";
+    it.recommended_key = "windows.action.black";
     it.ok = no_image && black;
   } else if (id == "mouse_vanish") {
     BOOL vanish = FALSE;
     SystemParametersInfoW(SPI_GETMOUSEVANISH, 0, &vanish, 0);
-    it.label = "Nascondi il puntatore mentre scrivi";
-    it.current = vanish ? "attivo" : "spento";
-    it.recommended = "Attiva";
+    it.current_key = vanish ? "windows.value.on" : "windows.value.off";
+    it.recommended_key = "windows.action.turn_on";
     it.ok = vanish != FALSE;
   } else if (id == "accent_titlebar") {
     const bool on = ReadDword(kDwm, L"ColorPrevalence", 0) != 0;
-    it.label = "Colore d'accento sulle barre del titolo";
-    it.current = on ? "acceso" : "spento";
-    it.recommended = "Spegni";
+    it.current_key = on ? "windows.value.on" : "windows.value.off";
+    it.recommended_key = "windows.action.turn_off";
     it.ok = !on;
   }
   return it;
@@ -231,6 +240,12 @@ WindowsItem ReadItem(const std::string& id) {
 
 const char* const kIds[] = {"dark_theme",   "taskbar_autohide", "display_timeout", "screensaver",     "desktop_icons",
                             "transparency", "black_wallpaper",  "mouse_vanish",    "accent_titlebar"};
+
+bool KnownId(const std::string& id) {
+  for (const char* known : kIds)
+    if (id == known) return true;
+  return false;
+}
 
 // --- valore attuale (per il backup) e scrittura --------------------------------
 
@@ -382,7 +397,7 @@ std::vector<WindowsItem> WindowsSettings::ReadAll() const {
 
 bool WindowsSettings::Apply(const std::string& id) {
   std::lock_guard lock(mutex_);
-  if (ReadItem(id).label.empty()) return false;  // id sconosciuto
+  if (!KnownId(id)) return false;  // id sconosciuto
   JsonValue backup = LoadBackup();
   // Si salva l'originale solo la prima volta: "Ripristina" torna a com'era prima di OLED Guard.
   if (!backup.Find(id)) {

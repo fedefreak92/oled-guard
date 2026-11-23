@@ -11,6 +11,7 @@
 #include "activity_log.h"
 #include "app_history.h"
 #include "history.h"
+#include "i18n.h"
 #include "signals.h"
 #include "config.h"
 #include "json.h"
@@ -51,11 +52,13 @@ struct MonitorItem {
   std::string connection;  // "HDMI" | "DP" | "DVI" | "Interno" | ""
 };
 
+// Etichetta nella pagina: chiave "windows.<id>.label".
 struct WindowsItem {
   std::string id;
-  std::string label;
-  std::string current;
-  std::string recommended;
+  std::string current_key;
+  I18nParams current_params;
+  std::string recommended_key;
+  I18nParams recommended_params;
   bool ok = false;          // gia' come consigliato
   bool restorable = false;  // valore originale salvato
   bool managed = false;     // bloccato dal sistema
@@ -96,8 +99,11 @@ struct HistoryPayload {
 };
 std::string HistoryMessage(const HistoryPayload& p);
 
-// Avviso breve mostrato dalla pagina (testo italiano, UTF-8).
-std::string NoticeMessage(std::string_view text);
+// Avviso breve mostrato dalla pagina: chiave di traduzione e segnaposto.
+std::string NoticeMessage(std::string_view key, const I18nParams& params = {});
+
+// Dizionario della lingua attiva per la pagina.
+std::string StringsMessage(const Translations& t);
 
 // Mappa dei livelli di oscuramento ridotta per la miniatura della scheda.
 struct DimMapSummary {
@@ -144,6 +150,7 @@ enum class UiCommandType {
   ClearActivity,
   SetDimExclude,  // exe, on
   ClearHistory,
+  SetLanguage,    // id = codice di lingua o "auto"
 };
 
 struct UiCommand {

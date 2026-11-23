@@ -60,10 +60,10 @@ bool ValidDayKey(double v) {
 std::string ZoneLabel(int zone) {
   const int zx = zone % kZoneCols, zy = zone / kZoneCols;
   const int col = zx * 3 / kZoneCols, row = zy * 3 / kZoneRows;
-  static const char* kRows[3] = {"in alto", "in mezzo", "in basso"};
-  static const char* kCols[3] = {"a sinistra", "al centro", "a destra"};
-  if (row == 1 && col == 1) return "al centro";
-  return std::string(kRows[row]) + " " + kCols[col];
+  static const char* kRows[3] = {"top", "middle", "bottom"};
+  static const char* kCols[3] = {"left", "center", "right"};
+  if (row == 1 && col == 1) return "wear.zone.center";
+  return std::string("wear.zone.") + kRows[row] + "_" + kCols[col];
 }
 
 }  // namespace
@@ -174,7 +174,7 @@ WearView History::Wear(const std::string& monitor) const {
   if (v.hottest < 0) return v;
   const double mean = sum / kZones;
   v.hottest_hours = max;
-  v.hottest_label = ZoneLabel(v.hottest);
+  v.hottest_key = ZoneLabel(v.hottest);
   v.concentration = mean > 0 ? max / mean : 0;
   for (int z = 0; z < kZones; ++z) {
     v.normalized[z] = m.hours[z] / max;

@@ -371,3 +371,15 @@ TEST(config_alert_privacy_invalid) {
     CHECK(AnyContains(r.warnings, "alert_"));
   }
 }
+
+TEST(config_language_roundtrip_and_invalid) {
+  auto d = ConfigFromJson("{}");
+  CHECK_EQ(d.config.language, std::string("auto"));
+  auto r = ConfigFromJson(R"({"language": "DE"})");
+  CHECK(r.warnings.empty());
+  CHECK_EQ(r.config.language, std::string("de"));
+  CHECK(ConfigFromJson(ConfigToJson(r.config)).config == r.config);
+  auto bad = ConfigFromJson(R"({"language": "pt"})");
+  CHECK_EQ(bad.config.language, std::string("auto"));
+  CHECK(AnyContains(bad.warnings, "language"));
+}

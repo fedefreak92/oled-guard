@@ -74,7 +74,9 @@ class App {
   void PushHistoryToUi();
   void SaveHistoryNow();
   // Attivita' recente: aggiunge l'evento e lo invia alla pagina se aperta.
-  void Record(std::string_view kind, std::string_view text);
+  // Evento dell'attivita' recente: chiave di traduzione e segnaposto. I segnaposto che
+  // finiscono in "_key" sono a loro volta chiavi (la pagina le traduce).
+  void Record(std::string_view kind, std::string_view key, I18nParams params = {});
   // Finestra "Apri" per scegliere un .exe, su un thread proprio.
   void BrowseExe();
   void OnWindowsDone();

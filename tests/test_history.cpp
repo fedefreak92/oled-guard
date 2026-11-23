@@ -89,7 +89,7 @@ TEST(history_wear_map_hotspot) {
   const auto w = h.Wear("LG TV SSCR2");
   CHECK_EQ(w.hottest, 0);
   CHECK_NEAR(w.hottest_hours, 1.0, 1e-9);
-  CHECK_EQ(w.hottest_label, std::string("in alto a sinistra"));
+  CHECK_EQ(w.hottest_key, std::string("wear.zone.top_left"));
   const double mean = (1.0 + 0.25 * (oled::kZones - 1)) / oled::kZones;
   CHECK_NEAR(w.concentration, 1.0 / mean, 1e-9);
   CHECK_EQ(w.over_double, 1);
@@ -101,7 +101,7 @@ TEST(history_wear_map_hotspot) {
   s.zone_light[oled::kZones - 1] = 9;
   History c;
   c.AddSecond(Sec(kMonday, 20261123, &s));
-  CHECK_EQ(c.Wear("LG TV SSCR2").hottest_label, std::string("in basso a destra"));
+  CHECK_EQ(c.Wear("LG TV SSCR2").hottest_key, std::string("wear.zone.bottom_right"));
 }
 
 TEST(history_wear_map_per_monitor) {
