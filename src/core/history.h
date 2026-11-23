@@ -40,7 +40,8 @@ struct SecondSample {
 };
 
 struct WearView {
-  std::array<double, kZones> normalized{};  // 0-1 rispetto alla zona peggiore
+  ZoneGrid grid;                            // griglia della mappa (proporzioni dello schermo)
+  std::vector<double> normalized;           // grid.Count() valori 0-1 rispetto alla zona peggiore
   int hottest = -1;                         // -1: nessun dato
   double hottest_hours = 0;
   std::string hottest_key;                  // "wear.zone.top_left"...
@@ -85,7 +86,8 @@ class History {
     int count = 0;
   };
   struct WearMap {
-    std::array<double, kZones> hours{};
+    ZoneGrid grid;
+    std::vector<double> hours = std::vector<double>(static_cast<size_t>(ZoneGrid{}.Count()), 0.0);
     int64_t since_local_s = 0;
     double measured_s = 0;
   };

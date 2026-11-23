@@ -377,7 +377,7 @@ input[type=range]:disabled::-webkit-slider-thumb { border-color: #56666b; }
 /* statistiche (progetto 2) */
 .stat b.info { color: var(--info); }
 .stat b.warn { color: var(--warn); }
-.wear-grid { display: grid; grid-template-columns: repeat(32, 1fr); gap: 2px; padding: 4px; border-radius: 10px; background: #05090b; border: 1px solid var(--line); }
+.wear-grid { display: grid; grid-template-columns: repeat(32, 1fr); /* colonne vere impostate dalla pagina */ gap: 2px; padding: 4px; border-radius: 10px; background: #05090b; border: 1px solid var(--line); }
 .wear-grid i { aspect-ratio: 1; border-radius: 2px; }
 .wear-grid i.hot { outline: 2px solid #fff; outline-offset: -1px; }
 .legend .grow { flex: 1; }

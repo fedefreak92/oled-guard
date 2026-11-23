@@ -351,6 +351,8 @@ std::string HistoryMessage(const HistoryPayload& p) {
   JsonValue cells = JsonValue::MakeArray();
   for (double v : p.wear.normalized) cells.Push(JsonValue(v));
   wear.Set("cells", cells);
+  wear.Set("cols", JsonValue(p.wear.grid.cols));
+  wear.Set("rows", JsonValue(p.wear.grid.rows));
   wear.Set("hottest", JsonValue(p.wear.hottest));
   wear.Set("hottest_hours", JsonValue(p.wear.hottest_hours));
   wear.Set("hottest_key", JsonValue(p.wear.hottest_key));

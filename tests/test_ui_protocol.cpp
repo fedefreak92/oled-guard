@@ -436,6 +436,7 @@ TEST(ui_history_message_fields) {
   p.risk_peak_24h = 0.5;
   p.wear.hottest = 3;
   p.wear.hottest_key = "wear.zone.top_left";
+  p.wear.normalized.assign(oled::kZones, 0.0);
   p.wear.normalized[3] = 1;
   p.wear_monitor = "LG TV SSCR2";
   p.top_apps = {oled::AppView{"code.exe", 100, 20}};
@@ -512,4 +513,18 @@ TEST(ui_navigate_message) {
   const JsonValue v = Parse(oled::NavigateMessage("monitor"));
   CHECK_EQ(v.Find("type")->AsString(), std::string("navigate"));
   CHECK_EQ(v.Find("page")->AsString(), std::string("monitor"));
+}
+
+TEST(ui_history_message_grid) {
+  oled::HistoryPayload p;
+  p.wear.grid = oled::ZoneGrid{38, 16};
+  p.wear.normalized.assign(608, 0.5);
+  p.wear.hottest = 3;
+  const JsonValue v = Parse(oled::HistoryMessage(p));
+  const JsonValue* wear = v.Find("wear");
+  CHECK(wear != nullptr);
+  if (!wear) return;
+  CHECK_NEAR(wear->Find("cols")->AsNumber(), 38, 1e-12);
+  CHECK_NEAR(wear->Find("rows")->AsNumber(), 16, 1e-12);
+  CHECK_EQ(wear->Find("cells")->AsArray().size(), size_t{608});
 }

@@ -10,6 +10,7 @@
 using oled::ContentKind;
 using oled::FrameSummary;
 using oled::History;
+using oled::JsonValue;
 using oled::SecondSample;
 
 namespace {
@@ -282,13 +283,14 @@ TEST(history_json_keeps_top_apps_per_day) {
 
 // Un file di un'altra versione o di forma sbagliata non va riusato (ne' sovrascritto in
 // silenzio): il chiamante lo mette da parte.
-TEST(history_json_usable_only_version_1) {
+TEST(history_json_usable_versions_1_and_2) {
   const auto usable = [](const char* text) {
     const auto parsed = oled::ParseJson(text);
     return parsed.value.has_value() && oled::HistoryJsonUsable(*parsed.value);
   };
   CHECK(usable(R"({"version": 1})"));
-  CHECK(!usable(R"({"version": 2, "timeline": []})"));
+  CHECK(usable(R"({"version": 2, "timeline": []})"));
+  CHECK(!usable(R"({"version": 3, "timeline": []})"));
   CHECK(!usable("{}"));
   CHECK(!usable("[]"));
   CHECK(!usable(R"({"version": "1"})"));
@@ -315,4 +317,97 @@ TEST(history_timeline_recovers_after_clock_goes_back) {
   const auto u = d.Timeline(kMonday + 600, 1);
   CHECK(u[0].has_value());
   if (u[0]) CHECK_NEAR(*u[0], 0.4, 1e-9);
+}
+
+namespace {
+
+// history.json della 1.1.0 (versione 1): una mappa 32x18 con 2 ore nella zona 0.
+std::string V1WithMap() {
+  std::string hours = "[2";
+  for (int z = 1; z < oled::kZones; ++z) hours += ",0";
+  hours += "]";
+  return R"({"version": 1, "wear": [{"monitor": "TV", "since": 1000, "measured_s": 7200, "hours": )" + hours + "}]}";
+}
+
+SecondSample OnMonitor(int64_t local_s, const FrameSummary* summary) {
+  SecondSample x = Sec(local_s, 20261123, summary);
+  x.monitor = "TV";
+  return x;
+}
+
+}  // namespace
+
+TEST(history_v1_map_kept_on_same_grid) {
+  const auto parsed = oled::ParseJson(V1WithMap());
+  CHECK(parsed.value.has_value());
+  if (!parsed.value) return;
+  History h = History::FromJson(*parsed.value);
+  CHECK_NEAR(h.Wear("TV").hottest_hours, 2.0, 1e-9);
+  FrameSummary s;  // griglia predefinita 32x18, come uno schermo 16:9
+  s.zone_light[0] = 3600;  // un'ora in un secondo
+  h.AddSecond(OnMonitor(kMonday, &s));
+  const auto w = h.Wear("TV");
+  CHECK(w.grid == (oled::ZoneGrid{32, 18}));
+  CHECK_NEAR(w.hottest_hours, 3.0, 1e-9);
+  CHECK_EQ(w.since_local_s, int64_t{1000});
+}
+
+TEST(history_grid_change_resets_map_only) {
+  History h;
+  FrameSummary wide;
+  wide.risk = 0.5;
+  wide.zone_light[0] = 1;
+  for (int i = 0; i < 600; ++i) h.AddSecond(OnMonitor(kMonday + i, &wide));
+  h.CountSession(20261123);
+  FrameSummary ultra;
+  ultra.grid = oled::ZoneGrid{38, 16};
+  ultra.risk = 0.5;
+  ultra.zone_light[607] = 1;  // ultima zona della griglia 38x16
+  h.AddSecond(OnMonitor(kMonday + 600, &ultra));
+  const auto w = h.Wear("TV");
+  CHECK(w.grid == (oled::ZoneGrid{38, 16}));
+  CHECK_EQ(w.normalized.size(), size_t{608});
+  CHECK_EQ(w.hottest, 607);
+  CHECK_EQ(w.hottest_key, std::string("wear.zone.bottom_right"));
+  CHECK_NEAR(w.measured_hours, 1.0 / 3600, 1e-12);
+  CHECK_EQ(w.since_local_s, kMonday + 600);
+  CHECK_EQ(h.SessionsTotal(), 1);  // il resto dello storico resta
+  const auto timeline = h.Timeline(kMonday + 601, 3);
+  CHECK(timeline.back().has_value());
+}
+
+TEST(history_v2_roundtrip) {
+  History h;
+  FrameSummary ultra;
+  ultra.grid = oled::ZoneGrid{38, 16};
+  ultra.zone_light[100] = 2;
+  for (int i = 0; i < 10; ++i) h.AddSecond(OnMonitor(kMonday + i, &ultra));
+  const JsonValue j = h.ToJson();
+  CHECK_NEAR(j.Find("version")->AsNumber(), 2, 1e-12);
+  const History b = History::FromJson(j);
+  const auto wa = h.Wear("TV"), wb = b.Wear("TV");
+  CHECK(wb.grid == (oled::ZoneGrid{38, 16}));
+  CHECK_EQ(wb.hottest, 100);
+  CHECK_NEAR(wb.hottest_hours, wa.hottest_hours, 1e-12);
+  CHECK(wb.normalized == wa.normalized);
+}
+
+TEST(history_v2_bad_wear_skipped) {
+  const auto hours = [](int n) {
+    std::string out = "[1";
+    for (int i = 1; i < n; ++i) out += ",0";
+    return out + "]";
+  };
+  const std::string bad[] = {
+      R"({"version": 2, "wear": [{"monitor": "TV", "since": 1, "measured_s": 5, "cols": 0, "rows": 18, "hours": )" + hours(1) + "}]}",
+      R"({"version": 2, "wear": [{"monitor": "TV", "since": 1, "measured_s": 5, "cols": 32, "rows": -1, "hours": )" + hours(576) + "}]}",
+      R"({"version": 2, "wear": [{"monitor": "TV", "since": 1, "measured_s": 5, "cols": 40, "rows": 17, "hours": )" + hours(680) + "}]}",
+      R"({"version": 2, "wear": [{"monitor": "TV", "since": 1, "measured_s": 5, "cols": 38, "rows": 16, "hours": )" + hours(576) + "}]}",
+  };
+  for (const std::string& text : bad) {
+    const auto parsed = oled::ParseJson(text);
+    CHECK(parsed.value.has_value());
+    if (!parsed.value) continue;
+    CHECK_EQ(History::FromJson(*parsed.value).Wear("TV").hottest, -1);
+  }
 }

@@ -151,14 +151,17 @@ if (preview) {
         const x = s / 3600;
         timeline.push(Math.max(0, 0.3 + 0.25 * Math.sin(x / 2.3) + 0.1 * Math.sin(x * 1.7)));
       }
+      // Griglia come la calcola l'app: 16:9 -> 32x18, ?grid=21x9 -> 38x16 (ultrawide).
+      const [cols, rows] = new URLSearchParams(location.search).get('grid') === '21x9' ? [38, 16] : [32, 18];
       const cells = [];
-      for (let y = 0; y < 18; y++) {
-        for (let x = 0; x < 32; x++) {
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          const u = x / cols, v0 = y / rows;
           let v = 0.15 + 0.1 * Math.random();
-          if (x < 5 && y < 6) v = 0.75 + 0.25 * Math.random();   // icone in alto a sinistra
-          if (x > 26 && y < 2) v = 0.6 + 0.2 * Math.random();    // orologio
-          if (y >= 17) v = 0.5 + 0.2 * Math.random();            // barra delle applicazioni
-          if (x > 10 && x < 22 && y > 12 && y < 16) v = 0.45;
+          if (u < 0.16 && v0 < 0.33) v = 0.75 + 0.25 * Math.random();   // icone in alto a sinistra
+          if (u > 0.84 && v0 < 0.11) v = 0.6 + 0.2 * Math.random();     // orologio
+          if (y >= rows - 1) v = 0.5 + 0.2 * Math.random();              // barra delle applicazioni
+          if (u > 0.33 && u < 0.69 && v0 > 0.7 && v0 < 0.9) v = 0.45;
           cells.push(v);
         }
       }
@@ -166,7 +169,7 @@ if (preview) {
       receive({
         type: 'history', timeline, timeline_end: end, risk_peak_24h: 0.82,
         wear: {
-          monitor: 'OLED TV', cells: cells.map((v) => v / max), hottest: 0, hottest_hours: 38.5,
+          monitor: 'OLED TV', cols, rows, cells: cells.map((v) => v / max), hottest: 0, hottest_hours: 38.5,
           hottest_key: 'wear.zone.top_left', concentration: 1.86, over_double: 14, measured_hours: 142,
           since: end - 45 * 86400,
         },

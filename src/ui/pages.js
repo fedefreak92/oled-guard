@@ -596,8 +596,16 @@ PAGES.statistiche = {
     wear.el.querySelector('.panel-head').insertBefore(mapSub, wear.el.querySelector('.panel-head .grow'));
     wear.body.classList.add('pad');
     const grid = h('div.wear-grid');
+    // Celle create sulla griglia ricevuta (cols x rows, dalle proporzioni dello schermo).
     const cells = [];
-    for (let i = 0; i < 576; i++) { const c = h('i'); cells.push(c); grid.append(c); }
+    const sizeGrid = (cols, rows) => {
+      if (cells.length === cols * rows && grid.dataset.cols === String(cols)) return;
+      grid.innerHTML = '';
+      cells.length = 0;
+      grid.dataset.cols = String(cols);
+      grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      for (let i = 0; i < cols * rows; i++) { const c = h('i'); cells.push(c); grid.append(c); }
+    };
     const legend = h('div.legend', null, h('span', { text: t('stats.wear.left') }), h('span.grow'), h('span', { text: t('stats.wear.less') }),
       ...[0.1, 0.35, 0.6, 0.78, 0.95].map((t) => { const i = h('i'); i.style.background = wearColor(t); return i; }),
       h('span', { text: t('stats.wear.more') }), h('span.grow'), h('span', { text: t('stats.wear.right') }));
@@ -668,6 +676,7 @@ PAGES.statistiche = {
           const w = hist.wear;
           setText(mapSub, w.monitor || '');
           const has = w.hottest >= 0;
+          sizeGrid(w.cols || 32, w.rows || 18);
           grid.hidden = !has;
           wearEmpty.hidden = has;
           cells.forEach((cell, i) => {
@@ -681,8 +690,8 @@ PAGES.statistiche = {
           setText(w2s, has ? t('stats.wear.full_white', { h: fmtNumber(w.hottest_hours, 1) }) : '');
           setText(w3b, has ? `${fmtNumber(w.concentration, 2)}×` : '-');
           setText(w3s, t('stats.wear.ratio'));
-          setText(w4b, has ? `${w.over_double}/576` : '-');
-          setText(w4s, has ? t('stats.wear.of_panel', { pct: fmtPct((w.over_double / 576) * 100, 1) }) : '');
+          setText(w4b, has ? `${w.over_double}/${cells.length}` : '-');
+          setText(w4s, has ? t('stats.wear.of_panel', { pct: fmtPct((w.over_double / cells.length) * 100, 1) }) : '');
 
           const n = RANGES[range];
           let vals = hist.timeline.slice(-n);

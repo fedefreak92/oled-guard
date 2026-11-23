@@ -57,9 +57,9 @@ bool ValidDayKey(double v) {
          k % 100 <= 31;
 }
 
-std::string ZoneLabel(int zone) {
-  const int zx = zone % kZoneCols, zy = zone / kZoneCols;
-  const int col = zx * 3 / kZoneCols, row = zy * 3 / kZoneRows;
+std::string ZoneLabel(int zone, ZoneGrid grid) {
+  const int zx = zone % grid.cols, zy = zone / grid.cols;
+  const int col = zx * 3 / grid.cols, row = zy * 3 / grid.rows;
   static const char* kRows[3] = {"top", "middle", "bottom"};
   static const char* kCols[3] = {"left", "center", "right"};
   if (row == 1 && col == 1) return "wear.zone.center";
@@ -94,8 +94,16 @@ void History::AddSecond(const SecondSample& s) {
       timeline_.pop_front();
     }
     auto [it, inserted] = wear_.try_emplace(s.monitor);
-    if (inserted) it->second.since_local_s = s.local_s;
-    for (int z = 0; z < kZones; ++z) it->second.hours[z] += f->zone_light[z] / 3600.0;
+    WearMap& map = it->second;
+    // Altra griglia (altro schermo con lo stesso nome, altra risoluzione): le zone non
+    // corrispondono piu', la mappa di questo schermo riparte da zero.
+    if (inserted || !(map.grid == f->grid)) {
+      map.grid = f->grid;
+      map.hours.assign(static_cast<size_t>(f->grid.Count()), 0.0);
+      map.since_local_s = s.local_s;
+      map.measured_s = 0;
+    }
+    for (int z = 0; z < map.grid.Count(); ++z) map.hours[z] += f->zone_light[z] / 3600.0;
     it->second.measured_s += 1;
     day.light_before += f->light_still_before;
     day.light_removed += f->light_still_removed;
@@ -161,8 +169,10 @@ WearView History::Wear(const std::string& monitor) const {
   const auto it = wear_.find(monitor);
   if (it == wear_.end() || it->second.measured_s <= 0) return v;
   const WearMap& m = it->second;
+  const int zones = m.grid.Count();
+  v.grid = m.grid;
   double max = 0, sum = 0;
-  for (int z = 0; z < kZones; ++z) {
+  for (int z = 0; z < zones; ++z) {
     sum += m.hours[z];
     if (m.hours[z] > max) {
       max = m.hours[z];
@@ -172,11 +182,12 @@ WearView History::Wear(const std::string& monitor) const {
   v.measured_hours = m.measured_s / 3600.0;
   v.since_local_s = m.since_local_s;
   if (v.hottest < 0) return v;
-  const double mean = sum / kZones;
+  const double mean = sum / zones;
   v.hottest_hours = max;
-  v.hottest_key = ZoneLabel(v.hottest);
+  v.hottest_key = ZoneLabel(v.hottest, m.grid);
   v.concentration = mean > 0 ? max / mean : 0;
-  for (int z = 0; z < kZones; ++z) {
+  v.normalized.assign(static_cast<size_t>(zones), 0.0);
+  for (int z = 0; z < zones; ++z) {
     v.normalized[z] = m.hours[z] / max;
     if (m.hours[z] > 2 * mean) ++v.over_double;
   }
@@ -266,7 +277,7 @@ double History::ProtectedThisWeekS(int today_key) const {
 
 JsonValue History::ToJson() const {
   JsonValue o = JsonValue::MakeObject();
-  o.Set("version", JsonValue(1));
+  o.Set("version", JsonValue(2));
   JsonValue timeline = JsonValue::MakeArray();
   for (const Bucket& b : timeline_) {
     timeline.Push(Numbers({static_cast<double>(b.index), b.sum, static_cast<double>(b.count)}));
@@ -278,6 +289,8 @@ JsonValue History::ToJson() const {
     w.Set("monitor", JsonValue(monitor));
     w.Set("since", JsonValue(static_cast<double>(m.since_local_s)));
     w.Set("measured_s", JsonValue(m.measured_s));
+    w.Set("cols", JsonValue(m.grid.cols));
+    w.Set("rows", JsonValue(m.grid.rows));
     JsonValue hours = JsonValue::MakeArray();
     for (double v : m.hours) hours.Push(JsonValue(v));
     w.Set("hours", hours);
@@ -330,14 +343,14 @@ JsonValue History::ToJson() const {
 bool HistoryJsonUsable(const JsonValue& v) {
   if (v.type() != JsonValue::Type::Object) return false;
   const JsonValue* version = v.Find("version");
-  return version && version->type() == JsonValue::Type::Number && version->AsNumber() == 1;
+  return version && version->type() == JsonValue::Type::Number && (version->AsNumber() == 1 || version->AsNumber() == 2);
 }
 
 History History::FromJson(const JsonValue& v) {
   History h;
   if (v.type() != JsonValue::Type::Object) return h;
   const auto version = NonNegative(v.Find("version"));
-  if (!version || *version != 1) return h;
+  if (!version || (*version != 1 && *version != 2)) return h;
   if (const JsonValue* t = ArrayField(v, "timeline")) {
     for (const JsonValue& b : t->AsArray()) {
       const auto index = NumberAt(b, 0), sum = NumberAt(b, 1), count = NumberAt(b, 2);
@@ -352,15 +365,27 @@ History History::FromJson(const JsonValue& v) {
       const JsonValue* name = m.Find("monitor");
       const JsonValue* hours = ArrayField(m, "hours");
       const auto since = NonNegative(m.Find("since")), measured = NonNegative(m.Find("measured_s"));
-      if (!name || name->type() != JsonValue::Type::String || !hours || hours->AsArray().size() != kZones || !since ||
-          !measured) {
+      // Versione 1: sempre 32x18. Versione 2: la griglia e' salvata con la mappa.
+      ZoneGrid grid;
+      if (*version == 2) {
+        const auto cols = NonNegative(m.Find("cols")), rows = NonNegative(m.Find("rows"));
+        if (!cols || !rows || *cols < 1 || *rows < 1 || std::floor(*cols) != *cols || std::floor(*rows) != *rows ||
+            *cols * *rows > kMaxZones) {
+          continue;
+        }
+        grid = ZoneGrid{static_cast<int>(*cols), static_cast<int>(*rows)};
+      }
+      if (!name || name->type() != JsonValue::Type::String || !hours ||
+          hours->AsArray().size() != static_cast<size_t>(grid.Count()) || !since || !measured) {
         continue;
       }
       WearMap map;
+      map.grid = grid;
+      map.hours.assign(static_cast<size_t>(grid.Count()), 0.0);
       map.since_local_s = static_cast<int64_t>(*since);
       map.measured_s = *measured;
       bool ok = true;
-      for (int z = 0; z < kZones && ok; ++z) {
+      for (int z = 0; z < grid.Count() && ok; ++z) {
         const auto x = NumberAt(*hours, z);
         ok = x.has_value();
         if (ok) map.hours[z] = *x;
