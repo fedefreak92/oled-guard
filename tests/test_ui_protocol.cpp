@@ -112,7 +112,8 @@ TEST(ui_command_parses_known_commands) {
   auto apply = oled::ParseUiCommand(R"({"cmd":"windowsApply","id":"dark_theme"})");
   CHECK(apply && apply->id == "dark_theme");
   for (const char* simple : {"testShift", "listProcesses", "windowsApplyAll", "windowsRestoreAll", "displayOff"}) {
-    CHECK(oled::ParseUiCommand(std::string(R"({"cmd":")") + simple + "\"}").has_value());
+    const std::string json = std::string(R"({"cmd":")") + simple + "\"}";
+    CHECK(oled::ParseUiCommand(json).has_value());
   }
 }
 
@@ -123,7 +124,8 @@ TEST(ui_command_rejects_bad_input) {
                           R"({"cmd":"setConfig","patch":5})", R"({"cmd":"windowsApply"})", R"({"cmd":5})"}) {
     CHECK(!oled::ParseUiCommand(bad).has_value());
   }
-  CHECK(!oled::ParseUiCommand(R"({"cmd":"addApp","exe":")" + std::string(300, 'a') + "\"}").has_value());
+  const std::string long_exe = R"({"cmd":"addApp","exe":")" + std::string(300, 'a') + "\"}";
+  CHECK(!oled::ParseUiCommand(long_exe).has_value());
 }
 
 TEST(config_patch_applies_valid_values) {
@@ -332,7 +334,8 @@ TEST(ui_about_and_browsed_messages) {
 
 TEST(ui_parse_new_commands) {
   for (const char* simple : {"openLogFolder", "browseExe", "clearActivity"}) {
-    CHECK(oled::ParseUiCommand(std::string(R"({"cmd":")") + simple + "\"}").has_value());
+    const std::string json = std::string(R"({"cmd":")") + simple + "\"}";
+    CHECK(oled::ParseUiCommand(json).has_value());
   }
   auto log = oled::ParseUiCommand(R"({"cmd":"openLogFolder"})");
   CHECK(log && log->type == UiCommandType::OpenLogFolder);
@@ -349,8 +352,8 @@ TEST(ui_parse_new_commands_reject) {
                           R"({"cmd":"setMonitor","device":5})", R"({"cmd":"setDimExclude","exe":"x.exe"})"}) {
     CHECK(!oled::ParseUiCommand(bad).has_value());
   }
-  CHECK(!oled::ParseUiCommand(R"({"cmd":"setDimExclude","on":true,"exe":")" + std::string(261, 'a') + "\"}")
-             .has_value());
+  const std::string long_exe = R"({"cmd":"setDimExclude","on":true,"exe":")" + std::string(261, 'a') + "\"}";
+  CHECK(!oled::ParseUiCommand(long_exe).has_value());
 }
 
 TEST(ui_signals_messages) {

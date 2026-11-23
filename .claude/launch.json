@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "ui-anteprima",
-      "runtimeExecutable": "C:\\Python314\\python.exe",
+      "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8765", "--bind", "127.0.0.1", "--directory", "src/ui"],
       "port": 8765
     }

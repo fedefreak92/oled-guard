@@ -3,7 +3,7 @@
 Data: 2026-11-22
 Stato: in revisione
 Progetto precedente: `2026-11-21-oled-guard-ui-v2-design.md` (nuova interfaccia, v1.0.0).
-Riferimento visivo: le schermate in `C:\Users\feder\Downloads\ui` (striscia "Live signals",
+Riferimento visivo: le schermate di riferimento, non incluse nel repository (striscia "Live signals",
 pagina Statistics).
 
 ## 1. Intento

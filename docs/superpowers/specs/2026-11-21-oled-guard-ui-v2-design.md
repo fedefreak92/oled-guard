@@ -2,7 +2,7 @@
 
 Data: 2026-11-21
 Stato: in revisione
-Riferimento visivo: le 7 schermate in `C:\Users\feder\Downloads\ui` (Dashboard, Overlay,
+Riferimento visivo: le 7 schermate di riferimento, non incluse nel repository (Dashboard, Overlay,
 Monitors, App Profiles, Settings, Advanced, Statistics).
 
 ## 1. Intento
