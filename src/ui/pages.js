@@ -777,9 +777,9 @@ PAGES.profili = {
   build(root) {
     let selected = null, pendingSelect = null, filter = '';
     // Elenco
-    const search = h('input', { placeholder: 'Cerca un\'app...', spellcheck: 'false' });
+    const search = h('input', { placeholder: t('apps.search'), spellcheck: 'false' });
     search.addEventListener('input', () => { filter = search.value.trim().toLowerCase(); renderList(); });
-    const listPanel = panel('Profili app');
+    const listPanel = panel(t('nav.profili'));
     listPanel.el.querySelector('.panel-head').append(h('label.field', null, icon('search'), search));
     const count = h('span.sub');
     listPanel.el.querySelector('.panel-head').insertBefore(count, listPanel.el.querySelector('.panel-head .grow'));
@@ -788,7 +788,7 @@ PAGES.profili = {
     listPanel.body.append(list);
 
     // Aggiungi
-    const addInput = h('input', { placeholder: 'nome dell\'app, es. gioco.exe', maxlength: '260', spellcheck: 'false' });
+    const addInput = h('input', { placeholder: t('apps.add.placeholder'), maxlength: '260', spellcheck: 'false' });
     const procBox = h('div.proc', { hidden: true });
     const addTyped = () => {
       let exe = addInput.value.trim().toLowerCase();
@@ -800,26 +800,26 @@ PAGES.profili = {
       procBox.hidden = true;
     };
     addInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addTyped(); });
-    const addPanel = panel('Aggiungi un\'app');
+    const addPanel = panel(t('apps.add'));
     addPanel.body.classList.add('pad');
     addPanel.body.append(h('div.add-row', null, h('label.field', null, icon('plus'), addInput),
-      h('button.btn', { type: 'button', on: { click: () => { if (!procBox.hidden) { procBox.hidden = true; return; } send({ cmd: 'listProcesses' }); } } }, icon('list'), 'App aperte'),
-      h('button.btn', { type: 'button', on: { click: () => send({ cmd: 'browseExe' }) } }, icon('folder'), 'Sfoglia...'),
-      h('button.btn.solid', { type: 'button', on: { click: addTyped } }, icon('plus'), 'Aggiungi')), procBox);
+      h('button.btn', { type: 'button', on: { click: () => { if (!procBox.hidden) { procBox.hidden = true; return; } send({ cmd: 'listProcesses' }); } } }, icon('list'), t('apps.add.open')),
+      h('button.btn', { type: 'button', on: { click: () => send({ cmd: 'browseExe' }) } }, icon('folder'), t('apps.add.browse')),
+      h('button.btn.solid', { type: 'button', on: { click: addTyped } }, icon('plus'), t('apps.add.button'))), procBox);
 
     // Pause automatiche globali
     const autoNotif = toggle((v) => setConfig({ pause_on_notification_state: v }));
     const autoFull = toggle((v) => setConfig({ pause_on_fullscreen_window: v }));
     const autoProtected = toggle((v) => setConfig({ pause_on_protected_window: v }));
-    const autoPanel = panel('Pausa automatica', 'per tutte le app');
+    const autoPanel = panel(t('apps.auto'), t('apps.auto.sub'));
     autoPanel.body.append(
-      settingRow('Giochi e presentazioni', 'Giochi DirectX a schermo intero, presentazioni, schermo assente.', autoNotif.el),
-      settingRow('Qualsiasi finestra a tutto schermo', 'Borderless, video, browser a tutto schermo.', autoFull.el),
+      settingRow(t('apps.auto.games'), t('apps.auto.games.desc'), autoNotif.el),
+      settingRow(t('apps.auto.full'), t('apps.auto.full.desc'), autoFull.el),
       settingRow(t('apps.auto.protected.title'), t('apps.auto.protected.desc'), autoProtected.el));
 
     // Modifica
-    const editPanel = panel('Modifica');
-    const delBtn = h('button.btn.small.danger', { type: 'button', on: { click: () => { if (selected) { send({ cmd: 'removeApp', exe: selected }); selected = null; } } } }, icon('trash'), 'Elimina');
+    const editPanel = panel(t('apps.edit'));
+    const delBtn = h('button.btn.small.danger', { type: 'button', on: { click: () => { if (selected) { send({ cmd: 'removeApp', exe: selected }); selected = null; } } } }, icon('trash'), t('apps.delete'));
     editPanel.el.querySelector('.panel-head').append(delBtn);
     editPanel.body.classList.add('pad');
     const editName = h('div.edit-name');
@@ -828,11 +828,11 @@ PAGES.profili = {
     const explain = h('p.hint.box');
     const dimEx = toggle((v) => selected && send({ cmd: 'setDimExclude', exe: selected, on: v }));
     const editBody = h('div', null,
-      h('div.edit-title', { text: 'App' }), editName, editInfo,
-      h('div.edit-title', { text: 'Quando quest\'app è in primo piano' }), rules.el, explain,
-      h('div.edit-title', { text: 'Oscuramento' }),
-      settingRow('Non oscurare mentre è in primo piano', 'Sospende l\'oscuramento delle zone ferme (utile per app di grafica).', dimEx.el));
-    const editEmpty = h('div.empty', { text: 'Scegli un\'app dall\'elenco per modificarla.' });
+      h('div.edit-title', { text: t('apps.edit.app') }), editName, editInfo,
+      h('div.edit-title', { text: t('apps.edit.when') }), rules.el, explain,
+      h('div.edit-title', { text: t('overview.qa.dim') }),
+      settingRow(t('apps.edit.no_dim'), t('apps.edit.no_dim.desc'), dimEx.el));
+    const editEmpty = h('div.empty', { text: t('apps.edit.empty') });
     editPanel.body.append(editEmpty, editBody);
 
     root.append(h('div.page', null, h('div.cols', null,
@@ -844,14 +844,14 @@ PAGES.profili = {
       list.innerHTML = '';
       const shown = apps().filter((a) => !filter || a.exe.includes(filter));
       setText(count, `${apps().length}`);
-      if (!shown.length) list.append(h('div.empty', { text: filter ? 'Nessuna app corrisponde alla ricerca.' : 'Nessuna app ancora: aggiungine una qui sotto.' }));
+      if (!shown.length) list.append(h('div.empty', { text: filter ? t('apps.list.no_match') : t('apps.list.empty') }));
       for (const a of shown) {
         const info = ruleInfo(a.rule);
-        const trash = h('button.trash', { type: 'button', title: 'Elimina', on: { click: (e) => { e.stopPropagation(); if (selected === a.exe) selected = null; send({ cmd: 'removeApp', exe: a.exe }); } } }, icon('trash'));
+        const trash = h('button.trash', { type: 'button', title: t('apps.delete'), on: { click: (e) => { e.stopPropagation(); if (selected === a.exe) selected = null; send({ cmd: 'removeApp', exe: a.exe }); } } }, icon('trash'));
         const row = h('button.app', { type: 'button', cls: a.exe === selected ? 'on' : null, on: { click: () => { selected = a.exe; renderList(); renderEdit(); } } },
           avatar(a.exe),
-          h('span.name', null, h('b', { text: a.exe }), h('small', { text: a.last_seen_s ? `ultima pausa · ${fmtWhen(a.last_seen_s * 1000)} · ${a.count} ${a.count === 1 ? 'volta' : 'volte'}` : 'aggiunta a mano' })),
-          h('span.tags', null, pill(info[2], info[3]), a.dim_exclude ? pill('Non oscurare') : null),
+          h('span.name', null, h('b', { text: a.exe }), h('small', { text: a.last_seen_s ? t('apps.list.last_pause', { when: fmtWhen(a.last_seen_s * 1000), times: tp('apps.list.times', a.count) }) : t('apps.list.manual') })),
+          h('span.tags', null, pill(info[2], info[3]), a.dim_exclude ? pill(t('apps.list.no_dim')) : null),
           trash);
         list.append(row);
       }
@@ -864,7 +864,7 @@ PAGES.profili = {
       if (!a) return;
       editName.innerHTML = '';
       editName.append(avatar(a.exe), h('span', { text: a.exe }));
-      setText(editInfo, a.reason_key ? `Ultima pausa: ${t(a.reason_key).toLowerCase()} · ${fmtWhen(a.last_seen_s * 1000)}` : 'Aggiunta a mano: non ha ancora messo in pausa la protezione.');
+      setText(editInfo, a.reason_key ? t('apps.edit.last_pause', { reason: t(a.reason_key).toLowerCase(), when: fmtWhen(a.last_seen_s * 1000) }) : t('apps.edit.manual'));
       rules.set(a.rule);
       setText(explain, ruleExplain(a.rule));
       dimEx.set(a.dim_exclude);
@@ -908,15 +908,15 @@ function keyName(e) {
 
 PAGES.tasti = {
   build(root) {
-    const HINT = 'Clicca una combinazione e premi i tasti nuovi (Esc per annullare).';
+    const HINT = t('keys.hint');
     const hint = h('p.hint.box', { text: HINT });
     let capturing = null;
     const keys = {};
-    const p = panel('Tasti rapidi', 'validi in tutto Windows');
+    const p = panel(t('nav.tasti'), t('keys.sub'));
     const defs = [
-      ['hotkey_toggle', 'Pausa / riprendi', 'Ferma o riavvia la protezione.'],
-      ['hotkey_display_off', 'Spegni schermo ora', 'La TV va in standby; si riaccende muovendo il mouse.'],
-      ['hotkey_emergency_exit', 'Uscita di emergenza', 'Chiude subito OLED Guard. Funziona anche se l\'interfaccia è bloccata.'],
+      ['hotkey_toggle', t('keys.toggle'), t('keys.toggle.desc')],
+      ['hotkey_display_off', t('keys.display_off'), t('keys.display_off.desc')],
+      ['hotkey_emergency_exit', t('keys.emergency'), t('keys.emergency.desc')],
     ];
     const show = (key) => setText(keys[key], cfg() ? cfg()[key].replace(/\+/g, ' + ') : '-');
     function stop(restore) {
@@ -931,7 +931,7 @@ PAGES.tasti = {
         stop(true);
         capturing = key;
         keys[key].classList.add('rec');
-        setText(keys[key], 'premi la combinazione...');
+        setText(keys[key], t('keys.press'));
         send({ cmd: 'hotkeyCapture', on: true });
       } } });
       p.body.append(settingRow(title, desc, keys[key]));
@@ -948,7 +948,7 @@ PAGES.tasti = {
       if (e.altKey) mods.push('Alt');
       if (e.shiftKey) mods.push('Shift');
       if (e.metaKey) mods.push('Win');
-      if (!mods.length) { setText(hint, 'Serve almeno un tasto fra Ctrl, Alt, Shift e Win.'); return; }
+      if (!mods.length) { setText(hint, t('keys.need_modifier')); return; }
       const combo = [...mods, name].join('+');
       const key = capturing;
       setText(keys[key], combo.replace(/\+/g, ' + '));
@@ -972,20 +972,25 @@ PAGES.tasti = {
 PAGES.impostazioni = {
   build(root) {
     const autostart = toggle((v) => setConfig({ autostart: v }));
-    const start = panel('Avvio', 'con Windows');
+    const language = segmented([['auto', t('settings.language.auto')], ...Object.entries(LANG_NAMES)], (v) => send({ cmd: 'setLanguage', id: v }));
+    const langPanel = panel(t('settings.language'), t('settings.language.sub'));
+    langPanel.el.classList.add('accented');
+    langPanel.body.append(settingRow(t('settings.language'), t('settings.language.desc'), language.el, { wide: true }));
+
+    const start = panel(t('settings.start'), t('settings.start.sub'));
     start.el.classList.add('accented');
-    start.body.append(settingRow('Avvia con Windows', 'OLED Guard parte da solo all\'accesso e resta nella barra delle applicazioni.', autostart.el));
+    start.body.append(settingRow(t('tray.autostart'), t('settings.start.desc'), autostart.el));
 
     const awayToggle = toggle((v) => setConfig({ away_enabled: v }));
     const awayAfter = slider({ min: 1, max: 60, step: 1, format: (v) => `${v} min`, onInput: throttledConfig('away_after_min') });
     const awayLevel = slider({ min: 10, max: 80, step: 1, format: (v) => `${v}%`, onInput: throttledConfig('away_brightness_pct') });
     const awayRows = [
-      settingRow('Dopo quanto tempo', 'Minuti senza mouse e tastiera, con lo schermo fermo.', awayAfter.el, { wide: true }),
-      settingRow('Scurisci fino a', 'Luminosità finale; la discesa dura 10 secondi.', awayLevel.el, { wide: true }),
+      settingRow(t('settings.away.after'), t('settings.away.after.desc'), awayAfter.el, { wide: true }),
+      settingRow(t('settings.away.level'), t('settings.away.level.desc'), awayLevel.el, { wide: true }),
     ];
-    const away = panel('Modalità assente', 'quando non sei al PC');
+    const away = panel(t('settings.away'), t('settings.away.sub'));
     away.el.classList.add('accented');
-    away.body.append(settingRow('Scurisci quando non ci sei', 'Torna normale subito, al primo movimento. Un video in riproduzione non la fa scattare.', awayToggle.el), ...awayRows);
+    away.body.append(settingRow(t('settings.away.toggle'), t('settings.away.toggle.desc'), awayToggle.el), ...awayRows);
 
     const swatches = h('div.swatches');
     const swatchEls = {};
@@ -993,67 +998,68 @@ PAGES.impostazioni = {
       const i = h('i');
       i.style.background = color;
       swatchEls[name] = h('button.swatch', { type: 'button', title: name, on: { click: () => setConfig({ ui_accent: name }) } }, i,
-        h('small', { text: `${contrastRatio(color, PANEL_COLOR).toFixed(1).replace('.', ',')}:1` }));
+        h('small', { text: `${fmtNumber(contrastRatio(color, PANEL_COLOR), 1)}:1` }));
       swatches.append(swatchEls[name]);
     }
-    const size = segmented([['small', 'Piccolo'], ['normal', 'Normale'], ['large', 'Grande'], ['xl', 'XL']], (v) => setConfig({ ui_text_size: v }));
-    const look = panel('Aspetto', 'colore d\'accento · dimensione del testo');
+    const size = segmented([['small', t('settings.size.small')], ['normal', t('settings.size.normal')], ['large', t('settings.size.large')], ['xl', 'XL']], (v) => setConfig({ ui_text_size: v }));
+    const look = panel(t('settings.look'), t('settings.look.sub'));
     look.el.classList.add('accented');
     look.body.append(
-      settingRow('Colore d\'accento', 'Interruttori, selezioni e stato. Il numero è il contrasto sul fondo dei pannelli.', swatches, { wide: true }),
-      settingRow('Dimensione del testo', 'Ingrandisce testi, spazi e icone insieme.', size.el, { wide: true }));
+      settingRow(t('settings.accent'), t('settings.accent.desc'), swatches, { wide: true }),
+      settingRow(t('settings.size'), t('settings.size.desc'), size.el, { wide: true }));
 
-    const level = segmented([['error', 'Errori'], ['warn', 'Avvisi'], ['info', 'Normale'], ['debug', 'Dettagliato']], (v) => setConfig({ log_level: v }));
+    const level = segmented([['error', t('settings.log.error')], ['warn', t('settings.log.warn')], ['info', t('settings.log.info')], ['debug', t('settings.log.debug')]], (v) => setConfig({ log_level: v }));
     const cfgPath = h('div.path'), logPath = h('div.path');
-    const diag = panel('Diagnostica', 'log e file');
+    const diag = panel(t('settings.diag'), t('settings.diag.sub'));
     diag.el.classList.add('accented');
     diag.body.append(
-      settingRow('Dettaglio del log', 'Il livello Dettagliato serve solo per cercare un problema.', level.el, { wide: true }),
-      settingRow('Cartella dei log', logPath, h('button.btn', { type: 'button', on: { click: () => send({ cmd: 'openLogFolder' }) } }, icon('folder'), 'Apri')),
-      settingRow('File di configurazione', cfgPath, h('span')));
+      settingRow(t('settings.log'), t('settings.log.desc'), level.el, { wide: true }),
+      settingRow(t('settings.log.folder'), logPath, h('button.btn', { type: 'button', on: { click: () => send({ cmd: 'openLogFolder' }) } }, icon('folder'), t('common.open'))),
+      settingRow(t('settings.config_file'), cfgPath, h('span')));
 
     // Notifiche: avviso per il rischio non protetto.
     const alertToggle = toggle((v) => setConfig({ alert_enabled: v }));
-    const alertLevel = segmented([['low', 'Bassa · 10%'], ['medium', 'Media · 20%'], ['high', 'Alta · 35%']], (v) => setConfig({ alert_threshold: v }));
+    const alertLevel = segmented([['low', t('settings.alert.low', { pct: fmtPct(10) })], ['medium', t('settings.alert.medium', { pct: fmtPct(20) })], ['high', t('settings.alert.high', { pct: fmtPct(35) })]], (v) => setConfig({ alert_threshold: v }));
     const alertAfter = slider({ min: 5, max: 240, step: 5, format: (v) => `${v} min`, onInput: throttledConfig('alert_after_min') });
     const alertRows = [
-      settingRow('Soglia', 'Quanta parte dello schermo ferma, luminosa e non scurita fa partire il conteggio.', alertLevel.el, { wide: true }),
-      settingRow('Avvisa dopo', 'Minuti di fila sopra la soglia. Al massimo un avviso all\'ora.', alertAfter.el, { wide: true }),
+      settingRow(t('settings.alert.threshold'), t('settings.alert.threshold.desc'), alertLevel.el, { wide: true }),
+      settingRow(t('settings.alert.after'), t('settings.alert.after.desc'), alertAfter.el, { wide: true }),
     ];
-    const notif = panel('Notifiche', 'quando avvisarti');
+    const notif = panel(t('settings.notif'), t('settings.notif.sub'));
     notif.el.classList.add('accented');
-    notif.body.append(settingRow('Avviso nella barra delle applicazioni', 'Solo per le zone ferme e luminose che la protezione non sta già scurendo.', alertToggle.el), ...alertRows);
+    notif.body.append(settingRow(t('settings.alert'), t('settings.alert.desc'), alertToggle.el), ...alertRows);
 
     // Privacy: statistiche per app e storico.
     const appStats = toggle((v) => setConfig({ app_stats_enabled: v }));
     let confirmUntil = 0, confirmTimer = 0;
-    const clearBtn = h('button.btn.danger', { type: 'button' }, icon('trash'), h('span', { text: 'Cancella lo storico' }));
+    const clearBtn = h('button.btn.danger', { type: 'button' }, icon('trash'), h('span', { text: t('settings.clear') }));
     // Serve un secondo clic entro 5 s: un clic per sbaglio non cancella nulla.
     clearBtn.addEventListener('click', () => {
       if (performance.now() < confirmUntil) {
         confirmUntil = 0;
         clearTimeout(confirmTimer);
-        setText(clearBtn.lastChild, 'Cancella lo storico');
+        setText(clearBtn.lastChild, t('settings.clear'));
         send({ cmd: 'clearHistory' });
         return;
       }
       confirmUntil = performance.now() + 5000;
-      setText(clearBtn.lastChild, 'Conferma: cancella');
+      setText(clearBtn.lastChild, t('settings.clear.confirm'));
       clearTimeout(confirmTimer);
-      confirmTimer = setTimeout(() => { confirmUntil = 0; setText(clearBtn.lastChild, 'Cancella lo storico'); }, 5000);
+      confirmTimer = setTimeout(() => { confirmUntil = 0; setText(clearBtn.lastChild, t('settings.clear')); }, 5000);
     });
-    const privacy = panel('Privacy', 'cosa resta sul PC');
+    const privacy = panel(t('settings.privacy'), t('settings.privacy.sub'));
     privacy.el.classList.add('accented');
     privacy.body.append(
-      settingRow('Statistiche per app', 'Tempo in primo piano di ogni app, per la pagina Statistiche. Restano sul PC.', appStats.el),
-      settingRow('Cancella lo storico', 'Azzera grafico, mappa di usura, app e giorni di fila (history.json).', clearBtn));
+      settingRow(t('settings.app_stats'), t('settings.app_stats.desc'), appStats.el),
+      settingRow(t('settings.clear'), t('settings.clear.desc'), clearBtn));
 
-    root.append(h('div.page', null, h('div.cols.even', null, h('div.stack', null, start.el, away.el, notif.el), h('div.stack', null, look.el, privacy.el, diag.el))));
+    root.append(h('div.page', null, h('div.cols.even', null, h('div.stack', null, langPanel.el, start.el, away.el, notif.el), h('div.stack', null, look.el, privacy.el, diag.el))));
     return {
       leave() { clearTimeout(confirmTimer); },
       update() {
         const c = cfg();
         if (c) {
+          language.set(c.language || 'auto');
           alertToggle.set(c.alert_enabled);
           alertLevel.set(c.alert_threshold);
           alertAfter.set(c.alert_after_min);
@@ -1079,15 +1085,15 @@ PAGES.impostazioni = {
 PAGES.windows = {
   build(root) {
     const score = h('b', { text: '-' });
-    const applyAll = h('button.btn.solid', { type: 'button', on: { click: () => send({ cmd: 'windowsApplyAll' }) } }, icon('check'), 'Applica tutti i consigli');
-    const restore = h('button.btn', { type: 'button', on: { click: () => send({ cmd: 'windowsRestoreAll' }) } }, icon('reset'), 'Ripristina come prima');
-    const head = h('section.panel', null, h('div.score', null, score, h('span', { text: 'Impostazioni consigliate attive' }), h('span.grow'), applyAll, restore));
-    const list = panel('Impostazioni di Windows per un OLED');
-    const off = h('button.btn', { type: 'button', on: { click: () => send({ cmd: 'displayOff' }) } }, icon('power'), 'Spegni schermo');
-    const offPanel = panel('Schermo');
-    offPanel.body.append(settingRow('Spegni lo schermo adesso', 'La TV va in standby; si riaccende muovendo il mouse.', off));
+    const applyAll = h('button.btn.solid', { type: 'button', on: { click: () => send({ cmd: 'windowsApplyAll' }) } }, icon('check'), t('windows.apply_all'));
+    const restore = h('button.btn', { type: 'button', on: { click: () => send({ cmd: 'windowsRestoreAll' }) } }, icon('reset'), t('windows.restore'));
+    const head = h('section.panel', null, h('div.score', null, score, h('span', { text: t('windows.score') }), h('span.grow'), applyAll, restore));
+    const list = panel(t('windows.title'));
+    const off = h('button.btn', { type: 'button', on: { click: () => send({ cmd: 'displayOff' }) } }, icon('power'), t('windows.off.button'));
+    const offPanel = panel(t('windows.off.panel'));
+    offPanel.body.append(settingRow(t('windows.off'), t('keys.display_off.desc'), off));
     root.append(h('div.page', null, head, list.el, offPanel.el,
-      h('p.hint', { text: 'Ogni modifica parte solo da un tuo clic. Il valore originale viene salvato e "Ripristina come prima" lo rimette.' })));
+      h('p.hint', { text: t('windows.hint') })));
     let last = null;
     return {
       update() {
@@ -1100,12 +1106,12 @@ PAGES.windows = {
         list.body.innerHTML = '';
         for (const it of w.items) {
           let action;
-          if (it.managed) action = pill('Gestito dal sistema');
-          else if (it.ok) action = pill('Fatto', 'accent');
-          else action = h('button.btn.small', { type: 'button', title: 'Applica il valore consigliato', on: { click: () => send({ cmd: 'windowsApply', id: it.id }) } }, t(it.recommended_key, it.recommended_params));
+          if (it.managed) action = pill(t('windows.managed'));
+          else if (it.ok) action = pill(t('windows.done'), 'accent');
+          else action = h('button.btn.small', { type: 'button', title: t('windows.apply_one'), on: { click: () => send({ cmd: 'windowsApply', id: it.id }) } }, t(it.recommended_key, it.recommended_params));
           list.body.append(h('div.row', null,
             h('span.check', { cls: it.ok ? 'ok' : null }, it.ok ? icon('check') : null),
-            h('div.label', null, h('b', { text: t(`windows.${it.id}.label`) }), h('p', { text: `Ora: ${t(it.current_key, it.current_params)}` })),
+            h('div.label', null, h('b', { text: t(`windows.${it.id}.label`) }), h('p', { text: t('windows.now', { value: t(it.current_key, it.current_params) }) })),
             h('div.control', null, action)));
         }
       },
@@ -1115,30 +1121,32 @@ PAGES.windows = {
 
 // ------------------------------------------------------------------ avanzate
 
+// [chiave di config, min, max, passo, formato, predefinito]; titolo e descrizione: "advanced.<chiave>".
+const secs = (v) => `${fmtNumber(v / 1000, v % 1000 ? (v % 100 ? 2 : 1) : 0)} s`;
 const ADVANCED = [
-  ['dim_bright_threshold_pct', 'Soglia di luminosità', 'Da quale luminosità un elemento fermo viene scurito (% del bianco).', 5, 100, 1, (v) => `${v}%`, 25],
-  ['dim_motion_fraction_pct', 'Quota di movimento', 'Quanto deve muoversi il contenuto intorno a un logo perché conti come "video".', 10, 90, 1, (v) => `${v}%`, 25],
-  ['dim_recover_ms', 'Ritorno normale', 'Quanto ci mette una zona a tornare normale quando cambia.', 100, 5000, 100, (v) => `${String(v / 1000).replace('.', ',')} s`, 500],
-  ['pause_enter_delay_ms', 'Ritardo della pausa', 'Attesa prima di mettere in pausa (evita pause per un attimo).', 0, 10000, 100, (v) => `${String(v / 1000).replace('.', ',')} s`, 300],
-  ['resume_delay_ms', 'Ritardo della ripresa', 'Attesa prima di riprendere dopo un gioco o un video.', 0, 10000, 250, (v) => `${String(v / 1000).replace('.', ',')} s`, 2500],
+  ['dim_bright_threshold_pct', 5, 100, 1, (v) => fmtPct(v), 25],
+  ['dim_motion_fraction_pct', 10, 90, 1, (v) => fmtPct(v), 25],
+  ['dim_recover_ms', 100, 5000, 100, secs, 500],
+  ['pause_enter_delay_ms', 0, 10000, 100, secs, 300],
+  ['resume_delay_ms', 0, 10000, 250, secs, 2500],
 ];
 
 PAGES.avanzate = {
   build(root) {
     const reset = h('button.btn.small', { type: 'button', on: { click: () => {
       const patch = { allow_tearing: false };
-      for (const [key, , , , , , , def] of ADVANCED) patch[key] = def;
+      for (const [key, , , , , def] of ADVANCED) patch[key] = def;
       setConfig(patch);
-    } } }, icon('reset'), 'Ripristina i valori predefiniti');
-    const p = panel('Parametri del motore', 'valori fini, di solito non servono', reset);
-    const sliders = ADVANCED.map(([key, title, desc, min, max, step, fmt]) => {
+    } } }, icon('reset'), t('advanced.reset'));
+    const p = panel(t('advanced.title'), t('advanced.sub'), reset);
+    const sliders = ADVANCED.map(([key, min, max, step, fmt]) => {
       const s = slider({ min, max, step, format: fmt, onInput: throttledConfig(key) });
-      p.body.append(settingRow(title, desc, s.el, { wide: true, code: key }));
+      p.body.append(settingRow(t(`advanced.${key}`), t(`advanced.${key}.desc`), s.el, { wide: true, code: key }));
       return [key, s];
     });
     const tearing = toggle((v) => setConfig({ allow_tearing: v }));
-    p.body.append(settingRow('Tearing', 'Solo con VRR (G-Sync/FreeSync) attivo: riduce la latenza dell\'overlay.', tearing.el, { code: 'allow_tearing' }));
-    root.append(h('div.page', null, h('p.hint.box', { text: 'Le impostazioni dell\'app, l\'aspetto e la diagnostica sono in Impostazioni.' }), p.el));
+    p.body.append(settingRow(t('advanced.tearing'), t('advanced.tearing.desc'), tearing.el, { code: 'allow_tearing' }));
+    root.append(h('div.page', null, h('p.hint.box', { text: t('advanced.hint') }), p.el));
     return {
       update() {
         const c = cfg();
@@ -1152,40 +1160,28 @@ PAGES.avanzate = {
 
 // ------------------------------------------------------------------ informazioni
 
-const CHANGES = [
-  ['1.1.0', [
-    'Segnali dal vivo nella striscia in basso: rischio, movimento e luminosità degli ultimi 60 secondi',
-    'Statistiche: mappa di usura del pannello, rischio nel tempo, app più usate, usura per contenuto',
-    'Sessioni, giorni di fila e usura evitata',
-    'Avviso quando zone ferme e luminose restano senza protezione troppo a lungo',
-    'Impostazioni: notifiche e privacy, con la cancellazione dello storico',
-  ]],
-  ['1.0.0', [
-    'Nuova interfaccia con barra laterale, barra di stato e riepilogo in basso',
-    'Luminosità via software dello schermo protetto',
-    'Bordi scuriti regolabili lato per lato',
-    'Modalità assente: lo schermo si scurisce quando non ci sei',
-    'Pagina Monitor con la scelta dello schermo da proteggere',
-    'Attività recente nella Panoramica',
-    'Colore d\'accento e dimensione del testo',
-  ]],
-];
+// Novita' per versione: [versione, numero di voci]; testi "about.changes.<versione>.<n>".
+const CHANGES = [['1.2.0', 7], ['1.1.0', 5], ['1.0.0', 7]];
 
 PAGES.informazioni = {
   build(root) {
     const version = h('span.mono.accent');
     const intro = h('section.panel', null, h('div.panel-body.pad', null, h('div.about', null, logo(),
       h('div', null, h('h2', null, 'OLED Guard ', version),
-        h('p', { text: 'Protegge lo schermo OLED dal burn-in: sposta l\'immagine di pochi pixel, scurisce piano le zone ferme e luminose e si mette in pausa da solo con giochi e video a schermo intero.' })))));
-    const news = panel('Novità');
+        h('p', { text: t('about.intro') }),
+        h('p.hint', { text: t('about.panel_care') }),
+        h('p.hint', { text: t('about.browser_video') })))));
+    const news = panel(t('shell.news'));
     news.body.classList.add('pad');
-    news.body.append(h('ul.changes', null, CHANGES.map(([v, items]) => h('li', null, h('h5', { text: `v${v}` }), h('ul', null, items.map((t) => h('li', { text: t })))))));
-    const files = panel('File e licenze');
+    news.body.append(h('ul.changes', null, CHANGES.map(([v, n]) => h('li', null, h('h5', { text: `v${v}` }),
+      h('ul', null, Array.from({ length: n }, (_, i) => h('li', { text: t(`about.changes.${v}.${i + 1}`) })))))));
+    const files = panel(t('about.files'));
     const cfgPath = h('div.path'), logPath = h('div.path');
     files.body.append(
-      settingRow('Configurazione', cfgPath, h('span')),
-      settingRow('Log', logPath, h('button.btn.small', { type: 'button', on: { click: () => send({ cmd: 'openLogFolder' }) } }, icon('folder'), 'Apri')),
-      settingRow('Microsoft Edge WebView2', 'Usato per disegnare questa finestra. Licenza di tipo BSD di Microsoft (testo in third_party/webview2).', h('span')));
+      settingRow(t('notice.config.title'), cfgPath, h('span')),
+      settingRow(t('about.log'), logPath, h('button.btn.small', { type: 'button', on: { click: () => send({ cmd: 'openLogFolder' }) } }, icon('folder'), t('common.open'))),
+      settingRow('Microsoft Edge WebView2', t('about.webview2'), h('span')),
+      settingRow(t('about.license'), t('about.license.desc'), h('span')));
     root.append(h('div.page', null, intro, h('div.cols.even', null, news.el, files.el)));
     return {
       update() {

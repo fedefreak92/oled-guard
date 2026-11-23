@@ -1,3 +1,4 @@
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -126,4 +127,62 @@ TEST(i18n_files_match_english) {
     for (const auto& d : diff) ::oled::test::ReportFailure(__FILE__, __LINE__, std::string(lang) + ": " + d);
   }
   CHECK(files >= 2);
+}
+
+namespace {
+
+// Chiavi letterali usate nella pagina: t('k'), tp('k', ...) (che vuole k_one e k_other) e
+// data-i18n="k" / data-i18n-title="k". Le chiavi costruite (template) non si controllano qui.
+std::vector<std::string> UiKeys(const std::string& text) {
+  std::vector<std::string> keys;
+  const auto scan = [&](const std::string& prefix, const std::string& suffix_one, const std::string& suffix_other,
+                        char close) {
+    size_t pos = 0;
+    while ((pos = text.find(prefix, pos)) != std::string::npos) {
+      // "t(" non deve far parte di un nome piu' lungo (es. "toggle(", "setText(").
+      const bool word_start = pos == 0 || !(std::isalnum(static_cast<unsigned char>(text[pos - 1])) || text[pos - 1] == '_');
+      const size_t start = pos + prefix.size();
+      const size_t end = text.find(close, start);
+      pos = start;
+      if (!word_start || end == std::string::npos) continue;
+      const std::string key = text.substr(start, end - start);
+      // Chiavi composte ('nav.' + id): non sono letterali da controllare.
+      if (key.empty() || key.back() == '.' || key.find_first_of(" ${}\n") != std::string::npos) continue;
+      if (suffix_one.empty()) {
+        keys.push_back(key);
+      } else {
+        keys.push_back(key + suffix_one);
+        keys.push_back(key + suffix_other);
+      }
+    }
+  };
+  scan("t('", "", "", '\'');
+  scan("tp('", "_one", "_other", '\'');
+  scan("data-i18n=\"", "", "", '"');
+  scan("data-i18n-title=\"", "", "", '"');
+  return keys;
+}
+
+}  // namespace
+
+TEST(i18n_ui_key_scanner) {
+  const auto keys = UiKeys("a = t('x.y'); b = tp('c.d', 2); setText(e, 'z'); toggle('q'); f(`${t('no space')}`); g(t('nav.' + id)); "
+                           "<b data-i18n=\"m.n\" data-i18n-title=\"o.p\">");
+  const std::vector<std::string> expected = {"x.y", "c.d_one", "c.d_other", "m.n", "o.p"};
+  CHECK_EQ(keys, expected);
+}
+
+TEST(i18n_ui_keys_exist) {
+  const std::filesystem::path ui = std::filesystem::path(OLED_SOURCE_DIR) / "src" / "ui";
+  const auto en = oled::ParseJson(ReadFile(ui / "i18n" / "en.json"));
+  CHECK(en.value.has_value());
+  if (!en.value) return;
+  size_t checked = 0;
+  for (const char* file : {"app.js", "pages.js", "setup.js", "main.js", "index.html"}) {
+    for (const std::string& key : UiKeys(ReadFile(ui / file))) {
+      ++checked;
+      if (!en.value->Find(key)) ::oled::test::ReportFailure(__FILE__, __LINE__, std::string(file) + ": chiave mancante " + key);
+    }
+  }
+  CHECK(checked > 100);
 }

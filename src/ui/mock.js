@@ -27,8 +27,8 @@ if (preview) {
       { exe: 'netflix.exe', reason_key: 'pause.reason.manual', last_seen_s: now() / 1000 - 400000, count: 1 },
     ],
     monitorList: [
-      { device: '\\\\.\\DISPLAY1', name: 'LG TV SSCR2', width: 3840, height: 2160, refresh_hz: 144, hdr: true, primary: true, connection: 'HDMI' },
-      { device: '\\\\.\\DISPLAY2', name: 'DELL U2723QE', width: 2560, height: 1440, refresh_hz: 60, hdr: false, primary: false, connection: 'DP' },
+      { device: '\\\\.\\DISPLAY1', name: 'OLED TV', width: 3840, height: 2160, refresh_hz: 144, hdr: true, primary: true, connection: 'HDMI' },
+      { device: '\\\\.\\DISPLAY2', name: 'Monitor 27', width: 2560, height: 1440, refresh_hz: 60, hdr: false, primary: false, connection: 'DP' },
     ],
     windows: [
       // [id, valore attuale, consigliato (chiave e segnaposto), gia' a posto]
@@ -166,7 +166,7 @@ if (preview) {
       receive({
         type: 'history', timeline, timeline_end: end, risk_peak_24h: 0.82,
         wear: {
-          monitor: 'LG TV SSCR2', cells: cells.map((v) => v / max), hottest: 0, hottest_hours: 38.5,
+          monitor: 'OLED TV', cells: cells.map((v) => v / max), hottest: 0, hottest_hours: 38.5,
           hottest_key: 'wear.zone.top_left', concentration: 1.86, over_double: 14, measured_hours: 142,
           since: end - 45 * 86400,
         },
@@ -224,7 +224,7 @@ if (preview) {
       receive({
         type: 'state', paused: this.paused, manual_pause: this.manual, testing_shift: this.testing > t, setup_pending: !!this.setupPending,
         reason_key: this.paused ? 'pause.reason.manual' : 'pause.reason.none', foreground: 'chrome.exe', offset: this.offset, trail: this.trail,
-        next_move_ms: this.next, amplitude: this.config.amplitude_px, monitor: 'LG TV SSCR2', width: 3840, height: 2160,
+        next_move_ms: this.next, amplitude: this.config.amplitude_px, monitor: 'OLED TV', width: 3840, height: 2160,
         hdr: true, latency_ms: 6.9, away: this.away, session_ms: t - this.t0 + 2852000,
       });
     },
