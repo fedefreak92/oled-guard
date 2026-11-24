@@ -129,7 +129,9 @@ std::optional<std::string> FindProtectedWindow(const RECT& monitor) {
         if (!IsWindowVisible(hwnd) || IsIconic(hwnd) || IsCloaked(hwnd)) return TRUE;
         DWORD pid = 0;
         GetWindowThreadProcessId(hwnd, &pid);
-        if (pid == GetCurrentProcessId()) return TRUE;  // l'overlay stesso e' escluso dalla cattura
+        // Le finestre di OLED Guard non sono mai "protette" da mettere in pausa (l'overlay si
+        // esclude dalla cattura apposta), ma l'interfaccia copre come qualsiasi finestra.
+        const bool own = pid == GetCurrentProcessId();
         RECT r{};
         if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &r, sizeof(r)))) GetWindowRect(hwnd, &r);
         const ScreenRect rect{r.left, r.top, r.right, r.bottom};
@@ -137,7 +139,7 @@ std::optional<std::string> FindProtectedWindow(const RECT& monitor) {
         DWORD affinity = WDA_NONE;
         // EnumWindows va dall'alto verso il basso: conta solo la parte non coperta dalle
         // finestre opache sopra. Una finestra protetta coperta del tutto non va in pausa.
-        if (GetWindowDisplayAffinity(hwnd, &affinity) && affinity != WDA_NONE &&
+        if (!own && GetWindowDisplayAffinity(hwnd, &affinity) && affinity != WDA_NONE &&
             VisibleEnough(rect, {m.left, m.top, m.right, m.bottom}, s->above)) {
           s->found = hwnd;
           return FALSE;
@@ -146,8 +148,13 @@ std::optional<std::string> FindProtectedWindow(const RECT& monitor) {
         return TRUE;
       },
       reinterpret_cast<LPARAM>(&search));
-  if (!search.found) return std::nullopt;
-  if (LogEnabled(LogLevel::Debug)) {
+  static HWND last_logged = nullptr;  // una riga quando cambia, non 4 volte al secondo
+  if (!search.found) {
+    last_logged = nullptr;
+    return std::nullopt;
+  }
+  if (search.found != last_logged && LogEnabled(LogLevel::Debug)) {
+    last_logged = search.found;
     wchar_t cls[128] = {};
     GetClassNameW(search.found, cls, ARRAYSIZE(cls));
     RECT r{};
