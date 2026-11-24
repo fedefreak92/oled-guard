@@ -77,6 +77,12 @@ bool IsFullscreenWindow(ScreenRect window, ScreenRect monitor, bool maximized, b
 // La finestra conta se la sua parte sullo schermo e' almeno min_side x min_side.
 bool OverlapsEnough(ScreenRect window, ScreenRect monitor, long min_side = 64);
 
+// Come OverlapsEnough, ma togliendo le finestre che stanno sopra (`above`, opache): la
+// finestra conta solo se ne resta scoperto, sullo schermo, un pezzo di almeno
+// min_side x min_side. Una finestra protetta coperta del tutto non va in pausa: l'immagine
+// catturata mostra gia' cio' che la copre.
+bool VisibleEnough(ScreenRect window, ScreenRect monitor, const std::vector<ScreenRect>& above, long min_side = 64);
+
 // Motivi per cui la pausa scatta subito, senza ritardo di entrata.
 bool IsImmediate(PauseReason reason);
 

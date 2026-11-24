@@ -62,6 +62,57 @@ bool OverlapsEnough(ScreenRect window, ScreenRect monitor, long min_side) {
   return w >= min_side && h >= min_side;
 }
 
+bool VisibleEnough(ScreenRect window, ScreenRect monitor, const std::vector<ScreenRect>& above, long min_side) {
+  const ScreenRect clip{std::max(window.left, monitor.left), std::max(window.top, monitor.top),
+                        std::min(window.right, monitor.right), std::min(window.bottom, monitor.bottom)};
+  if (clip.right - clip.left < min_side || clip.bottom - clip.top < min_side) return false;
+  // Griglia lungo i bordi di tutte le finestre sopra (ritagliati alla zona): ogni cella e'
+  // tutta coperta o tutta scoperta. Si cerca un rettangolo di celle scoperte largo e alto
+  // almeno min_side, cosi' il risultato non dipende da come si spezzano i pezzi.
+  std::vector<long> xs{clip.left, clip.right}, ys{clip.top, clip.bottom};
+  std::vector<ScreenRect> cover;
+  for (const ScreenRect& o : above) {
+    const ScreenRect c{std::max(o.left, clip.left), std::max(o.top, clip.top), std::min(o.right, clip.right),
+                       std::min(o.bottom, clip.bottom)};
+    if (c.right <= c.left || c.bottom <= c.top) continue;
+    cover.push_back(c);
+    xs.insert(xs.end(), {c.left, c.right});
+    ys.insert(ys.end(), {c.top, c.bottom});
+  }
+  std::sort(xs.begin(), xs.end());
+  xs.erase(std::unique(xs.begin(), xs.end()), xs.end());
+  std::sort(ys.begin(), ys.end());
+  ys.erase(std::unique(ys.begin(), ys.end()), ys.end());
+  const size_t cols = xs.size() - 1, rows = ys.size() - 1;
+  std::vector<char> open(cols * rows, 1);
+  for (size_t r = 0; r < rows; ++r) {
+    for (size_t c = 0; c < cols; ++c) {
+      for (const ScreenRect& o : cover) {
+        if (o.left <= xs[c] && o.right >= xs[c + 1] && o.top <= ys[r] && o.bottom >= ys[r + 1]) {
+          open[r * cols + c] = 0;
+          break;
+        }
+      }
+    }
+  }
+  // Per ogni intervallo di colonne [i, j] abbastanza largo, righe consecutive tutte
+  // scoperte in quell'intervallo, abbastanza alte.
+  std::vector<char> row_ok(rows);
+  for (size_t i = 0; i < cols; ++i) {
+    std::fill(row_ok.begin(), row_ok.end(), char{1});
+    for (size_t j = i; j < cols; ++j) {
+      for (size_t r = 0; r < rows; ++r) row_ok[r] = static_cast<char>(row_ok[r] && open[r * cols + j]);
+      if (xs[j + 1] - xs[i] < min_side) continue;
+      long run = 0;
+      for (size_t r = 0; r < rows; ++r) {
+        run = row_ok[r] ? run + (ys[r + 1] - ys[r]) : 0;
+        if (run >= min_side) return true;
+      }
+    }
+  }
+  return false;
+}
+
 bool IsImmediate(PauseReason reason) {
   switch (reason) {
     case PauseReason::Manual:

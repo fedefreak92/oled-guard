@@ -100,10 +100,28 @@ std::string WindowProcessName(HWND hwnd) {
   return app.empty() ? name : app;
 }
 
+// Finestra che copre di sicuro cio' che sta sotto: niente trasparenze, niente finestre che
+// lasciano passare i clic, niente overlay o menu (strumenti, non attivabili). Nel dubbio
+// non conta come copertura: meglio una pausa in piu' che una finestra nascosta dall'overlay.
+bool IsOpaqueCover(HWND hwnd) {
+  const LONG_PTR ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+  if (ex & (WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW)) return false;
+  if (ex & WS_EX_LAYERED) {
+    COLORREF key = 0;
+    BYTE alpha = 0;
+    DWORD flags = 0;
+    // Fallisce con UpdateLayeredWindow (alfa per pixel): trasparenza ignota.
+    if (!GetLayeredWindowAttributes(hwnd, &key, &alpha, &flags)) return false;
+    if ((flags & LWA_COLORKEY) || ((flags & LWA_ALPHA) && alpha < 255)) return false;
+  }
+  return true;
+}
+
 std::optional<std::string> FindProtectedWindow(const RECT& monitor) {
   struct Search {
     RECT monitor;
     HWND found = nullptr;
+    std::vector<ScreenRect> above;  // finestre opache gia' viste, piu' in alto nell'ordine z
   } search{monitor};
   EnumWindows(
       [](HWND hwnd, LPARAM lp) -> BOOL {
@@ -112,17 +130,30 @@ std::optional<std::string> FindProtectedWindow(const RECT& monitor) {
         DWORD pid = 0;
         GetWindowThreadProcessId(hwnd, &pid);
         if (pid == GetCurrentProcessId()) return TRUE;  // l'overlay stesso e' escluso dalla cattura
-        DWORD affinity = WDA_NONE;
-        if (!GetWindowDisplayAffinity(hwnd, &affinity) || affinity == WDA_NONE) return TRUE;
         RECT r{};
         if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &r, sizeof(r)))) GetWindowRect(hwnd, &r);
+        const ScreenRect rect{r.left, r.top, r.right, r.bottom};
         const RECT& m = s->monitor;
-        if (!OverlapsEnough({r.left, r.top, r.right, r.bottom}, {m.left, m.top, m.right, m.bottom})) return TRUE;
-        s->found = hwnd;
-        return FALSE;
+        DWORD affinity = WDA_NONE;
+        // EnumWindows va dall'alto verso il basso: conta solo la parte non coperta dalle
+        // finestre opache sopra. Una finestra protetta coperta del tutto non va in pausa.
+        if (GetWindowDisplayAffinity(hwnd, &affinity) && affinity != WDA_NONE &&
+            VisibleEnough(rect, {m.left, m.top, m.right, m.bottom}, s->above)) {
+          s->found = hwnd;
+          return FALSE;
+        }
+        if (IsOpaqueCover(hwnd)) s->above.push_back(rect);
+        return TRUE;
       },
       reinterpret_cast<LPARAM>(&search));
   if (!search.found) return std::nullopt;
+  if (LogEnabled(LogLevel::Debug)) {
+    wchar_t cls[128] = {};
+    GetClassNameW(search.found, cls, ARRAYSIZE(cls));
+    RECT r{};
+    GetWindowRect(search.found, &r);
+    LogDebug("Finestra protetta visibile: classe {} ({},{})-({},{})", Narrow(cls), r.left, r.top, r.right, r.bottom);
+  }
   return WindowProcessName(search.found);
 }
 

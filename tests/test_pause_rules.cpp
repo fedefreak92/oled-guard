@@ -275,3 +275,33 @@ TEST(pause_protected_window_needs_overlap) {
   CHECK(OverlapsEnough({100, 100, 900, 700}, monitor));
   CHECK(!OverlapsEnough({100, 100, 100, 700}, monitor));         // larghezza zero
 }
+
+TEST(protected_window_visible_part) {
+  const ScreenRect monitor{0, 0, 3840, 2160};
+  const ScreenRect keepass{1000, 500, 1800, 1100};
+  // Nessuna finestra sopra: conta come prima.
+  CHECK(VisibleEnough(keepass, monitor, {}));
+  // Coperta del tutto da un browser ingrandito.
+  CHECK(!VisibleEnough(keepass, monitor, {{0, 0, 3840, 2100}}));
+  // Spunta un angolo di 100x100 in basso a destra.
+  CHECK(VisibleEnough(keepass, monitor, {{0, 0, 1700, 2160}, {1700, 0, 3840, 1000}}));
+  // Spunta solo una striscia di 63 px: non basta.
+  CHECK(!VisibleEnough(keepass, monitor, {{0, 0, 1737, 2160}}));
+  // Due finestre ai lati lasciano libero il centro (200 px).
+  CHECK(VisibleEnough(keepass, monitor, {{0, 0, 1300, 2160}, {1500, 0, 3840, 2160}}));
+  // Una finestra fuori dallo schermo non copre nulla.
+  CHECK(VisibleEnough(keepass, monitor, {{-3000, 0, -10, 2160}}));
+  // La parte fuori dallo schermo protetto non conta come visibile.
+  CHECK(!VisibleEnough({3800, 500, 4600, 1100}, monitor, {}));
+}
+
+TEST(protected_window_visible_part_across_cut) {
+  const ScreenRect monitor{0, 0, 3840, 2160};
+  const ScreenRect win{0, 0, 600, 600};
+  // Una finestra copre la meta' destra in basso e una la meta' destra in alto lasciando
+  // scoperta solo una colonna di 100 px a sinistra, alta 600: il pezzo visibile 100x600
+  // attraversa i bordi orizzontali delle due finestre e non va spezzato in strisce.
+  CHECK(VisibleEnough(win, monitor, {{100, 300, 600, 600}, {100, 0, 600, 300}}));
+  // Scoperto solo un quadrato 100x100 a cavallo del bordo superiore della finestra in basso.
+  CHECK(VisibleEnough(win, monitor, {{100, 250, 600, 600}, {0, 0, 600, 200}, {0, 300, 100, 600}}));
+}

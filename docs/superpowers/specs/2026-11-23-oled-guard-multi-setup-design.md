@@ -164,6 +164,12 @@ scartata: solo inglese e italiano (l'utente vuole 4-5 lingue principali).
   interseca lo schermo protetto per almeno 64×64 px, con `GetWindowDisplayAffinity`
   diverso da `WDA_NONE`. Il risultato (presente o no, primo processo trovato) entra in
   `PauseInputs`; la decisione resta in `EvaluatePause` (core, testata).
+- **Decisione dell'utente dopo la revisione finale (2026-11-24)**: conta solo la parte
+  della finestra protetta **non coperta** da finestre opache sopra di lei (scorse
+  dall'alto con `EnumWindows`); se non ne resta scoperto un pezzo di almeno 64x64 px,
+  niente pausa. Non contano come coperture le finestre trasparenti, quelle che lasciano
+  passare i clic, gli overlay e i menu (WS_EX_TRANSPARENT, WS_EX_NOACTIVATE,
+  WS_EX_TOOLWINDOW, layered non del tutto opache): nel dubbio, pausa.
 - **Prima verifica (task 0, prova usa-e-getta)**: `GetWindowDisplayAffinity` su finestre
   di altri processi restituisce il valore giusto? Prova con KeePassXC (protezione dalla
   cattura attiva di serie) e con una piccola finestra di prova che chiama
