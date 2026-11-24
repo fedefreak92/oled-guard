@@ -3,6 +3,9 @@
 # Due server: windows-latest e windows-2022 (build 20348, stessa generazione di Windows 10:
 # controlla che l'exe non usi funzioni o DLL piu' recenti). Nessuno dei due ha uno schermo,
 # quindi overlay e finestra non si provano qui.
+# Lo zip di release si prepara su windows-2022 (MSVC 14.44): MSVC 14.52 di windows-latest
+# ha compilato male un ciclo su x e y (vedi WearStats::CellMs(int, int)), quindi per ora
+# su windows-latest si compila e si prova soltanto.
 name: CI
 
 on:
@@ -33,12 +36,12 @@ jobs:
         run: powershell -ExecutionPolicy Bypass -File tools\smoke-start.ps1 -BuildDir build
 
       - name: Controllo dell'exe e zip di release
-        if: matrix.os == 'windows-latest'
+        if: matrix.os == 'windows-2022'
         shell: powershell
         run: powershell -ExecutionPolicy Bypass -File tools\package-release.ps1 -BuildDir build -OutDir dist
 
       - uses: actions/upload-artifact@v4
-        if: matrix.os == 'windows-latest'
+        if: matrix.os == 'windows-2022'
         with:
           name: oled-guard-windows-x64
           path: |

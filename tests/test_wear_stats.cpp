@@ -1,7 +1,10 @@
+#include <array>
+
 #include "json.h"
 #include "test_framework.h"
 #include "wear_stats.h"
 
+using oled::JsonValue;
 using oled::Offset;
 using oled::PauseReason;
 using oled::WearStats;
@@ -44,12 +47,51 @@ TEST(wear_stats_counts_pauses_by_reason) {
   CHECK_EQ(s.TodayPauses(PauseReason::Denylisted), 0);
 }
 
-TEST(wear_stats_uniformity) {
+// Statistiche con le 49 celle date per indice (riga per riga, da (-3,-3)), senza
+// costruire posizioni dentro un ciclo: MSVC 14.52 (/O2) compila male {x, y} con x
+// contatore di ciclo negativo (vedi WearStats::CellMs(int, int)).
+WearStats WithCells(const std::array<double, 49>& cells) {
+  JsonValue o = JsonValue::MakeObject();
+  JsonValue arr = JsonValue::MakeArray();
+  for (double c : cells) arr.Push(JsonValue(c));
+  o.Set("cells", arr);
+  return WearStats::FromJson(o);
+}
+
+std::array<double, 49> DistinctCells() {
+  std::array<double, 49> cells{};
+  for (size_t i = 0; i < cells.size(); ++i) cells[i] = 1000.0 + static_cast<double>(i);
+  return cells;
+}
+
+TEST(wear_stats_cell_layout) {
+  const WearStats s = WithCells(DistinctCells());
+  for (int y = -3; y <= 3; ++y)
+    for (int x = -3; x <= 3; ++x) CHECK_NEAR(s.CellMs(x, y), 1000.0 + (y + 3) * 7 + (x + 3), 1e-9);
+  CHECK_NEAR(s.CellMs({-1, 1}), 1000.0 + 4 * 7 + 2, 1e-9);
+  CHECK_NEAR(s.CellMs(4, 0), 0.0, 1e-9);
+}
+
+TEST(wear_stats_add_goes_to_its_own_cell) {
   WearStats s;
-  s.RollDay(1);
-  CHECK(!s.Uniformity(1).has_value());
-  for (int y = -1; y <= 1; ++y)
-    for (int x = -1; x <= 1; ++x) s.AddProtectedTime({x, y}, 100000);
+  s.AddProtectedTime({-1, -1}, 1);
+  s.AddProtectedTime({-1, 1}, 2);
+  s.AddProtectedTime({-3, 2}, 4);
+  s.AddProtectedTime({2, -3}, 8);
+  const JsonValue json = s.ToJson();
+  const auto& cells = json.Find("cells")->AsArray();
+  CHECK_NEAR(cells[2 * 7 + 2].AsNumber(), 1, 1e-9);
+  CHECK_NEAR(cells[4 * 7 + 2].AsNumber(), 2, 1e-9);
+  CHECK_NEAR(cells[5 * 7 + 0].AsNumber(), 4, 1e-9);
+  CHECK_NEAR(cells[0 * 7 + 5].AsNumber(), 8, 1e-9);
+}
+
+TEST(wear_stats_uniformity) {
+  CHECK(!WearStats{}.Uniformity(1).has_value());
+  std::array<double, 49> cells{};
+  for (int y = 2; y <= 4; ++y)
+    for (int x = 2; x <= 4; ++x) cells[static_cast<size_t>(y * 7 + x)] = 100000;  // il riquadro +-1
+  WearStats s = WithCells(cells);
   CHECK(s.Uniformity(1).has_value());
   if (s.Uniformity(1)) CHECK_NEAR(*s.Uniformity(1), 100.0, 1e-9);
   s.AddProtectedTime({0, 0}, 800000);  // una cella molto piu' usata

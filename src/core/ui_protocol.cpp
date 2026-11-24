@@ -77,7 +77,7 @@ std::string StatsMessage(const WearStats& stats, int amplitude) {
   o.Set("type", JsonValue("stats"));
   JsonValue cells = JsonValue::MakeArray();
   for (int y = -WearStats::kRadius; y <= WearStats::kRadius; ++y) {
-    for (int x = -WearStats::kRadius; x <= WearStats::kRadius; ++x) cells.Push(JsonValue(stats.CellMs({x, y})));
+    for (int x = -WearStats::kRadius; x <= WearStats::kRadius; ++x) cells.Push(JsonValue(stats.CellMs(x, y)));
   }
   o.Set("cells", cells);
   const auto u = stats.Uniformity(amplitude);

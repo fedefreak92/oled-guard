@@ -16,16 +16,16 @@ std::optional<double> NonNegative(const JsonValue* v) {
 
 }  // namespace
 
-int WearStats::Index(Offset at) {
-  if (std::abs(at.x) > kRadius || std::abs(at.y) > kRadius) return -1;
-  return (at.y + kRadius) * kSide + (at.x + kRadius);
+int WearStats::Index(int x, int y) {
+  if (std::abs(x) > kRadius || std::abs(y) > kRadius) return -1;
+  return (y + kRadius) * kSide + (x + kRadius);
 }
 
 void WearStats::AddProtectedTime(Offset at, double ms) {
   if (!(ms > 0) || !std::isfinite(ms)) return;
   today_ms_ += ms;
   total_ms_ += ms;
-  const int i = Index(at);
+  const int i = Index(at.x, at.y);
   if (i >= 0) cells_[static_cast<size_t>(i)] += ms;
 }
 
@@ -41,8 +41,10 @@ void WearStats::RollDay(int day_key) {
   pauses_today_.fill(0);
 }
 
-double WearStats::CellMs(Offset at) const {
-  const int i = Index(at);
+double WearStats::CellMs(Offset at) const { return CellMs(at.x, at.y); }
+
+double WearStats::CellMs(int x, int y) const {
+  const int i = Index(x, y);
   return i >= 0 ? cells_[static_cast<size_t>(i)] : 0.0;
 }
 
@@ -63,7 +65,7 @@ std::optional<double> WearStats::Uniformity(int amplitude) const {
   int n = 0;
   for (int y = -a; y <= a; ++y) {
     for (int x = -a; x <= a; ++x) {
-      sum += CellMs({x, y});
+      sum += CellMs(x, y);
       ++n;
     }
   }
@@ -72,7 +74,7 @@ std::optional<double> WearStats::Uniformity(int amplitude) const {
   double var = 0;
   for (int y = -a; y <= a; ++y) {
     for (int x = -a; x <= a; ++x) {
-      const double d = CellMs({x, y}) - mean;
+      const double d = CellMs(x, y) - mean;
       var += d * d;
     }
   }

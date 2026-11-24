@@ -53,6 +53,18 @@ TEST(ui_stats_message_has_49_cells_and_null_uniformity) {
   CHECK_NEAR(v.Find("total_ms")->AsNumber(), 0, 1e-9);
 }
 
+// Ogni cella della mappa delle posizioni arriva alla pagina al suo posto.
+TEST(ui_stats_message_cells_in_order) {
+  JsonValue o = JsonValue::MakeObject();
+  JsonValue arr = JsonValue::MakeArray();
+  for (int i = 0; i < 49; ++i) arr.Push(JsonValue(1000.0 + i));
+  o.Set("cells", arr);
+  const JsonValue v = Parse(oled::StatsMessage(oled::WearStats::FromJson(o), 2));
+  const auto& cells = v.Find("cells")->AsArray();
+  CHECK_EQ(cells.size(), size_t{49});
+  for (size_t i = 0; i < cells.size() && i < 49; ++i) CHECK_NEAR(cells[i].AsNumber(), 1000.0 + static_cast<double>(i), 1e-9);
+}
+
 TEST(ui_apps_message_includes_rules) {
   oled::AppHistory h;
   h.Record("game.exe", oled::PauseReason::FullscreenWindow, 10);

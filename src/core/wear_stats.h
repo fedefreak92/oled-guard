@@ -24,6 +24,10 @@ class WearStats {
   void RollDay(int day_key);
 
   double CellMs(Offset at) const;  // cumulativo, tutti i giorni
+  // Come sopra, con x e y separati. Nei cicli su x e y va usata questa: MSVC 14.52 (/O2)
+  // compila male {x, y} passato per valore quando x e' un contatore di ciclo negativo
+  // (riempie la meta' alta, cioe' y, con il segno di x).
+  double CellMs(int x, int y) const;
   double TodayProtectedMs() const { return today_ms_; }
   double TotalProtectedMs() const { return total_ms_; }
   int TodayPauses() const;
@@ -36,7 +40,7 @@ class WearStats {
   static WearStats FromJson(const JsonValue& v);
 
  private:
-  static int Index(Offset at);
+  static int Index(int x, int y);
 
   std::array<double, kSide * kSide> cells_{};
   std::array<int, kReasons> pauses_today_{};
