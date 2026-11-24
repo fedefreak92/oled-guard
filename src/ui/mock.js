@@ -50,10 +50,20 @@ if (preview) {
     // Testi come li manderebbe l'app: inglese sovrascritto dalla lingua (?lang=, default it).
     async loadStrings(lang) {
       const read = (l) => fetch(`i18n/${l}.json`).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
-      const [en, active] = await Promise.all([read('en'), lang === 'en' ? Promise.resolve({}) : read(lang)]);
+      const pseudo = lang === 'xx';
+      const [en, active] = await Promise.all([read('en'), lang === 'en' || pseudo ? Promise.resolve({}) : read(lang)]);
       const strings = { ...en, ...active };
       delete strings._meta;
-      receive({ type: 'strings', lang, strings });
+      if (pseudo) for (const k of Object.keys(strings)) strings[k] = this.pseudo(strings[k]);
+      receive({ type: 'strings', lang: pseudo ? 'en' : lang, strings });
+    },
+    // Pseudo-lingua per provare l'impaginazione: accenti su ogni lettera e testo piu' lungo
+    // del 40%; i segnaposto {nome} restano intatti. Un testo senza accenti a schermo e' un
+    // testo non tradotto.
+    pseudo(text) {
+      const map = { a: 'á', e: 'é', i: 'î', o: 'ö', u: 'ü', c: 'ç', n: 'ñ', s: 'š', y: 'ý', A: 'Å', E: 'É', I: 'Î', O: 'Ö', U: 'Ü', C: 'Ç', N: 'Ñ', S: 'Š' };
+      const out = text.split(/(\{[^}]*\})/).map((part) => (part.startsWith('{') ? part : [...part].map((ch) => map[ch] || ch).join(''))).join('');
+      return `${out} ${'~'.repeat(Math.ceil(text.length * 0.4))}`;
     },
     async start() {
       const params = new URLSearchParams(location.search);
