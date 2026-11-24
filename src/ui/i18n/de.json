@@ -487,7 +487,7 @@
   "about.log": "Protokoll",
   "about.webview2": "Wird zum Zeichnen dieses Fensters verwendet. BSD-artige Lizenz von Microsoft (Text in THIRD_PARTY_NOTICES.md).",
   "about.license": "Lizenz",
-  "about.license.desc": "OLED Guard ist Open Source unter der MIT-Lizenz.",
+  "about.license.desc": "OLED Guard ist Open Source unter der GPL-3.0-Lizenz.",
   "tray.export_diagnostics": "Diagnose exportieren",
   "notice.diagnostics.title": "Diagnose",
   "notice.diagnostics_saved": "Diagnose gespeichert: {path}",

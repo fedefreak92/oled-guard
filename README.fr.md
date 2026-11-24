@@ -1,7 +1,7 @@
 # OLED Guard
 
 [![CI](https://github.com/fedefreak92/oled-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/fedefreak92/oled-guard/actions/workflows/ci.yml)
-[![Licence : MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
+[![Licence : GPL-3.0](https://img.shields.io/badge/licence-GPL--3.0-blue.svg)](LICENSE)
 
 [English](README.md) · [Italiano](README.it.md) · [Español](README.es.md) · [Deutsch](README.de.md) · **Français**
 
@@ -151,5 +151,8 @@ communique pas avec l'écran et ne modifie pas son firmware.
 
 ## Licence
 
-[MIT](LICENSE). Les composants tiers sont listés dans
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Copyright (C) 2026 fedefreak92. OLED Guard est un logiciel libre sous
+[GNU General Public License v3.0](LICENSE) (GPL-3.0-only) : tu peux l'utiliser,
+l'étudier, le modifier et le partager, et quiconque le distribue, modifié ou non, doit
+le faire sous la même licence et avec le code source. Les composants tiers sont listés
+dans [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
