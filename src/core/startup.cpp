@@ -15,12 +15,18 @@ StartupDecision DecideStartup(bool config_exists, bool ui_available) {
   return d;
 }
 
+StartupDecision AfterUiFailure(const StartupDecision& current) {
+  if (!current.setup_pending) return current;
+  return DecideStartup(/*config_exists=*/false, /*ui_available=*/false);
+}
+
 bool MissingMonitorNotifier::Update(bool missing, double uptime_ms, double now_ms) {
   if (!missing) {
     missing_ = false;
-    notified_ = false;
+    seen_ = true;
     return false;
   }
+  if (seen_) return false;
   if (!missing_) {
     missing_ = true;
     since_ms_ = now_ms;

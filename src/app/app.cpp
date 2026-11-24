@@ -186,6 +186,17 @@ int App::Run(HINSTANCE instance) {
     } else {
       ShowNotice("notice.ui_unavailable.title", "notice.ui_unavailable.body");
     }
+    // Primo avvio senza finestra: niente procedura, si protegge lo schermo scelto in
+    // automatico (come senza WebView2) e il file di configurazione nasce adesso, cosi'
+    // ai prossimi avvii la protezione parte subito. L'overlay parte al prossimo tick.
+    if (setup_pending_) {
+      const StartupDecision d = AfterUiFailure(StartupDecision{true, false, false});
+      setup_pending_ = d.setup_pending;
+      notify_auto_choice_ = d.notify_auto_choice;
+      LogWarn("Interfaccia non disponibile durante il primo avvio: scelta automatica dello schermo");
+      SaveConfig();
+      monitor_valid_ = false;
+    }
   });
   // Avvisi nati prima che la tray esistesse (config, hotkey di emergenza).
   for (const auto& [title, text] : pending_notices_) tray_.ShowBalloon(title, text);

@@ -34,9 +34,6 @@ TEST(missing_monitor_notifies_once) {
   CHECK(!n.Update(true, up + 29000, 29000));
   CHECK(n.Update(true, up + 30000, 30000));
   CHECK(!n.Update(true, up + 90000, 90000));  // una volta sola
-  CHECK(!n.Update(false, up + 91000, 91000));  // tornato: si riarma
-  CHECK(!n.Update(true, up + 92000, 92000));
-  CHECK(n.Update(true, up + 122000, 122000));
 }
 
 TEST(missing_monitor_waits_for_uptime) {
@@ -45,4 +42,24 @@ TEST(missing_monitor_waits_for_uptime) {
   CHECK(!n.Update(true, 0, 0));
   CHECK(!n.Update(true, 50000, 50000));
   CHECK(n.Update(true, 60000, 60000));
+}
+
+TEST(startup_ui_failure_during_setup_falls_back_to_auto) {
+  const auto pending = DecideStartup(false, true);
+  const auto d = oled::AfterUiFailure(pending);
+  CHECK(!d.setup_pending);
+  CHECK(d.start_protection);
+  CHECK(d.notify_auto_choice);
+  // Fuori dalla procedura un errore della finestra non cambia nulla.
+  const auto normal = DecideStartup(true, true);
+  const auto n = oled::AfterUiFailure(normal);
+  CHECK(!n.setup_pending && n.start_protection && !n.notify_auto_choice);
+}
+
+TEST(missing_monitor_not_after_seen) {
+  MissingMonitorNotifier n;
+  const double up = 120000;
+  CHECK(!n.Update(false, up, 0));               // lo schermo c'era
+  CHECK(!n.Update(true, up + 1000, 1000));      // la TV si spegne la sera
+  CHECK(!n.Update(true, up + 90000, 90000));    // nessun avviso: era gia' stato visto
 }
