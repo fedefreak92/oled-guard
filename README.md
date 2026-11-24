@@ -3,15 +3,14 @@
 [![CI](https://github.com/fedefreak92/oled-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/fedefreak92/oled-guard/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-*[Leggi in italiano](README.it.md)*
+**English** · [Italiano](README.it.md) · [Español](README.es.md) · [Deutsch](README.de.md) · [Français](README.fr.md)
 
-A Windows app that protects an OLED TV used as a PC monitor from burn-in. It
-captures the desktop on the GPU and redraws it, shifted by 1-3 pixels, in a
-click-through overlay. It also dims small static elements (taskbar, icons, logos)
-that stay bright for a long time, and shows live signals and usage statistics.
-
-It was built for a 4K 143 Hz LG OLED TV with HDR always on, where the TV's own
-pixel shift wasn't an option.
+A Windows app that protects an OLED monitor or TV used with a PC from burn-in.
+Many OLED TVs have no protection designed for PC use, where the taskbar, icons and
+window borders sit on the same pixels for hours. OLED Guard captures the desktop on
+the GPU and redraws it, shifted by 1-3 pixels, in a click-through overlay. It also
+dims small static elements (taskbar, icons, logos) that stay bright for a long time,
+and shows live signals and usage statistics.
 
 ![Overview page](docs/screenshots/overview.png)
 
@@ -19,7 +18,7 @@ pixel shift wasn't an option.
 | --- | --- |
 | ![Statistics page with the panel wear map and risk chart](docs/screenshots/statistics.png) | ![Pixel shift, dimming and edge settings](docs/screenshots/overlay.png) |
 
-*Screenshots of the interface in preview mode, with demo data. The interface is in Italian.*
+*Screenshots of the interface in preview mode, with demo data.*
 
 ## Features
 
@@ -31,15 +30,47 @@ pixel shift wasn't an option.
   returns to normal at once.
 - **Software brightness, darkened edges and away mode**: lowers the image when you
   step away from the PC.
-- **Automatic pause** for games, fullscreen apps, presentations, lock screen, UAC
-  and session switches, plus per-app rules.
-- **Live signals and statistics**: risk, motion and brightness for the last 60 s,
-  a 32x18 wear map of the panel, a 6 h / 24 h / 7 d risk chart, most used apps and
-  a taskbar notification when unprotected risk stays high. Stats never leave the PC.
-- **Windows tweaks for OLED** (only on request, with backup and restore): dark
-  theme, taskbar auto-hide, display timeout, black screensaver and wallpaper,
-  hidden desktop icons and more.
+- **Automatic pause** for games, full-screen apps, presentations, lock screen, UAC,
+  session switches and **protected windows** (see below), plus per-app rules.
+- **Live signals and statistics**: risk, motion and brightness for the last 60 s, a
+  wear map of the panel that follows its proportions (16:9, 16:10, ultrawide,
+  super-ultrawide), a 6 h / 24 h / 7 d risk chart, most used apps and a taskbar
+  notification when unprotected risk stays high. Stats never leave the PC.
+- **First-run setup**: choose the language and the display to protect; **Identify**
+  shows a big number on each display, handy with a TV and a monitor side by side.
+  Protection starts only when you confirm.
+- **Five languages**: English, Italian, Spanish, German and French, following the
+  Windows language or chosen in Settings.
+- **Windows tweaks for OLED** (only on request, with backup and restore): dark theme,
+  taskbar auto-hide, display timeout, black screensaver and wallpaper, hidden desktop
+  icons and more.
+- **Export diagnostics**: a readable text file to attach to bug reports.
 - Tray icon, global hotkeys, autostart, single instance, logs and an emergency exit.
+
+## Download and first run
+
+1. Download the latest `oled-guard-<version>-windows-x64.zip` from
+   [Releases](https://github.com/fedefreak92/oled-guard/releases) and check it
+   against the `.sha256` file next to it if you like.
+2. Unzip it anywhere and run `oled-guard.exe`. Nothing else needs to be installed:
+   the C++ runtime is built in, and the WebView2 runtime for the window already comes
+   with Windows 11 (on Windows 10 the app tells you where to get it, and protection
+   works from the tray without it).
+3. The release is not code-signed, so Windows SmartScreen shows a warning on the
+   first run: choose *More info → Run anyway*.
+4. Follow the three setup steps: language, the OLED display, a short summary.
+
+## Protected windows and video
+
+Some apps hide their windows from screen capture: protected video (for example in
+streaming apps), password managers such as KeePassXC, some banking apps. Since the
+overlay redraws a captured image, it would cover them with black or with the desktop
+behind. OLED Guard pauses automatically while such a window is visible on the
+protected display (you can turn this off in *App profiles*).
+
+Protected video **inside a browser** can't be detected by Windows. In full screen,
+protection pauses by itself anyway; in a window, use the manual pause or add a rule
+for the browser in *App profiles*.
 
 ## How it works
 
@@ -49,7 +80,7 @@ Desktop Duplication (DXGI)  ──►  D3D11 texture (stays on the GPU)
                  ┌────────────────────┼─────────────────────┐
                  ▼                    ▼                     ▼
         CSDetect / CSActivate     CSSummary            shift_ps.hlsl
-        which cells are static    32x18 zones,         draws the shifted frame,
+        which cells are static    wear-map zones,      draws the shifted frame,
         and bright, dim levels    read back 1x/s       dimming, brightness, edges
                                   (async, tiny)              │
                                                              ▼
@@ -67,18 +98,20 @@ Desktop Duplication (DXGI)  ──►  D3D11 texture (stays on the GPU)
   removes the overlay if the UI or render thread stops responding, so the screen is
   never left frozen or black.
 - **Interface**: WebView2 with plain HTML/CSS/JS, a strict CSP (`default-src 'self'`),
-  no libraries and no network access.
+  no libraries and no network access. Texts live in `src/ui/i18n/<language>.json`,
+  shared by the window, the tray and the notifications.
 
 ## Code layout
 
 | Folder | Contents |
 | --- | --- |
-| `src/core` | Pure logic with no Windows headers: shift scheduler, pause rules, dimming model, statistics, alert, JSON, config, UI protocol |
-| `src/app` | Win32, DXGI and D3D11: capture, render thread, overlay, tray, hotkeys, files, WebView2 window |
+| `src/core` | Pure logic with no Windows headers: shift scheduler, pause rules, dimming model, statistics, alert, translations, startup decisions, diagnostics text, JSON, config, UI protocol |
+| `src/app` | Win32, DXGI and D3D11: capture, render thread, overlay, tray, hotkeys, files, WebView2 window, display identification, diagnostics export |
 | `src/app/shaders` | HLSL shaders, compiled at build time with `fxc` and embedded as headers |
-| `src/ui` | The interface (`mock.js` feeds fake data when the page runs in a normal browser) |
+| `src/ui` | The interface; `i18n/` holds the translations, `mock.js` feeds fake data when the page runs in a normal browser |
 | `tests` | Unit tests for `src/core`, with a tiny framework and no dependencies |
 | `tests_gpu` | Shader tests on the WARP software device |
+| `tools` | Release packaging (dependency check, zip, SHA-256) |
 | `docs/superpowers` | Design specs and implementation plans for each milestone |
 
 ## Testing
@@ -89,18 +122,19 @@ powershell -ExecutionPolicy Bypass -File build.ps1
 
 configures, builds and runs both test suites through CTest.
 
-- **Unit tests** cover the pure logic in `src/core`.
+- **Unit tests** cover the pure logic in `src/core`, including checks that every
+  language file has the same keys and placeholders as English and that every text
+  used by the page exists.
 - **GPU tests** run the real shaders on **WARP**, Direct3D's software rasterizer, so
   they need no graphics card and run in CI. Each shader is checked against a C++
   reference model (`src/core/dim_model.*`, `summary_model.*`, `shade_model.*`) on
-  synthetic scenes: HDR values far above SDR white, odd resolutions, active windows
-  and pauses.
+  synthetic scenes: HDR values far above SDR white, odd resolutions, 16:10, ultrawide
+  and super-ultrawide sizes, active windows and pauses.
 
 ## Building
 
 Requirements:
 
-- Windows 11 (Windows 10 2004 or later may work but is untested)
 - Visual Studio 2022 or later, or the Build Tools, with the C++ desktop workload and
   a Windows 10/11 SDK (CMake and Ninja are included)
 - A Direct3D 11 GPU to run the app; the tests also run without one
@@ -108,15 +142,18 @@ Requirements:
 `build.ps1` finds Visual Studio by itself, builds into `build\` and runs the tests.
 Use `-Config Debug` for a debug build and `-Clean` to start from scratch. The app is
 `build\oled-guard.exe`; it needs the `ui` folder that the build copies next to it.
+`tools\package-release.ps1` checks the executable and builds the release zip.
 
 To work on the interface only, serve `src/ui` with any static server (for example
 `python -m http.server --directory src/ui`) and open it in a browser: `mock.js`
-supplies fake data.
+supplies fake data. Useful parameters: `?lang=de` (language), `?lang=xx` (a pseudo
+language 40% longer, to check the layout), `?setup=1` (first-run setup),
+`?grid=21x9` (ultrawide wear map).
 
 ## Usage
 
-Run `oled-guard.exe`: it starts in the tray and protects the monitor chosen in the
-settings. Default hotkeys (configurable):
+OLED Guard runs in the tray and protects the display chosen at first run (you can
+change it from the tray menu or the *Display* page). Default hotkeys (configurable):
 
 | Hotkey | Action |
 | --- | --- |
@@ -136,26 +173,47 @@ Files:
 - WebView2 data in `%LOCALAPPDATA%\oled-guard\webview2`
 - Autostart in `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (value `OledGuard`),
   only if you enable it
+- Exported diagnostics in your *Documents* folder
 
 No administrator rights are needed. Windows settings change only when you apply
-them from the *Windows* page, and *Ripristina come prima* ("restore as before") puts back the saved values.
+them from the *Windows for OLED* page, and *Restore as before* puts back the saved
+values.
+
+## Supported systems
+
+- **Windows 11**: tested.
+- **Windows 10 version 2004 or later**: supported, tested less. Older versions show a
+  message and don't start, because they lack the capture exclusion the overlay needs.
+- Monitors and TVs, SDR and HDR, any refresh rate and resolution. Tested in depth on
+  one setup (RTX 5080, LG OLED TV, HDR on): reports from other displays and GPUs are
+  very welcome.
+
+## Reporting a problem
+
+Open an issue with the *Bug report* form: it asks for the display, the GPU, the
+Windows version and the diagnostics file (*Advanced → Export diagnostics*, or the
+tray menu). Read the file before attaching it: the configuration lists the app names
+in your rules. Nothing is ever sent automatically.
+
+Spanish, German and French are machine translations waiting for a native speaker's
+review: corrections are welcome through the *Translation fix* form or a pull request
+on `src/ui/i18n/`.
 
 ## Limitations
 
-- One monitor at a time. Rotated (portrait) displays are not supported: the app
+- One display at a time. Rotated (portrait) displays are not supported: the app
   stays paused.
-- DRM-protected content is not detected: pause manually.
-- The interface and the comments in the code are in Italian; identifiers are in
-  English.
-- The release build is not code-signed, so Windows SmartScreen will warn on first
-  run.
-- Tested on a single setup (RTX 5080, LG OLED TV, HDR on).
+- Protected video inside a browser is not detected (see above).
+- Laptops: no battery-specific behavior yet.
+- Comments in the code and the log are in Italian; identifiers are in English.
+- The release build is not code-signed.
 
 ## Disclaimer
 
 OLED Guard reduces how long the same pixels stay lit, but it cannot guarantee that
-a panel will not burn in. Use it alongside your TV's own panel care features. It
-does not talk to the TV or change its firmware.
+a panel will not burn in. Keep using your display's own panel care (pixel refresh,
+and its pixel shift if it has one). It does not talk to the display or change its
+firmware.
 
 ## License
 
