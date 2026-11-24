@@ -188,9 +188,11 @@ i valori salvati.
 ## Sistemi supportati
 
 - **Windows 11**: provato.
-- **Windows 10 versione 2004 o successiva**: supportato, provato meno. Le versioni più
-  vecchie mostrano un messaggio e non partono, perché manca l'esclusione dalla cattura
-  che serve all'overlay.
+- **Windows 10 versione 2004 o successiva**: supportato, provato meno. La CI compila,
+  prova e avvia l'app su Windows Server 2022 (la generazione di Windows 10, build
+  20348), ma overlay e finestra non sono ancora stati provati su Windows 10 vero. Le
+  versioni più vecchie mostrano un messaggio e non partono, perché manca l'esclusione
+  dalla cattura che serve all'overlay.
 - Monitor e TV, SDR e HDR, qualsiasi frequenza e risoluzione. Provato a fondo su una
   configurazione (RTX 5080, TV LG OLED, HDR attivo): le segnalazioni da altri schermi
   e GPU sono benvenute.

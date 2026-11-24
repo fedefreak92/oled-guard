@@ -1,5 +1,8 @@
-# Compila ed esegue i test unitari e quelli GPU (su WARP, senza scheda video), poi
-# controlla che l'exe non dipenda dal runtime di Visual C++ e prepara lo zip di release.
+# Compila ed esegue i test unitari e quelli GPU (su WARP, senza scheda video), prova che
+# l'exe parta davvero e prepara lo zip di release.
+# Due server: windows-latest e windows-2022 (build 20348, stessa generazione di Windows 10:
+# controlla che l'exe non usi funzioni o DLL piu' recenti). Nessuno dei due ha uno schermo,
+# quindi overlay e finestra non si provano qui.
 name: CI
 
 on:
@@ -12,7 +15,11 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-2022]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -21,11 +28,17 @@ jobs:
         shell: powershell
         run: powershell -ExecutionPolicy Bypass -File build.ps1
 
+      - name: Prova d'avvio
+        shell: powershell
+        run: powershell -ExecutionPolicy Bypass -File tools\smoke-start.ps1 -BuildDir build
+
       - name: Controllo dell'exe e zip di release
+        if: matrix.os == 'windows-latest'
         shell: powershell
         run: powershell -ExecutionPolicy Bypass -File tools\package-release.ps1 -BuildDir build -OutDir dist
 
       - uses: actions/upload-artifact@v4
+        if: matrix.os == 'windows-latest'
         with:
           name: oled-guard-windows-x64
           path: |

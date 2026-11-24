@@ -182,8 +182,11 @@ values.
 ## Supported systems
 
 - **Windows 11**: tested.
-- **Windows 10 version 2004 or later**: supported, tested less. Older versions show a
-  message and don't start, because they lack the capture exclusion the overlay needs.
+- **Windows 10 version 2004 or later**: supported, tested less. CI builds, tests and
+  starts the app on Windows Server 2022 (the Windows 10 generation, build 20348), but
+  the overlay and the window have not been tried on Windows 10 itself yet. Older
+  versions show a message and don't start, because they lack the capture exclusion
+  the overlay needs.
 - Monitors and TVs, SDR and HDR, any refresh rate and resolution. Tested in depth on
   one setup (RTX 5080, LG OLED TV, HDR on): reports from other displays and GPUs are
   very welcome.
