@@ -426,9 +426,4 @@ void WindowsSettings::RestoreAll() {
   SaveBackup(JsonValue::MakeObject());
 }
 
-void TurnDisplayOff(HWND any_own_window) {
-  // Gestito da DefWindowProc della nostra finestra: nessun broadcast a tutto il sistema.
-  SendMessageW(any_own_window, WM_SYSCOMMAND, SC_MONITORPOWER, 2);
-}
-
 }  // namespace oled

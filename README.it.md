@@ -164,7 +164,6 @@ dal menu della tray o dalla pagina *Schermo*). Tasti rapidi predefiniti
 | Tasti | Azione |
 | --- | --- |
 | `Ctrl+Alt+Shift+P` | Pausa / ripresa |
-| `Ctrl+Alt+Shift+O` | Spegne lo schermo |
 | `Ctrl+Alt+Shift+F12` | Uscita di emergenza |
 
 Opzioni da riga di comando: `--open-ui`, `--list-monitors`, `--debug`, `--fast-shift`

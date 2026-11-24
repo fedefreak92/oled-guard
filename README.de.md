@@ -111,7 +111,6 @@ Standard-Tastenkombinationen (anpassbar):
 | Tasten | Aktion |
 | --- | --- |
 | `Ctrl+Alt+Shift+P` | Pausieren / fortsetzen |
-| `Ctrl+Alt+Shift+O` | Bildschirm ausschalten |
 | `Ctrl+Alt+Shift+F12` | Notausstieg |
 
 Einstellungen, Statistik, Verlauf, Sicherung der Windows-Einstellungen und Protokolle

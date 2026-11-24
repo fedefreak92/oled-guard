@@ -924,7 +924,6 @@ PAGES.tasti = {
     const p = panel(t('nav.tasti'), t('keys.sub'));
     const defs = [
       ['hotkey_toggle', t('keys.toggle'), t('keys.toggle.desc')],
-      ['hotkey_display_off', t('keys.display_off'), t('keys.display_off.desc')],
       ['hotkey_emergency_exit', t('keys.emergency'), t('keys.emergency.desc')],
     ];
     const show = (key) => setText(keys[key], cfg() ? cfg()[key].replace(/\+/g, ' + ') : '-');
@@ -1098,10 +1097,7 @@ PAGES.windows = {
     const restore = h('button.btn', { type: 'button', on: { click: () => send({ cmd: 'windowsRestoreAll' }) } }, icon('reset'), t('windows.restore'));
     const head = h('section.panel', null, h('div.score', null, score, h('span', { text: t('windows.score') }), h('span.grow'), applyAll, restore));
     const list = panel(t('windows.title'));
-    const off = h('button.btn', { type: 'button', on: { click: () => send({ cmd: 'displayOff' }) } }, icon('power'), t('windows.off.button'));
-    const offPanel = panel(t('windows.off.panel'));
-    offPanel.body.append(settingRow(t('windows.off'), t('keys.display_off.desc'), off));
-    root.append(h('div.page', null, head, list.el, offPanel.el,
+    root.append(h('div.page', null, head, list.el,
       h('p.hint', { text: t('windows.hint') })));
     let last = null;
     return {

@@ -444,8 +444,6 @@ std::optional<UiCommand> ParseUiCommand(std::string_view json) {
     c.type = UiCommandType::WindowsApplyAll;
   } else if (name == "windowsRestoreAll") {
     c.type = UiCommandType::WindowsRestoreAll;
-  } else if (name == "displayOff") {
-    c.type = UiCommandType::DisplayOff;
   } else if (name == "dimWatch") {
     if (!need_on()) return std::nullopt;
     c.type = UiCommandType::DimWatch;

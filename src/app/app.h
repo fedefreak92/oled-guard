@@ -73,7 +73,6 @@ class App {
   void ExportDiagnosticsNow();
   ShiftTiming EffectiveTiming() const;
   void RegisterToggleHotkey();
-  void RegisterDisplayOffHotkey();
   // Esegue una modifica alle impostazioni di Windows su un thread di lavoro.
   void RunWindowsTask(std::function<void()> task);
   void PushWindowsToUi();
@@ -89,7 +88,6 @@ class App {
   // Finestra "Apri" per scegliere un .exe, su un thread proprio.
   void BrowseExe();
   void OnWindowsDone();
-  void ScheduleDisplayOff();
   static std::filesystem::path StatsPath();
   void SaveStatsNow();
   void StartEmergencyGuard();
@@ -154,7 +152,6 @@ class App {
   bool fast_shift_ = false;
   bool debug_ = false;
   bool toggle_hotkey_registered_ = false;
-  bool display_off_hotkey_registered_ = false;
   WindowsSettings windows_{AppDataDir() / L"windows-backup.json"};
   std::thread windows_worker_;
   std::atomic<bool> windows_busy_{false};

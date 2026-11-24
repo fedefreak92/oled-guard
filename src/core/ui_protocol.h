@@ -143,7 +143,6 @@ enum class UiCommandType {
   WindowsApply,
   WindowsApplyAll,
   WindowsRestoreAll,
-  DisplayOff,
   HotkeyCapture,
   Window,
   DimWatch,

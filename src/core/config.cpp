@@ -110,7 +110,6 @@ void FixHotkeys(Reader& reader, Config& c) {
   const std::pair<const char*, std::pair<std::string*, const std::string*>> keys[] = {
       {"hotkey_toggle", {&c.hotkey_toggle, &d.hotkey_toggle}},
       {"hotkey_emergency_exit", {&c.hotkey_emergency_exit, &d.hotkey_emergency_exit}},
-      {"hotkey_display_off", {&c.hotkey_display_off, &d.hotkey_display_off}},
   };
   for (const auto& [name, values] : keys) {
     if (!ParseHotkey(*values.first)) {
@@ -121,12 +120,10 @@ void FixHotkeys(Reader& reader, Config& c) {
   // Il confronto avviene dopo le sostituzioni: un default puo' coincidere con un'altra.
   const auto t = ParseHotkey(c.hotkey_toggle);
   const auto e = ParseHotkey(c.hotkey_emergency_exit);
-  const auto o = ParseHotkey(c.hotkey_display_off);
-  if (t == e || t == o || e == o) {
+  if (t == e) {
     reader.Warn("le hotkey devono essere tutte diverse fra loro, uso i valori predefiniti");
     c.hotkey_toggle = d.hotkey_toggle;
     c.hotkey_emergency_exit = d.hotkey_emergency_exit;
-    c.hotkey_display_off = d.hotkey_display_off;
   }
 }
 
@@ -201,7 +198,7 @@ ConfigLoadResult ConfigFromJson(std::string_view raw) {
     else if (key == "allowlist") r.List(key, v, c.allowlist);
     else if (key == "hotkey_toggle") r.String(key, v, c.hotkey_toggle);
     else if (key == "hotkey_emergency_exit") r.String(key, v, c.hotkey_emergency_exit);
-    else if (key == "hotkey_display_off") r.String(key, v, c.hotkey_display_off);
+    else if (key == "hotkey_display_off") {}  // "Spegni schermo", tolto nella 1.2.0: si ignora
     else if (key == "allow_tearing") r.Bool(key, v, c.allow_tearing);
     else if (key == "autostart") r.Bool(key, v, c.autostart);
     else if (key == "dim_enabled") r.Bool(key, v, c.dim_enabled);
@@ -287,7 +284,6 @@ std::string ConfigToJson(const Config& c) {
   o.Set("allowlist", list(c.allowlist));
   o.Set("hotkey_toggle", JsonValue(c.hotkey_toggle));
   o.Set("hotkey_emergency_exit", JsonValue(c.hotkey_emergency_exit));
-  o.Set("hotkey_display_off", JsonValue(c.hotkey_display_off));
   o.Set("allow_tearing", JsonValue(c.allow_tearing));
   o.Set("autostart", JsonValue(c.autostart));
   o.Set("log_level", JsonValue(c.log_level));

@@ -110,7 +110,6 @@ Raccourcis par défaut (modifiables) :
 | Raccourci | Action |
 | --- | --- |
 | `Ctrl+Alt+Shift+P` | Pause / reprise |
-| `Ctrl+Alt+Shift+O` | Éteindre l'écran |
 | `Ctrl+Alt+Shift+F12` | Sortie d'urgence |
 
 Les paramètres, statistiques, historique, la sauvegarde des paramètres Windows et les

@@ -158,7 +158,6 @@ change it from the tray menu or the *Display* page). Default hotkeys (configurab
 | Hotkey | Action |
 | --- | --- |
 | `Ctrl+Alt+Shift+P` | Pause / resume |
-| `Ctrl+Alt+Shift+O` | Turn the display off |
 | `Ctrl+Alt+Shift+F12` | Emergency exit |
 
 Command-line options: `--open-ui`, `--list-monitors`, `--debug`, `--fast-shift`

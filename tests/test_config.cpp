@@ -101,20 +101,13 @@ TEST(config_invalid_hotkey_default_does_not_collide) {
   CHECK(!(oled::ParseHotkey(r2.config.hotkey_toggle) == oled::ParseHotkey(r2.config.hotkey_emergency_exit)));
 }
 
-TEST(config_display_off_hotkey_default) {
-  auto r = ConfigFromJson("{}");
-  CHECK_EQ(r.config.hotkey_display_off, std::string("Ctrl+Alt+Shift+O"));
-}
-
-TEST(config_three_hotkeys_must_differ) {
-  auto r = ConfigFromJson(R"({"hotkey_display_off": "Ctrl+Alt+Shift+P"})");
-  CHECK(!r.warnings.empty());
-  CHECK_EQ(r.config.hotkey_toggle, std::string("Ctrl+Alt+Shift+P"));
-  CHECK_EQ(r.config.hotkey_display_off, std::string("Ctrl+Alt+Shift+O"));
-  CHECK_EQ(r.config.hotkey_emergency_exit, std::string("Ctrl+Alt+Shift+F12"));
-  auto r2 = ConfigFromJson(R"({"hotkey_display_off": "ctrl+alt+shift+f12"})");
-  CHECK(!r2.warnings.empty());
-  CHECK_EQ(r2.config.hotkey_display_off, std::string("Ctrl+Alt+Shift+O"));
+// "Spegni schermo" e' stato tolto nella 1.2.0: la chiave delle versioni precedenti si
+// accetta senza avvisi e non si salva piu'.
+TEST(config_old_display_off_key_ignored) {
+  auto r = ConfigFromJson(R"({"hotkey_display_off": "Ctrl+Alt+Shift+O"})");
+  CHECK(r.warnings.empty());
+  CHECK(r.config == Config{});
+  CHECK(ConfigToJson(r.config).find("hotkey_display_off") == std::string::npos);
 }
 
 TEST(config_rejects_unparsable_hotkey) {
@@ -187,7 +180,6 @@ TEST(config_roundtrip) {
   c.allowlist = {"mpv.exe", "vlc.exe"};
   c.hotkey_toggle = "Ctrl+Alt+O";
   c.hotkey_emergency_exit = "Ctrl+Alt+Shift+F11";
-  c.hotkey_display_off = "Ctrl+Alt+Shift+B";
   c.allow_tearing = true;
   c.autostart = true;
   c.log_level = "warn";

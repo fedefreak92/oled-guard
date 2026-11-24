@@ -26,7 +26,6 @@ struct Config {
   std::vector<std::string> allowlist;
   std::string hotkey_toggle = "Ctrl+Alt+Shift+P";
   std::string hotkey_emergency_exit = "Ctrl+Alt+Shift+F12";
-  std::string hotkey_display_off = "Ctrl+Alt+Shift+O";
   bool allow_tearing = false;
   bool autostart = false;
   std::string log_level = "info";

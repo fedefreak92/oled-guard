@@ -10,7 +10,7 @@ if (preview) {
       monitor: 'auto', amplitude_px: 2, dwell_min_s: 20, dwell_max_s: 60, transition_min_s: 2, transition_max_s: 5,
       pause_on_notification_state: true, pause_on_fullscreen_window: true, pause_enter_delay_ms: 300, resume_delay_ms: 2500,
       denylist: ['netflix.exe'], allowlist: ['vlc.exe'], hotkey_toggle: 'Ctrl+Alt+Shift+P', hotkey_emergency_exit: 'Ctrl+Alt+Shift+F12',
-      hotkey_display_off: 'Ctrl+Alt+Shift+O', allow_tearing: false, autostart: true, log_level: 'info',
+      allow_tearing: false, autostart: true, log_level: 'info',
       dim_enabled: true, dim_strength_pct: 40, dim_delay_s: 60, dim_ramp_s: 120, dim_recover_ms: 500,
       dim_window_mode: 'desktop', dim_activate: 'both',
       dim_large_enabled: false, dim_large_delay_s: 1200, dim_large_strength_pct: 20, dim_bright_threshold_pct: 25,
@@ -296,7 +296,6 @@ if (preview) {
         case 'windowsApply': this.windows = this.windows.map((w) => (w[0] === cmd.id ? [w[0], w[2], w[2], true] : w)); this.sendWindows(); break;
         case 'windowsApplyAll': this.windows = this.windows.map((w) => [w[0], w[2], w[2], true]); this.sendWindows(); break;
         case 'windowsRestoreAll': receive({ type: 'notice', key: 'preview.windows_restored' }); break;
-        case 'displayOff': receive({ type: 'notice', key: 'preview.display_off' }); break;
         case 'setLanguage': this.config.language = cmd.id; this.loadStrings(cmd.id === 'auto' ? 'it' : cmd.id); receive({ type: 'config', config: this.config }); break;
         case 'dimHighlight': this.highlightUntil = now() + 15000; this.sendDim(); break;
         case 'identifyMonitors': receive({ type: 'notice', key: 'preview.identify' }); break;

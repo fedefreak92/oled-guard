@@ -37,8 +37,6 @@ constexpr UINT_PTR kTimerPause = 2;
 constexpr UINT_PTR kTimerConfigReload = 3;
 constexpr UINT_PTR kTimerStatsSave = 4;
 constexpr UINT_PTR kTimerTestShift = 5;
-constexpr UINT_PTR kTimerDisplayOff = 6;
-constexpr UINT kDisplayOffDelayMs = 700;
 constexpr UINT kStatsSaveMs = 60000;
 constexpr UINT kTestShiftMs = 30000;
 constexpr UINT kPausePollMs = 250;
@@ -52,7 +50,6 @@ constexpr UINT WM_APP_SECOND_INSTANCE = WM_APP + 4;
 constexpr UINT WM_APP_UI_CLOSE = WM_APP + 5;
 constexpr UINT WM_APP_WINDOWS_DONE = WM_APP + 6;
 constexpr UINT WM_APP_BROWSED = WM_APP + 7;  // lParam: std::string* (nome .exe, vuoto se annullato)
-constexpr int kDisplayOffHotkeyId = 2;
 
 constexpr UINT kCmdExit = 100;
 constexpr UINT kCmdToggle = 101;
@@ -202,7 +199,6 @@ int App::Run(HINSTANCE instance) {
   for (const auto& [title, text] : pending_notices_) tray_.ShowBalloon(title, text);
   pending_notices_.clear();
   RegisterToggleHotkey();
-  RegisterDisplayOffHotkey();
   // Con una config illeggibile i valori sono quelli predefiniti: non si tocca il
   // registro, altrimenti un errore di battitura toglierebbe l'avvio automatico.
   if (!initial_config_failed_) SyncAutostart();
@@ -337,7 +333,6 @@ void App::ApplyConfig(const Config& next) {
   if (previous.language != config_.language) ApplyLanguage();
   if (previous.hotkey_toggle != config_.hotkey_toggle) RegisterToggleHotkey();
   if (previous.hotkey_emergency_exit != config_.hotkey_emergency_exit) StartEmergencyGuard();
-  if (previous.hotkey_display_off != config_.hotkey_display_off) RegisterDisplayOffHotkey();
   SyncAutostart();
   PushDimInputs();
   PushShadeInputs();
@@ -429,20 +424,6 @@ void App::RegisterToggleHotkey() {
   if (!toggle_hotkey_registered_) {
     LogWarn("Hotkey {} non registrata: gia' in uso", config_.hotkey_toggle);
     ShowNotice("notice.hotkey_unavailable.title", "notice.hotkey_toggle_taken.body", {{"keys", config_.hotkey_toggle}});
-  }
-}
-
-void App::RegisterDisplayOffHotkey() {
-  if (display_off_hotkey_registered_) UnregisterHotKey(main_, kDisplayOffHotkeyId);
-  display_off_hotkey_registered_ = false;
-  const auto key = ParseHotkey(config_.hotkey_display_off);
-  if (!key) return;
-  display_off_hotkey_registered_ =
-      RegisterHotKey(main_, kDisplayOffHotkeyId, key->modifiers | MOD_NOREPEAT, key->vk) != FALSE;
-  if (!display_off_hotkey_registered_) {
-    LogWarn("Hotkey {} non registrata: gia' in uso", config_.hotkey_display_off);
-    ShowNotice("notice.hotkey_unavailable.title", "notice.hotkey_display_off_taken.body",
-               {{"keys", config_.hotkey_display_off}});
   }
 }
 
@@ -587,12 +568,6 @@ void App::RunWindowsTask(std::function<void()> task) {
 }
 
 void App::PushWindowsToUi() { RunWindowsTask(nullptr); }
-
-void App::ScheduleDisplayOff() {
-  // Rilasciare i tasti della hotkey (o il clic) conta come input e riaccenderebbe
-  // subito lo schermo: si spegne dopo un attimo.
-  SetTimer(main_, kTimerDisplayOff, kDisplayOffDelayMs, nullptr);
-}
 
 void App::OnWindowsDone() {
   std::string message;
@@ -1049,7 +1024,6 @@ void App::OpenUi() {
         if (hotkey_capture_active_) {
           hotkey_capture_active_ = false;
           RegisterToggleHotkey();
-          RegisterDisplayOffHotkey();
         }
         SaveStatsNow();
         if (setup_pending_) ShowNotice("notice.setup_unfinished.title", "notice.setup_unfinished.body");
@@ -1109,10 +1083,6 @@ void App::OnUiMessage(const std::string& json) {
       RunWindowsTask([this] { windows_.RestoreAll(); });
       Record("windows", "activity.windows_restored");
       break;
-    case UiCommandType::DisplayOff:
-      LogInfo("Schermo spento dall'interfaccia");
-      ScheduleDisplayOff();
-      break;
     case UiCommandType::SetAppRule:
     case UiCommandType::AddApp:
     case UiCommandType::RemoveApp: {
@@ -1159,14 +1129,11 @@ void App::OnUiMessage(const std::string& json) {
       // L'uscita di emergenza resta sempre attiva.
       if (command->on) {
         if (toggle_hotkey_registered_) UnregisterHotKey(main_, kToggleHotkeyId);
-        if (display_off_hotkey_registered_) UnregisterHotKey(main_, kDisplayOffHotkeyId);
         toggle_hotkey_registered_ = false;
-        display_off_hotkey_registered_ = false;
         hotkey_capture_active_ = true;
       } else {
         hotkey_capture_active_ = false;
         RegisterToggleHotkey();
-        RegisterDisplayOffHotkey();
       }
       break;
     case UiCommandType::DimWatch:
@@ -1424,7 +1391,6 @@ void App::Quit() {
   ui_.Close();
   StopOverlay();
   if (toggle_hotkey_registered_) UnregisterHotKey(main_, kToggleHotkeyId);
-  if (display_off_hotkey_registered_) UnregisterHotKey(main_, kDisplayOffHotkeyId);
   WTSUnRegisterSessionNotification(main_);
   DestroyWindow(main_);
 }
@@ -1464,10 +1430,6 @@ LRESULT App::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
         ReloadConfig();
       }
       if (wp == kTimerStatsSave) SaveStatsNow();
-      if (wp == kTimerDisplayOff) {
-        KillTimer(main_, kTimerDisplayOff);
-        TurnDisplayOff(main_);
-      }
       if (wp == kTimerTestShift) {
         KillTimer(main_, kTimerTestShift);
         testing_shift_until_ms_ = 0;
@@ -1477,10 +1439,6 @@ LRESULT App::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
       return 0;
     case WM_HOTKEY:
       if (wp == kToggleHotkeyId) SetManualPause(!manual_pause_);
-      if (wp == kDisplayOffHotkeyId) {
-        LogInfo("Schermo spento con la hotkey");
-        ScheduleDisplayOff();
-      }
       return 0;
     case WM_APP_WINDOWS_DONE:
       OnWindowsDone();

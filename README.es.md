@@ -109,7 +109,6 @@ OLED Guard se queda en la bandeja y protege la pantalla elegida en el primer ini
 | Atajo | Acción |
 | --- | --- |
 | `Ctrl+Alt+Shift+P` | Pausar / reanudar |
-| `Ctrl+Alt+Shift+O` | Apagar la pantalla |
 | `Ctrl+Alt+Shift+F12` | Salida de emergencia |
 
 Ajustes, estadísticas, historial, copia de los ajustes de Windows y registros están en

@@ -34,7 +34,5 @@ class WindowsSettings {
   mutable std::mutex mutex_;
 };
 
-// Spegne il monitor (la TV va in standby e si riaccende al movimento del mouse).
-void TurnDisplayOff(HWND any_own_window);
 
 }  // namespace oled

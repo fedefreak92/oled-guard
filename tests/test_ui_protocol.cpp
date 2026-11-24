@@ -159,7 +159,7 @@ TEST(ui_command_parses_known_commands) {
   CHECK(pause && pause->on);
   auto apply = oled::ParseUiCommand(R"({"cmd":"windowsApply","id":"dark_theme"})");
   CHECK(apply && apply->id == "dark_theme");
-  for (const char* simple : {"testShift", "listProcesses", "windowsApplyAll", "windowsRestoreAll", "displayOff"}) {
+  for (const char* simple : {"testShift", "listProcesses", "windowsApplyAll", "windowsRestoreAll"}) {
     const std::string json = std::string(R"({"cmd":")") + simple + "\"}";
     CHECK(oled::ParseUiCommand(json).has_value());
   }
@@ -533,4 +533,9 @@ TEST(ui_parse_export_diagnostics) {
   const std::string json = R"({"cmd":"exportDiagnostics"})";
   auto c = oled::ParseUiCommand(json);
   CHECK(c && c->type == oled::UiCommandType::ExportDiagnostics);
+}
+
+TEST(ui_display_off_removed) {
+  const std::string json = R"({"cmd":"displayOff"})";
+  CHECK(!oled::ParseUiCommand(json).has_value());
 }
