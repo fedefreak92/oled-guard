@@ -58,7 +58,7 @@ An agent writes code fast, so the checks have to be fast and automatic too.
 
 - **Logic apart from Windows.** Everything that decides something (when to shift,
   when to pause, how much to dim, statistics, translations, startup) lives in
-  `src/core` with no Windows headers, so it is covered by 303 unit tests.
+  `src/core` with no Windows headers, so it is covered by 306 unit tests.
 - **Shaders tested without a GPU.** 33 tests run the real HLSL shaders on WARP,
   Direct3D's software rasterizer, and compare them with C++ reference models.
 - **CI on two Windows generations.** Every push builds, runs all tests and starts
@@ -73,10 +73,19 @@ An agent writes code fast, so the checks have to be fast and automatic too.
   what it decided, why, and what it costs if wrong, so I could review the calls
   instead of rediscovering them.
 
-## Where the tests were not enough
+## What the real problems taught me
 
 These are the moments that taught me the most.
 
+- **A compiler bug caught before the release.** The first CI run on GitHub failed
+  on one of the two Windows images: a statistics test got 18.35 instead of 100,
+  while everything passed on my PC. The first fix was based on a wrong guess, and
+  the CI rejected it. So we stopped guessing and had the CI print the data and then
+  the generated assembly: the newest Microsoft compiler (MSVC 14.52) built a
+  position `{x, y}` wrongly when `x` was a negative loop counter, turning `y` into
+  -1. The app was affected too: the Statistics page would have shown a wrong
+  position map. The fix avoids that pattern, new tests check the map cell by cell,
+  and the release is built with a compiler that gets it right.
 - **Dimming the wrong areas.** The first dimming passed every synthetic test, but on
   my real desktop it darkened the wrong zones. We added a diagnostics mode
   (statistics, grid dumps and snapshots compared frame by frame) and from then on a
@@ -99,9 +108,9 @@ These are the moments that taught me the most.
 
 ## Numbers
 
-- 4 days, 106 commits, 6 specs and 6 plans
+- 4 days, 109 commits, 6 specs and 6 plans
 - About 20,000 lines of C++20, HLSL and JavaScript, of which about 4,900 are tests
-- 336 automated tests, CI on two Windows versions
+- 339 automated tests, CI on two Windows versions
 - 5 languages, no runtime dependencies beyond Windows and WebView2
 
 ## Commits

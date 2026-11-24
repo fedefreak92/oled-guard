@@ -59,7 +59,7 @@ automatici.
 
 - **Logica separata da Windows.** Tutto ciò che decide qualcosa (quando spostare,
   quando mettere in pausa, quanto scurire, statistiche, traduzioni, avvio) sta in
-  `src/core` senza header di Windows, ed è coperto da 303 test unitari.
+  `src/core` senza header di Windows, ed è coperto da 306 test unitari.
 - **Shader provati senza scheda video.** 33 test eseguono gli shader HLSL veri su
   WARP, il rasterizzatore software di Direct3D, e li confrontano con modelli di
   riferimento in C++.
@@ -75,10 +75,20 @@ automatici.
   cosa ha deciso, perché e quanto costa se è sbagliato, così potevo rivedere le
   scelte invece di riscoprirle.
 
-## Dove i test non sono bastati
+## Cosa mi hanno insegnato i problemi veri
 
 Sono i momenti da cui ho imparato di più.
 
+- **Un errore del compilatore trovato prima del rilascio.** La prima CI su GitHub è
+  fallita su una delle due immagini di Windows: un test delle statistiche dava 18,35
+  invece di 100, mentre sul mio PC passava tutto. La prima correzione partiva da
+  un'ipotesi sbagliata e la CI l'ha bocciata. Allora abbiamo smesso di tirare a
+  indovinare e abbiamo fatto stampare alla CI i dati e poi l'assembly generato: il
+  compilatore Microsoft più recente (MSVC 14.52) costruiva male una posizione
+  `{x, y}` quando `x` era un contatore di ciclo negativo, e `y` diventava -1.
+  Toccava anche l'app: la pagina Statistiche avrebbe mostrato una mappa delle
+  posizioni sbagliata. La correzione evita quello schema, nuovi test controllano la
+  mappa cella per cella e il rilascio si compila con un compilatore che la fa giusta.
 - **Scurire le zone sbagliate.** Il primo oscuramento passava tutti i test sintetici,
   ma sul mio desktop vero scuriva le zone sbagliate. Abbiamo aggiunto una modalità
   di diagnostica (statistiche, griglie e istantanee confrontate fotogramma per
@@ -102,9 +112,9 @@ Sono i momenti da cui ho imparato di più.
 
 ## Numeri
 
-- 4 giorni, 106 commit, 6 spec e 6 piani
+- 4 giorni, 109 commit, 6 spec e 6 piani
 - Circa 20.000 righe di C++20, HLSL e JavaScript, di cui circa 4.900 di test
-- 336 test automatici, CI su due versioni di Windows
+- 339 test automatici, CI su due versioni di Windows
 - 5 lingue, nessuna dipendenza oltre a Windows e WebView2
 
 ## Commit

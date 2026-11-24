@@ -237,7 +237,7 @@ Claude Code ha scritto codice, test e documentazione, partendo dai test, con ogn
 attività revisionata da agenti separati.
 
 [docs/DEVELOPMENT.it.md](docs/DEVELOPMENT.it.md) racconta tutto: chi ha fatto cosa,
-il metodo, le tappe e cosa i test automatici non hanno trovato. Spec e piani sono in
+il metodo, le tappe e i problemi veri trovati lungo la strada. Spec e piani sono in
 [`docs/superpowers`](docs/superpowers), e ogni commit ha una riga `Co-Authored-By`.
 
 ## Licenza

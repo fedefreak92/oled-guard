@@ -230,7 +230,7 @@ and decided what shipped. Claude Code wrote the code, the tests and the docs, te
 first, with every task reviewed by separate agents.
 
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) tells the whole story: who did what, the
-method, the milestones and what the automated tests did not catch. The specs and
+method, the milestones and the real problems found along the way. The specs and
 plans are in [`docs/superpowers`](docs/superpowers) (in Italian), and every commit
 carries a `Co-Authored-By` line.
 
