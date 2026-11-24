@@ -5,6 +5,10 @@
 
 [English](README.md) · **Italiano** · [Español](README.es.md) · [Deutsch](README.de.md) · [Français](README.fr.md)
 
+> **Un progetto di ingegneria del software con l'IA.** Ho progettato, diretto e
+> provato OLED Guard; il codice l'ha scritto [Claude Code](https://claude.com/claude-code)
+> a partire da spec e piani approvati da me. [Come è stata sviluppata →](docs/DEVELOPMENT.it.md)
+
 Un'app per Windows che protegge dal burn-in un monitor o una TV OLED usati col PC.
 Molte TV OLED non hanno una protezione pensata per l'uso col PC, dove barra delle
 applicazioni, icone e bordi delle finestre restano per ore sugli stessi pixel. OLED
@@ -222,6 +226,19 @@ OLED Guard riduce il tempo in cui gli stessi pixel restano accesi, ma non può
 garantire che il pannello non subisca burn-in. Continua a usare la cura del pannello
 integrata nello schermo (pixel refresh e, se c'è, il suo spostamento dei pixel). Non
 comunica con lo schermo e non ne modifica il firmware.
+
+## Come è stata sviluppata
+
+Ho sviluppato OLED Guard in quattro giorni con Claude Code come agente di
+programmazione, lavorando da product owner e responsabile tecnico: ho fissato
+obiettivi e vincoli, approvato ogni spec di design e ogni piano prima
+dell'implementazione, provato ogni tappa su hardware vero e deciso cosa rilasciare.
+Claude Code ha scritto codice, test e documentazione, partendo dai test, con ogni
+attività revisionata da agenti separati.
+
+[docs/DEVELOPMENT.it.md](docs/DEVELOPMENT.it.md) racconta tutto: chi ha fatto cosa,
+il metodo, le tappe e cosa i test automatici non hanno trovato. Spec e piani sono in
+[`docs/superpowers`](docs/superpowers), e ogni commit ha una riga `Co-Authored-By`.
 
 ## Licenza
 

@@ -5,6 +5,10 @@
 
 **English** · [Italiano](README.it.md) · [Español](README.es.md) · [Deutsch](README.de.md) · [Français](README.fr.md)
 
+> **An AI-assisted engineering project.** I designed, directed and tested OLED Guard;
+> the code was written by [Claude Code](https://claude.com/claude-code) from specs and
+> plans I approved. [How it was built →](docs/DEVELOPMENT.md)
+
 A Windows app that protects an OLED monitor or TV used with a PC from burn-in.
 Many OLED TVs have no protection designed for PC use, where the taskbar, icons and
 window borders sit on the same pixels for hours. OLED Guard captures the desktop on
@@ -112,7 +116,7 @@ Desktop Duplication (DXGI)  ──►  D3D11 texture (stays on the GPU)
 | `tests` | Unit tests for `src/core`, with a tiny framework and no dependencies |
 | `tests_gpu` | Shader tests on the WARP software device |
 | `tools` | Release packaging (dependency check, zip, SHA-256) |
-| `docs/superpowers` | Design specs and implementation plans for each milestone |
+| `docs/superpowers` | Design specs and implementation plans for each milestone ([how they were used](docs/DEVELOPMENT.md)) |
 
 ## Testing
 
@@ -216,6 +220,19 @@ OLED Guard reduces how long the same pixels stay lit, but it cannot guarantee th
 a panel will not burn in. Keep using your display's own panel care (pixel refresh,
 and its pixel shift if it has one). It does not talk to the display or change its
 firmware.
+
+## How it was built
+
+I built OLED Guard in four days with Claude Code as the coding agent, working as
+product owner and technical lead: I set the scope and the constraints, approved every
+design spec and plan before implementation, tested each milestone on real hardware
+and decided what shipped. Claude Code wrote the code, the tests and the docs, test
+first, with every task reviewed by separate agents.
+
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) tells the whole story: who did what, the
+method, the milestones and what the automated tests did not catch. The specs and
+plans are in [`docs/superpowers`](docs/superpowers) (in Italian), and every commit
+carries a `Co-Authored-By` line.
 
 ## License
 

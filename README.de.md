@@ -5,6 +5,10 @@
 
 [English](README.md) · [Italiano](README.it.md) · [Español](README.es.md) · **Deutsch** · [Français](README.fr.md)
 
+> **Ein KI-gestütztes Softwareprojekt.** Ich habe OLED Guard entworfen, gesteuert und
+> getestet; den Code hat [Claude Code](https://claude.com/claude-code) nach von mir
+> freigegebenen Spezifikationen und Plänen geschrieben. [Wie es entstand →](docs/DEVELOPMENT.md) (Englisch)
+
 > Maschinelle Übersetzung, die noch von Muttersprachlern geprüft werden muss.
 > Korrekturen sind willkommen. Maßgeblich ist die [englische Fassung](README.md).
 
@@ -149,6 +153,17 @@ garantieren, dass ein Panel nicht einbrennt. Nutze weiterhin die eingebaute Pane
 deines Bildschirms (Pixel Refresh und, falls vorhanden, seine eigene
 Pixelverschiebung). Die App kommuniziert nicht mit dem Bildschirm und ändert seine
 Firmware nicht.
+
+## Wie es entstanden ist
+
+Ich habe OLED Guard in vier Tagen mit Claude Code als Programmier-Agent entwickelt,
+in der Rolle von Product Owner und technischer Leitung: Ich habe Umfang und Vorgaben
+festgelegt, jede Spezifikation und jeden Plan vor der Umsetzung freigegeben, jeden
+Meilenstein auf echter Hardware getestet und über die Releases entschieden. Claude
+Code hat Code, Tests und Dokumentation geschrieben, testgetrieben, und jede Aufgabe
+wurde von separaten Agenten geprüft. Die ganze Geschichte steht in
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) (Englisch), und jeder Commit trägt eine
+`Co-Authored-By`-Zeile.
 
 ## Lizenz
 
