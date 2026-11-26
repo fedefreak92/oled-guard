@@ -82,7 +82,7 @@ void ShowMonitorIdentifiers(HINSTANCE instance, const std::vector<MonitorInfo>& 
     if (!hwnd) continue;
     auto* text = new IdentifyText{std::to_wstring(i + 1), monitors[i].friendly_name};
     SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(text));
-    SetLayeredWindowAttributes(hwnd, 0, 200, LWA_ALPHA);
+    SetLayeredWindowAttributes(hwnd, 0, 153, LWA_ALPHA);  // 60% (153/255), come nel piano
     ShowWindow(hwnd, SW_SHOWNOACTIVATE);
     SetTimer(hwnd, kCloseTimer, kShowMs, nullptr);
   }
