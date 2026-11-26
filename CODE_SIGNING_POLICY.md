@@ -1,7 +1,7 @@
 # Code signing policy
 
-**Status:** OLED Guard is applying for free code signing through
-[SignPath Foundation](https://signpath.org). Until the application is approved, the
+**Status:** OLED Guard applied for free code signing through
+[SignPath Foundation](https://signpath.org) on 26 November 2026. Until the application is approved, the
 release builds are **not signed**, and Windows SmartScreen shows a warning on the
 first run. This page will say when signed releases start.
 
