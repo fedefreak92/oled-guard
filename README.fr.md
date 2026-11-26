@@ -6,8 +6,8 @@
 [English](README.md) · [Italiano](README.it.md) · [Español](README.es.md) · [Deutsch](README.de.md) · **Français**
 
 > **Un projet de génie logiciel assisté par l'IA.** J'ai conçu, dirigé et testé
-> OLED Guard ; le code a été écrit par [Claude Code](https://claude.com/claude-code) à
-> partir de spécifications et de plans que j'ai approuvés. [Comment il a été développé →](docs/DEVELOPMENT.md) (en anglais)
+> OLED Guard, en utilisant [Claude Code](https://claude.com/claude-code) pour le développement : l'agent a
+> écrit le code en suivant les spécifications et les plans que j'ai approuvés. [Comment il a été développé →](docs/DEVELOPMENT.md) (en anglais)
 
 > Traduction automatique en attente de relecture par un locuteur natif. Les corrections
 > sont les bienvenues. La version de référence est la [version anglaise](README.md).
@@ -167,12 +167,13 @@ communique pas avec l'écran et ne modifie pas son firmware.
 
 ## Comment il a été développé
 
-J'ai développé OLED Guard en quatre jours avec Claude Code comme agent de
-programmation, dans le rôle de product owner et de responsable technique : j'ai fixé
-le périmètre et les contraintes, approuvé chaque spécification et chaque plan avant
-l'implémentation, testé chaque étape sur du vrai matériel et décidé de ce qui sortait.
-Claude Code a écrit le code, les tests et la documentation, en commençant par les
-tests, chaque tâche étant revue par des agents distincts. L'histoire complète est dans
+J'ai conçu et publié OLED Guard en quatre jours, en dirigeant le projet du début à la
+fin et en utilisant Claude Code pour le développement. J'ai fixé le périmètre et les
+contraintes, approuvé chaque spécification et chaque plan avant l'implémentation,
+testé chaque étape sur du vrai matériel et décidé de ce qui sortait. Claude Code a
+écrit le code, les tests et la documentation en suivant ces spécifications, en
+commençant par les tests, chaque tâche étant revue par des agents distincts. Rôles,
+méthode, étapes et problèmes rencontrés sont décrits dans
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) (en anglais), et chaque commit porte une
 ligne `Co-Authored-By`.
 

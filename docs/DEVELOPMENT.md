@@ -2,14 +2,14 @@
 
 **English** · [Italiano](DEVELOPMENT.it.md)
 
-OLED Guard was built in four days (21-24 November 2026) with
-[Claude Code](https://claude.com/claude-code), Anthropic's coding agent. Claude Code
-wrote the code. I did the engineering around it: I defined the product and its
+I designed and shipped OLED Guard in four days (21-24 November 2026), leading the
+project from start to finish and using [Claude Code](https://claude.com/claude-code),
+Anthropic's coding agent, for the implementation. I defined the product and its
 constraints, approved every design and plan before any code existed, made the calls
-when there was a real trade-off, accepted each milestone on real hardware and decided
-what shipped.
+where there was a real trade-off, accepted each milestone on real hardware and decided
+what shipped. Claude Code wrote the code following those specs and plans.
 
-This page shows how that worked, with links to the evidence: specs, plans, commits
+This page documents how that worked, with links to the evidence: specs, plans, commits
 and tests.
 
 ## Who did what
@@ -72,44 +72,42 @@ An agent writes code fast, so the checks have to be fast and automatic too.
   decided, why, and what it would cost if wrong. I reviewed those calls instead of
   rediscovering them in the code.
 
-## What the real problems taught me
+## Issues found and how they were handled
 
-- **A compiler bug caught before the release.** The first CI run on GitHub failed on
-  one of the two Windows images: a statistics test got 18.35 instead of 100, while
-  everything passed on my PC. The first fix was based on a wrong guess, and CI
-  rejected it. So we stopped guessing: CI printed the data, then the generated
-  assembly. The newest Microsoft compiler (MSVC 14.52) built a position `{x, y}`
-  wrongly when `x` was a negative loop counter, turning `y` into -1. The app was
-  affected too: the Statistics page would have shown a wrong position map. The fix
-  avoids that pattern, new tests check the map cell by cell, and the release is built
-  with a compiler that gets it right
-  ([fix](https://github.com/fedefreak92/oled-guard/commit/f1cd25a)).
-- **Dimming the wrong areas.** The first dimming passed every synthetic test, but on my
-  real desktop it darkened the wrong zones. We added a diagnostics mode (statistics,
-  grid dumps, snapshots compared frame by frame), and from then on a visual feature was
-  done only when it looked right on the real screen
+- **Compiler miscompilation caught before the release.** CI detected that MSVC 14.52,
+  Microsoft's latest compiler, generated wrong code for a loop over the position map: a
+  statistics test returned 18.35 instead of 100, while the same code was correct with
+  MSVC 14.51 locally and 14.44 in CI. Impact: the Statistics page would have shown an
+  incorrect position map. A first fix, based on a hypothesis, failed CI; the analysis
+  then moved to the data, with cell values and generated assembly extracted from CI.
+  Root cause: the optimizer combined a negative 64-bit loop counter into a struct
+  argument without clearing its upper half. Resolution: the affected loops no longer
+  build that struct, regression tests check every cell, and releases are built with
+  MSVC 14.44 ([fix](https://github.com/fedefreak92/oled-guard/commit/f1cd25a)).
+- **Dimming validated only on synthetic data.** The first dimming implementation passed
+  every synthetic test but darkened the wrong areas on a real desktop. Resolution: a
+  diagnostics mode (statistics, grid dumps, frame snapshots), and visual features are
+  accepted only after verification on the real screen
   ([diagnostics](https://github.com/fedefreak92/oled-guard/commit/3fe5160)).
-- **The app covering itself.** In the live test of 1.2.0, the pause for protected
-  windows (password managers, protected video) never ended while OLED Guard's own
-  window was on top of them: the code ignored the app's windows completely, even as
-  covers. The log showed it within minutes, and it was fixed the same day
+- **Protected-window pause not ending.** The live acceptance test of 1.2.0 showed that
+  the pause for protected windows (password managers, protected video) did not end
+  while OLED Guard's own window covered them: the app's windows were excluded from the
+  occlusion check entirely. Found from the log during the test and fixed the same day
   ([fix](https://github.com/fedefreak92/oled-guard/commit/167b396)).
-- **Cutting a feature.** "Turn off display" was built and tested, but on my TV it did
-  nothing useful, and I realized I did not need it. I removed it instead of shipping
-  something that fails on the main target
-  ([removal](https://github.com/fedefreak92/oled-guard/commit/981befa)).
-- **Thinking about the user's evening.** The final review noticed that the "display not
-  found" notice would fire every evening for people who turn the TV off and leave the
-  PC on, which is the main audience. Now it appears only if the display was never seen
-  since the app started
-  ([fix](https://github.com/fedefreak92/oled-guard/commit/017986b)).
-- **Saying what is not tested.** I chose not to set up a Windows 10 virtual machine, so
-  CI checks the build, the tests and the startup on the Windows 10 generation instead.
-  The overlay itself has not run on a real Windows 10 PC, and the README says so.
+- **Feature removed after acceptance testing.** "Turn off display" worked as designed
+  but brought no benefit on the main target hardware, so it was removed rather than
+  shipped ([removal](https://github.com/fedefreak92/oled-guard/commit/981befa)).
+- **Notification behavior reviewed against real usage.** The final review found that the
+  "display not found" notice would fire every evening for users who switch off the TV
+  and leave the PC on, which is the main audience. It now fires only if the display was
+  never detected since the app started ([fix](https://github.com/fedefreak92/oled-guard/commit/017986b)).
+- **Test coverage stated explicitly.** Windows 10 is covered by CI (build, tests and
+  startup on the Windows 10 generation) rather than by a dedicated machine. The overlay
+  has not yet run on a physical Windows 10 PC, and the README says so.
 
 ## Numbers
 
-- 4 days, 110 commits, 6 specs and 6 plans
+- 4 days, 113 commits, 6 specs and 6 plans
 - About 20,000 lines of C++20, HLSL and JavaScript, about 4,900 of them tests
 - 339 automated tests, CI on two Windows versions
 - 5 languages, nothing to install beyond Windows and WebView2

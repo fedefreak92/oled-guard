@@ -2,14 +2,15 @@
 
 [English](DEVELOPMENT.md) · **Italiano**
 
-OLED Guard è stata sviluppata in quattro giorni (21-24 novembre 2026) con
-[Claude Code](https://claude.com/claude-code), l'agente di programmazione di
-Anthropic. Il codice l'ha scritto Claude Code. Io ho fatto il lavoro di ingegneria
-intorno al codice: ho definito il prodotto e i suoi vincoli, approvato ogni progetto e
-ogni piano prima che esistesse una riga di codice, preso le decisioni quando c'era una
-vera scelta, accettato ogni tappa su hardware vero e deciso cosa rilasciare.
+Ho progettato e pubblicato OLED Guard in quattro giorni (21-24 novembre 2026),
+guidando il progetto dall'inizio alla fine e usando
+[Claude Code](https://claude.com/claude-code), l'agente di programmazione di Anthropic,
+per lo sviluppo. Ho definito il prodotto e i suoi vincoli, approvato ogni progetto e
+ogni piano prima che esistesse una riga di codice, preso le decisioni dove c'era una
+vera scelta, accettato ogni tappa su hardware vero e deciso cosa rilasciare. Claude Code
+ha scritto il codice seguendo quelle spec e quei piani.
 
-Questa pagina mostra come ha funzionato, con i link alle prove: spec, piani, commit e
+Questa pagina documenta come ha funzionato, con i link alle prove: spec, piani, commit e
 test.
 
 ## Chi ha fatto cosa
@@ -73,48 +74,43 @@ automatici.
   cosa ha deciso, perché e quanto costerebbe se fosse sbagliato. Ho rivisto quelle
   scelte invece di riscoprirle nel codice.
 
-## Cosa mi hanno insegnato i problemi veri
+## Problemi riscontrati e come sono stati gestiti
 
-- **Un errore del compilatore trovato prima del rilascio.** La prima CI su GitHub è
-  fallita su una delle due immagini di Windows: un test delle statistiche dava 18,35
-  invece di 100, mentre sul mio PC passava tutto. La prima correzione partiva da
-  un'ipotesi sbagliata e la CI l'ha bocciata. Allora abbiamo smesso di tirare a
-  indovinare: la CI ha stampato i dati e poi l'assembly generato. Il compilatore
-  Microsoft più recente (MSVC 14.52) costruiva male una posizione `{x, y}` quando `x`
-  era un contatore di ciclo negativo, e `y` diventava -1. Toccava anche l'app: la
-  pagina Statistiche avrebbe mostrato una mappa delle posizioni sbagliata. La
-  correzione evita quello schema, nuovi test controllano la mappa cella per cella e il
-  rilascio si compila con un compilatore che la fa giusta
-  ([correzione](https://github.com/fedefreak92/oled-guard/commit/f1cd25a)).
-- **Scurire le zone sbagliate.** Il primo oscuramento passava tutti i test sintetici,
-  ma sul mio desktop vero scuriva le zone sbagliate. Abbiamo aggiunto una modalità di
-  diagnostica (statistiche, griglie e istantanee confrontate fotogramma per
-  fotogramma), e da lì in poi una funzione visiva era finita solo quando si vedeva
-  giusta sullo schermo vero
-  ([diagnostica](https://github.com/fedefreak92/oled-guard/commit/3fe5160)).
-- **L'app che copre se stessa.** Nella prova dal vivo della 1.2.0 la pausa per le
-  finestre protette (gestori di password, video protetti) non finiva mai mentre la
-  finestra di OLED Guard stava sopra di loro: il codice ignorava del tutto le finestre
-  dell'app, anche come copertura. Il log l'ha mostrato in pochi minuti ed è stato
-  corretto lo stesso giorno
-  ([correzione](https://github.com/fedefreak92/oled-guard/commit/167b396)).
-- **Togliere una funzione.** "Spegni schermo" era stata costruita e provata, ma sulla
-  mia TV non serviva a niente e ho capito che non mi era utile. L'ho tolta invece di
-  rilasciare qualcosa che non funziona sullo schermo principale
-  ([rimozione](https://github.com/fedefreak92/oled-guard/commit/981befa)).
-- **Pensare alla sera di chi la usa.** La revisione finale si è accorta che l'avviso
+- **Errore di compilazione rilevato prima del rilascio.** La CI ha rilevato che MSVC
+  14.52, l'ultima versione del compilatore Microsoft, generava codice sbagliato per un
+  ciclo sulla mappa delle posizioni: un test delle statistiche restituiva 18,35 invece
+  di 100, mentre lo stesso codice era corretto con MSVC 14.51 in locale e 14.44 in CI.
+  Impatto: la pagina Statistiche avrebbe mostrato una mappa delle posizioni errata. Una
+  prima correzione, basata su un'ipotesi, non ha superato la CI; l'analisi è quindi
+  passata ai dati, con i valori delle celle e l'assembly generato estratti dalla CI.
+  Causa: l'ottimizzatore univa un contatore di ciclo negativo a 64 bit a una struttura
+  passata come parametro senza azzerarne la metà alta. Soluzione: i cicli interessati
+  non costruiscono più quella struttura, test di regressione controllano ogni cella e le
+  release si compilano con MSVC 14.44 ([correzione](https://github.com/fedefreak92/oled-guard/commit/f1cd25a)).
+- **Oscuramento validato solo su dati sintetici.** La prima implementazione
+  dell'oscuramento superava tutti i test sintetici ma su un desktop reale scuriva le
+  zone sbagliate. Soluzione: una modalità di diagnostica (statistiche, griglie,
+  istantanee dei fotogrammi), e le funzioni visive si accettano solo dopo la verifica
+  sullo schermo vero ([diagnostica](https://github.com/fedefreak92/oled-guard/commit/3fe5160)).
+- **Pausa per le finestre protette che non terminava.** La prova di accettazione dal
+  vivo della 1.2.0 ha mostrato che la pausa per le finestre protette (gestori di
+  password, video protetti) non terminava mentre la finestra di OLED Guard le copriva:
+  le finestre dell'app erano escluse del tutto dal controllo delle coperture. Individuato
+  dal log durante la prova e corretto lo stesso giorno ([correzione](https://github.com/fedefreak92/oled-guard/commit/167b396)).
+- **Funzione tolta dopo la prova di accettazione.** "Spegni schermo" funzionava come
+  previsto ma non portava benefici sull'hardware di riferimento, quindi è stata tolta
+  invece di essere rilasciata ([rimozione](https://github.com/fedefreak92/oled-guard/commit/981befa)).
+- **Notifiche riviste sull'uso reale.** La revisione finale ha rilevato che l'avviso
   "schermo non trovato" sarebbe comparso ogni sera a chi spegne la TV e lascia il PC
-  acceso, cioè il pubblico principale. Ora compare solo se lo schermo non si è mai
-  visto da quando l'app è partita
-  ([correzione](https://github.com/fedefreak92/oled-guard/commit/017986b)).
-- **Dire cosa non è provato.** Ho scelto di non preparare una macchina virtuale con
-  Windows 10, quindi la CI controlla compilazione, test e avvio sulla generazione di
-  Windows 10. L'overlay non è mai girato su un PC con Windows 10 vero, e il README lo
-  dice.
+  acceso, cioè il pubblico principale. Ora compare solo se lo schermo non è mai stato
+  rilevato da quando l'app è partita ([correzione](https://github.com/fedefreak92/oled-guard/commit/017986b)).
+- **Copertura dei test dichiarata.** Windows 10 è coperto dalla CI (compilazione, test e
+  avvio sulla generazione di Windows 10) invece che da una macchina dedicata. L'overlay
+  non è ancora girato su un PC con Windows 10 vero, e il README lo dice.
 
 ## Numeri
 
-- 4 giorni, 110 commit, 6 spec e 6 piani
+- 4 giorni, 113 commit, 6 spec e 6 piani
 - Circa 20.000 righe di C++20, HLSL e JavaScript, di cui circa 4.900 di test
 - 339 test automatici, CI su due versioni di Windows
 - 5 lingue, niente da installare oltre a Windows e WebView2

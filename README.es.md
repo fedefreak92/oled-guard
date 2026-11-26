@@ -6,8 +6,8 @@
 [English](README.md) · [Italiano](README.it.md) · **Español** · [Deutsch](README.de.md) · [Français](README.fr.md)
 
 > **Un proyecto de ingeniería de software asistida por IA.** Diseñé, dirigí y probé
-> OLED Guard; el código lo escribió [Claude Code](https://claude.com/claude-code) a
-> partir de especificaciones y planes que aprobé. [Cómo se desarrolló →](docs/DEVELOPMENT.md) (en inglés)
+> OLED Guard, usando [Claude Code](https://claude.com/claude-code) para el desarrollo: el agente escribió el
+> código siguiendo las especificaciones y los planes que aprobé. [Cómo se desarrolló →](docs/DEVELOPMENT.md) (en inglés)
 
 > Traducción automática pendiente de revisión por un hablante nativo. Las correcciones
 > son bienvenidas. La versión de referencia es la [inglesa](README.md).
@@ -164,14 +164,14 @@ comunica con la pantalla ni modifica su firmware.
 
 ## Cómo se ha desarrollado
 
-Desarrollé OLED Guard en cuatro días con Claude Code como agente de programación,
-trabajando como product owner y responsable técnico: fijé el alcance y las
-restricciones, aprobé cada especificación y cada plan antes de implementarlos, probé
-cada etapa en hardware real y decidí qué se publicaba. Claude Code escribió el
-código, las pruebas y la documentación, empezando por las pruebas, con cada tarea
-revisada por agentes distintos. La historia completa está en
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) (en inglés), y cada commit lleva una línea
-`Co-Authored-By`.
+Diseñé y publiqué OLED Guard en cuatro días, dirigiendo el proyecto de principio a
+fin y usando Claude Code para el desarrollo. Fijé el alcance y las restricciones,
+aprobé cada especificación y cada plan antes de implementarlos, probé cada etapa en
+hardware real y decidí qué se publicaba. Claude Code escribió el código, las pruebas y
+la documentación siguiendo esas especificaciones, empezando por las pruebas, con cada
+tarea revisada por agentes distintos. Roles, método, etapas y problemas encontrados
+están en [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) (en inglés), y cada commit lleva
+una línea `Co-Authored-By`.
 
 ## Licencia
 

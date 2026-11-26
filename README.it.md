@@ -5,9 +5,9 @@
 
 [English](README.md) · **Italiano** · [Español](README.es.md) · [Deutsch](README.de.md) · [Français](README.fr.md)
 
-> **Un progetto di ingegneria del software con l'IA.** Ho progettato, diretto e
-> provato OLED Guard; il codice l'ha scritto [Claude Code](https://claude.com/claude-code)
-> a partire da spec e piani approvati da me. [Come è stata sviluppata →](docs/DEVELOPMENT.it.md)
+> **Un progetto di ingegneria del software con l'IA.** Ho progettato, guidato e
+> provato OLED Guard, usando [Claude Code](https://claude.com/claude-code) per lo sviluppo: l'agente ha
+> scritto il codice seguendo le spec e i piani approvati da me. [Come è stata sviluppata →](docs/DEVELOPMENT.it.md)
 
 Un'app per Windows che protegge dal burn-in un monitor o una TV OLED usati col PC.
 Molte TV OLED non hanno una protezione pensata per l'uso col PC, dove barra delle
@@ -40,7 +40,7 @@ da molto tempo (barra, icone, loghi) e mostra segnali dal vivo e statistiche d'u
 - **Un errore del compilatore trovato prima del rilascio.** La CI ha scoperto che MSVC
   14.52 compila male un ciclo sulla mappa delle posizioni. La causa è stata trovata
   nell'assembly generato e corretta con test di regressione
-  ([la storia](docs/DEVELOPMENT.it.md#cosa-mi-hanno-insegnato-i-problemi-veri),
+  ([la storia](docs/DEVELOPMENT.it.md#problemi-riscontrati-e-come-sono-stati-gestiti),
   [la correzione](https://github.com/fedefreak92/oled-guard/commit/f1cd25a)).
 - **Costruita in quattro giorni con Claude Code**, partendo da spec e test, con ogni
   tappa accettata su hardware vero ([come è stata sviluppata](docs/DEVELOPMENT.it.md)).
@@ -261,16 +261,16 @@ comunica con lo schermo e non ne modifica il firmware.
 
 ## Come è stata sviluppata
 
-Ho sviluppato OLED Guard in quattro giorni con Claude Code come agente di
-programmazione, lavorando da product owner e responsabile tecnico: ho fissato
-obiettivi e vincoli, approvato ogni spec di design e ogni piano prima
-dell'implementazione, provato ogni tappa su hardware vero e deciso cosa rilasciare.
-Claude Code ha scritto codice, test e documentazione, partendo dai test, con ogni
+Ho progettato e pubblicato OLED Guard in quattro giorni, guidando il progetto
+dall'inizio alla fine e usando Claude Code per lo sviluppo. Ho fissato obiettivi e
+vincoli, approvato ogni spec di design e ogni piano prima dell'implementazione,
+provato ogni tappa su hardware vero e deciso cosa rilasciare. Claude Code ha scritto
+codice, test e documentazione seguendo quelle spec, partendo dai test, con ogni
 attività revisionata da agenti separati.
 
-[docs/DEVELOPMENT.it.md](docs/DEVELOPMENT.it.md) racconta tutto: chi ha fatto cosa,
-il metodo, le tappe e i problemi veri trovati lungo la strada. Spec e piani sono in
-[`docs/superpowers`](docs/superpowers), e ogni commit ha una riga `Co-Authored-By`.
+[docs/DEVELOPMENT.it.md](docs/DEVELOPMENT.it.md) descrive ruoli, metodo, tappe e
+problemi riscontrati. Spec e piani sono in [`docs/superpowers`](docs/superpowers), e
+ogni commit ha una riga `Co-Authored-By`.
 
 ## Licenza
 

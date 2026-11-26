@@ -5,9 +5,9 @@
 
 **English** · [Italiano](README.it.md) · [Español](README.es.md) · [Deutsch](README.de.md) · [Français](README.fr.md)
 
-> **An AI-assisted engineering project.** I designed, directed and tested OLED Guard;
-> the code was written by [Claude Code](https://claude.com/claude-code) from specs and
-> plans I approved. [How it was built →](docs/DEVELOPMENT.md)
+> **An AI-assisted engineering project.** I designed, led and tested OLED Guard, using
+> [Claude Code](https://claude.com/claude-code) for the implementation: the agent wrote the code following the
+> specs and plans I approved. [How it was built →](docs/DEVELOPMENT.md)
 
 A Windows app that protects an OLED monitor or TV used with a PC from burn-in.
 Many OLED TVs have no protection designed for PC use, where the taskbar, icons and
@@ -39,7 +39,7 @@ and shows live signals and usage statistics.
   generations.
 - **A compiler bug caught before release.** CI found that MSVC 14.52 miscompiles a
   loop over the position map. It was traced in the generated assembly and fixed with
-  regression tests ([the story](docs/DEVELOPMENT.md#what-the-real-problems-taught-me),
+  regression tests ([the story](docs/DEVELOPMENT.md#issues-found-and-how-they-were-handled),
   [the fix](https://github.com/fedefreak92/oled-guard/commit/f1cd25a)).
 - **Built in four days with Claude Code**, spec first and test first, with every
   milestone accepted on real hardware ([how it was built](docs/DEVELOPMENT.md)).
@@ -253,16 +253,17 @@ firmware.
 
 ## How it was built
 
-I built OLED Guard in four days with Claude Code as the coding agent, working as
-product owner and technical lead: I set the scope and the constraints, approved every
-design spec and plan before implementation, tested each milestone on real hardware
-and decided what shipped. Claude Code wrote the code, the tests and the docs, test
-first, with every task reviewed by separate agents.
+I designed and shipped OLED Guard in four days, leading the project from start to
+finish and using Claude Code for the implementation. I set the scope and the
+constraints, approved every design spec and plan before implementation, tested each
+milestone on real hardware and decided what shipped. Claude Code wrote the code, the
+tests and the docs following those specs, test first, with every task reviewed by
+separate agents.
 
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) tells the whole story: who did what, the
-method, the milestones and the real problems found along the way. The specs and
-plans are in [`docs/superpowers`](docs/superpowers) (in Italian), and every commit
-carries a `Co-Authored-By` line.
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) covers roles, method, milestones and the
+issues found along the way. The specs and plans are in
+[`docs/superpowers`](docs/superpowers) (in Italian), and every commit carries a
+`Co-Authored-By` line.
 
 ## License
 
