@@ -36,6 +36,18 @@ struct DiagnosticsInput {
 
 inline constexpr size_t kDiagnosticsLogLines = 500;
 
+// Contatori del thread di disegno: l'ultima finestra di 10 s e i totali dall'avvio
+// dell'app (aggiornati alla fine di ogni finestra).
+struct RenderCounters {
+  uint64_t last_copied = 0, last_skipped = 0;
+  uint64_t total_copied = 0, total_skipped = 0;
+  int sessions = 0;
+  uint64_t measured_s = 0;  // secondi coperti dai totali
+};
+
+// Riga "render: ..." della sezione "## Render".
+std::string RenderStatsLine(const RenderCounters& c);
+
 // Sezioni "## System", "## GPUs", "## Displays", "## Config", "## Render",
 // "## Log (last N lines)"; del log solo le ultime kDiagnosticsLogLines righe.
 std::string BuildDiagnostics(const DiagnosticsInput& in);

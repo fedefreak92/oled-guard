@@ -17,6 +17,13 @@ std::string Join(const std::vector<std::string>& items, const char* sep) {
 
 }  // namespace
 
+std::string RenderStatsLine(const RenderCounters& c) {
+  return "render: last 10 s: " + std::to_string(c.last_copied) + " frames copied, " + std::to_string(c.last_skipped) +
+         " skipped; since start (" + std::to_string(c.measured_s) + " s): " + std::to_string(c.total_copied) +
+         " frames copied, " + std::to_string(c.total_skipped) + " skipped; sessions started " +
+         std::to_string(c.sessions);
+}
+
 std::string BuildDiagnostics(const DiagnosticsInput& in) {
   std::ostringstream o;
   o << "OLED Guard diagnostics\n"

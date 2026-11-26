@@ -93,3 +93,18 @@ TEST(diagnostics_empty_input_is_valid) {
   }
   CHECK(Pos(text, "none") != std::string::npos);
 }
+
+// Statistiche di disegno: ultimi 10 s e totali dall'avvio.
+TEST(diagnostics_render_stats_line) {
+  oled::RenderCounters c;
+  c.last_copied = 590;
+  c.last_skipped = 4;
+  c.total_copied = 123456;
+  c.total_skipped = 78;
+  c.sessions = 2;
+  c.measured_s = 7200;
+  const std::string line = oled::RenderStatsLine(c);
+  CHECK(Pos(line, "last 10 s: 590 frames copied, 4 skipped") != std::string::npos);
+  CHECK(Pos(line, "since start (7200 s): 123456 frames copied, 78 skipped") != std::string::npos);
+  CHECK(Pos(line, "sessions started 2") != std::string::npos);
+}

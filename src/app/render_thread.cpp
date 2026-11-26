@@ -9,6 +9,7 @@
 #include "capture.h"
 #include "clock.h"
 #include "d3d_device.h"
+#include "diagnostics_report.h"
 #include "dim_diagnostics.h"
 #include "dim_stats.h"
 #include "dim_schedule.h"
@@ -97,8 +98,14 @@ void RenderThread::Run() {
 }
 
 std::string RenderThread::StatsLine() const {
-  return "render: last 10 s " + std::to_string(last_copied_.load()) + " frames copied, " +
-         std::to_string(last_skipped_.load()) + " skipped; sessions started " + std::to_string(sessions_.load());
+  RenderCounters c;
+  c.last_copied = last_copied_.load();
+  c.last_skipped = last_skipped_.load();
+  c.total_copied = total_copied_.load();
+  c.total_skipped = total_skipped_.load();
+  c.sessions = sessions_.load();
+  c.measured_s = measured_ms_.load() / 1000;
+  return RenderStatsLine(c);
 }
 
 RenderThread::SessionEnd RenderThread::RunSession() {
@@ -434,6 +441,9 @@ RenderThread::SessionEnd RenderThread::RunSession() {
       LogDebug("Render: ultimi 10 s {} frame copiati, {} ignorati", capture.frames_copied, capture.frames_skipped);
       last_copied_ = capture.frames_copied;
       last_skipped_ = capture.frames_skipped;
+      total_copied_ += capture.frames_copied;
+      total_skipped_ += capture.frames_skipped;
+      measured_ms_ += static_cast<uint64_t>(now - stats_since);
       capture.frames_copied = 0;
       capture.frames_skipped = 0;
       stats_since = now;
