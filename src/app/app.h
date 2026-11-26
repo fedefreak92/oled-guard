@@ -65,6 +65,8 @@ class App {
   // Notifica nella tray; se la tray non esiste ancora la mostra appena creata.
   // Notifica nella tray: titolo e testo sono chiavi di traduzione.
   void ShowNotice(std::string_view title_key, std::string_view body_key, const I18nParams& params = {});
+  // Come ShowNotice, con testi gia' tradotti (plurali).
+  void ShowNoticeText(const std::wstring& title, const std::wstring& text);
   // Testo tradotto nella lingua attiva.
   std::wstring T(std::string_view key, const I18nParams& params = {}) const;
   // Impostazione "monitor" da mostrare all'utente: "Scelta automatica", "Schermo 2" per

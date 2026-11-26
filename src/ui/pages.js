@@ -148,7 +148,7 @@ PAGES.panoramica = {
       for (const e of store.activity.slice(0, 30)) {
         list.append(h('div.act', { cls: e.kind },
           h('span.ai', null, icon(ACTIVITY_ICONS[e.kind] || 'info')),
-          h('span', { text: t(e.key, e.params) + (e.count > 1 ? ` ×${e.count}` : '') }),
+          h('span', { text: tMsg(e.key, e.params) + (e.count > 1 ? ` ×${e.count}` : '') }),
           h('time', { text: fmtWhen(e.t) })));
       }
     };
@@ -565,17 +565,23 @@ function drawRiskChart(box, values, endLocalS, bucketS) {
   };
   values.forEach((v, i) => { if (v === null) flush(); else run.push([i, v]); });
   flush();
+  // Solo numeri e coordinate passano dal markup; le etichette (testi tradotti e date)
+  // sono nodi con textContent, mai HTML.
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${grid}<path class="area" d="${area}"/><path class="line" d="${line}"/></svg>`;
+  const svg = box.firstElementChild;
   // Etichette: ora locale (il secondo "locale" trattato come UTC).
-  let labels = '';
   for (let k = 0; k <= 4; k++) {
     const i = Math.round((k / 4) * (n - 1));
     const d = new Date((endLocalS - (n - 1 - i) * bucketS) * 1000);
-    const text = k === 4 ? t('stats.chart.now') : (bucketS >= 3600
+    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    label.setAttribute('class', 'axis');
+    label.setAttribute('x', Math.min(W - 24, Math.max(left, x(i) - 14)));
+    label.setAttribute('y', H - 4);
+    label.textContent = k === 4 ? t('stats.chart.now') : (bucketS >= 3600
       ? d.toLocaleDateString(store.lang, { weekday: 'short', timeZone: 'UTC' })
       : `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`);
-    labels += `<text class="axis" x="${Math.min(W - 24, Math.max(left, x(i) - 14))}" y="${H - 4}">${text}</text>`;
+    svg.append(label);
   }
-  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${grid}<path class="area" d="${area}"/><path class="line" d="${line}"/>${labels}</svg>`;
 }
 
 PAGES.statistiche = {
@@ -684,7 +690,7 @@ PAGES.statistiche = {
             cell.classList.toggle('hot', has && i === w.hottest);
           });
           const since = has ? new Date(w.since * 1000).toLocaleDateString(store.lang, { day: '2-digit', month: '2-digit', timeZone: 'UTC' }) : '-';
-          setText(w1b, has ? `${Math.round(w.measured_hours)} h` : '-');
+          setText(w1b, has ? t('unit.h', { n: fmtNumber(Math.round(w.measured_hours)) }) : '-');
           setText(w1s, has ? t('stats.wear.since', { date: since }) : '');
           setText(w2b, has ? t(w.hottest_key) : '-');
           setText(w2s, has ? t('stats.wear.full_white', { h: fmtNumber(w.hottest_hours, 1) }) : '');
@@ -990,7 +996,7 @@ PAGES.impostazioni = {
     start.body.append(settingRow(t('tray.autostart'), t('settings.start.desc'), autostart.el));
 
     const awayToggle = toggle((v) => setConfig({ away_enabled: v }));
-    const awayAfter = slider({ min: 1, max: 60, step: 1, format: (v) => `${v} min`, onInput: throttledConfig('away_after_min') });
+    const awayAfter = slider({ min: 1, max: 60, step: 1, format: (v) => t('unit.min', { n: fmtNumber(v) }), onInput: throttledConfig('away_after_min') });
     const awayLevel = slider({ min: 10, max: 80, step: 1, format: (v) => `${v}%`, onInput: throttledConfig('away_brightness_pct') });
     const awayRows = [
       settingRow(t('settings.away.after'), t('settings.away.after.desc'), awayAfter.el, { wide: true }),
@@ -1028,7 +1034,7 @@ PAGES.impostazioni = {
     // Notifiche: avviso per il rischio non protetto.
     const alertToggle = toggle((v) => setConfig({ alert_enabled: v }));
     const alertLevel = segmented([['low', t('settings.alert.low', { pct: fmtPct(10) })], ['medium', t('settings.alert.medium', { pct: fmtPct(20) })], ['high', t('settings.alert.high', { pct: fmtPct(35) })]], (v) => setConfig({ alert_threshold: v }));
-    const alertAfter = slider({ min: 5, max: 240, step: 5, format: (v) => `${v} min`, onInput: throttledConfig('alert_after_min') });
+    const alertAfter = slider({ min: 5, max: 240, step: 5, format: (v) => t('unit.min', { n: fmtNumber(v) }), onInput: throttledConfig('alert_after_min') });
     const alertRows = [
       settingRow(t('settings.alert.threshold'), t('settings.alert.threshold.desc'), alertLevel.el, { wide: true }),
       settingRow(t('settings.alert.after'), t('settings.alert.after.desc'), alertAfter.el, { wide: true }),

@@ -15,7 +15,8 @@
   "pause.reason.notification_state": "Jeu ou app en plein écran",
   "pause.reason.fullscreen_window": "Fenêtre en plein écran",
   "activity.config_invalid": "Configuration non valide : détails dans le journal",
-  "activity.config_warnings": "Configuration : {n} valeurs remplacées par les valeurs par défaut",
+  "activity.config_warnings_one": "Configuration : {n} valeur remplacée par la valeur par défaut",
+  "activity.config_warnings_other": "Configuration : {n} valeurs remplacées par les valeurs par défaut",
   "activity.monitor_protected": "Écran protégé : {name}",
   "activity.alert": "Alerte : écran immobile et non protégé depuis {min} min",
   "activity.paused": "En pause : {reason}",
@@ -81,7 +82,8 @@
   "notice.config_unreadable.body": "Le fichier est illisible : valeurs par défaut jusqu'à ce que tu le corriges. Détails dans le journal.",
   "notice.config_bad_json.body": "Le fichier n'est pas un JSON valide : les valeurs précédentes sont conservées. Détails dans le journal.",
   "notice.config.title": "Configuration",
-  "notice.config_warnings.body": "{n} avertissements : certaines valeurs ont été remplacées par les valeurs par défaut. Détails dans le journal.",
+  "notice.config_warnings.body_one": "{n} avertissement : une valeur a été remplacée par la valeur par défaut. Détails dans le journal.",
+  "notice.config_warnings.body_other": "{n} avertissements : certaines valeurs ont été remplacées par les valeurs par défaut. Détails dans le journal.",
   "notice.config_not_saved.title": "Configuration non enregistrée",
   "notice.config_not_saved.body": "Le fichier contient des erreurs : la modification vaut jusqu'à la fermeture de l'app. Corrige le fichier pour l'enregistrer.",
   "notice.config_save_failed.body": "Impossible d'enregistrer le fichier.",
@@ -148,6 +150,8 @@
   "common.na": "n/d",
   "unit.min": "{n} min",
   "unit.h": "{n} h",
+  "unit.clock_hm": "{h} h {m} min",
+  "unit.clock_ms": "{m} min {s} s",
   "time.never": "jamais",
   "time.now": "à l'instant",
   "time.today_at": "aujourd'hui {time}",
@@ -497,5 +501,5 @@
   "advanced.diag.export": "Exporter le diagnostic",
   "advanced.diag.export.desc": "Enregistre dans Documents un fichier texte avec la version de Windows, les cartes graphiques, les écrans, la configuration et la fin du journal. Joins-le à ton rapport sur GitHub.",
   "advanced.diag.button": "Exporter",
-  "advanced.diag.privacy": "Lis le fichier avant de le partager : la configuration contient les noms des apps de tes règles. Rien n'est envoyé automatiquement."
+  "advanced.diag.privacy": "Lis le fichier avant de le partager : la configuration contient les noms des apps de tes règles, et ton nom d'utilisateur Windows peut apparaître dans les chemins de fichiers et les noms de processus. Rien n'est envoyé automatiquement."
 }

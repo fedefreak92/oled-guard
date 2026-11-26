@@ -15,7 +15,8 @@
   "pause.reason.notification_state": "Spiel oder Vollbild-App",
   "pause.reason.fullscreen_window": "Vollbildfenster",
   "activity.config_invalid": "Ungültige Konfiguration: Details im Protokoll",
-  "activity.config_warnings": "Konfiguration: {n} Werte durch Standardwerte ersetzt",
+  "activity.config_warnings_one": "Konfiguration: {n} Wert durch den Standardwert ersetzt",
+  "activity.config_warnings_other": "Konfiguration: {n} Werte durch Standardwerte ersetzt",
   "activity.monitor_protected": "Geschützter Bildschirm: {name}",
   "activity.alert": "Warnung: Bildschirm seit {min} Min. unbewegt und ungeschützt",
   "activity.paused": "Pausiert: {reason}",
@@ -81,7 +82,8 @@
   "notice.config_unreadable.body": "Die Datei kann nicht gelesen werden: Standardwerte gelten, bis du sie korrigierst. Details im Protokoll.",
   "notice.config_bad_json.body": "Die Datei ist kein gültiges JSON: Die bisherigen Werte bleiben. Details im Protokoll.",
   "notice.config.title": "Konfiguration",
-  "notice.config_warnings.body": "{n} Warnungen: Einige Werte wurden durch Standardwerte ersetzt. Details im Protokoll.",
+  "notice.config_warnings.body_one": "{n} Warnung: Ein Wert wurde durch den Standardwert ersetzt. Details im Protokoll.",
+  "notice.config_warnings.body_other": "{n} Warnungen: Einige Werte wurden durch Standardwerte ersetzt. Details im Protokoll.",
   "notice.config_not_saved.title": "Konfiguration nicht gespeichert",
   "notice.config_not_saved.body": "Die Datei enthält Fehler: Die Änderung gilt bis zum Schließen der App. Korrigiere die Datei, um sie zu speichern.",
   "notice.config_save_failed.body": "Die Datei konnte nicht gespeichert werden.",
@@ -148,6 +150,8 @@
   "common.na": "k. A.",
   "unit.min": "{n} Min.",
   "unit.h": "{n} h",
+  "unit.clock_hm": "{h} h {m} Min.",
+  "unit.clock_ms": "{m} Min. {s} s",
   "time.never": "nie",
   "time.now": "gerade eben",
   "time.today_at": "heute {time}",
@@ -497,5 +501,5 @@
   "advanced.diag.export": "Diagnose exportieren",
   "advanced.diag.export.desc": "Speichert in Dokumente eine Textdatei mit Windows-Version, Grafikkarten, Bildschirmen, Konfiguration und dem Ende des Protokolls. Hänge sie an deinen Bericht auf GitHub an.",
   "advanced.diag.button": "Exportieren",
-  "advanced.diag.privacy": "Lies die Datei, bevor du sie teilst: Die Konfiguration enthält die Namen der Apps in deinen Regeln. Es wird nichts automatisch gesendet."
+  "advanced.diag.privacy": "Lies die Datei, bevor du sie teilst: Die Konfiguration enthält die Namen der Apps in deinen Regeln, und dein Windows-Benutzername kann in Dateipfaden und Prozessnamen vorkommen. Es wird nichts automatisch gesendet."
 }

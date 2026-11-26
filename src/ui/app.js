@@ -57,6 +57,15 @@ function tp(key, n, params) {
   const form = new Intl.PluralRules(store.lang).select(n) === 'one' ? '_one' : '_other';
   return t(key + form, { n: fmtNumber(n), ...params });
 }
+// Chiave arrivata dall'app (attivita', avvisi): se e' un plurale (key_one/key_other) e
+// c'e' il parametro n, sceglie la forma come tp().
+function tMsg(key, params) {
+  if (params && params.n !== undefined && store.strings[key] === undefined && store.strings[key + '_other'] !== undefined) {
+    const { n, ...rest } = params;
+    return tp(key, Number(n), rest);
+  }
+  return t(key, params);
+}
 // Testi fissi di index.html: data-i18n (contenuto) e data-i18n-title (suggerimento).
 function applyStaticStrings() {
   document.documentElement.lang = store.lang;
@@ -102,7 +111,7 @@ function receive(msg) {
       }
       store.signalsVersion++;
       break;
-    case 'notice': toast(t(msg.key, msg.params)); return;
+    case 'notice': toast(tMsg(msg.key, msg.params)); return;
     case 'navigate': showPage(msg.page); return;
     case 'processes': case 'browsed': break;
     default: store[msg.type] = msg;
@@ -143,7 +152,7 @@ const fmtMin = (s) => t('unit.min', { n: fmtNumber(Math.round(s / 6) / 10, Numbe
 function fmtClock(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
-  return h > 0 ? `${h}h ${pad2(m)}m` : `${m}m ${pad2(s % 60)}s`;
+  return h > 0 ? t('unit.clock_hm', { h, m: pad2(m) }) : t('unit.clock_ms', { m, s: pad2(s % 60) });
 }
 function fmtHours(ms) {
   const h = ms / 3600000;

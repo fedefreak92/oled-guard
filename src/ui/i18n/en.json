@@ -15,7 +15,8 @@
   "pause.reason.notification_state": "Game or full-screen app",
   "pause.reason.fullscreen_window": "Full-screen window",
   "activity.config_invalid": "Invalid configuration: details in the log",
-  "activity.config_warnings": "Configuration: {n} values replaced with defaults",
+  "activity.config_warnings_one": "Configuration: {n} value replaced with its default",
+  "activity.config_warnings_other": "Configuration: {n} values replaced with defaults",
   "activity.monitor_protected": "Protected display: {name}",
   "activity.alert": "Alert: still, unprotected screen for {min} min",
   "activity.paused": "Paused: {reason}",
@@ -81,7 +82,8 @@
   "notice.config_unreadable.body": "The file can't be read: using defaults until you fix it. Details in the log.",
   "notice.config_bad_json.body": "The file isn't valid JSON: keeping the previous values. Details in the log.",
   "notice.config.title": "Configuration",
-  "notice.config_warnings.body": "{n} warnings: some values were replaced with defaults. Details in the log.",
+  "notice.config_warnings.body_one": "{n} warning: one value was replaced with its default. Details in the log.",
+  "notice.config_warnings.body_other": "{n} warnings: some values were replaced with defaults. Details in the log.",
   "notice.config_not_saved.title": "Configuration not saved",
   "notice.config_not_saved.body": "The file has errors: the change lasts until you close the app. Fix the file to save it.",
   "notice.config_save_failed.body": "The file couldn't be saved.",
@@ -148,6 +150,8 @@
   "common.na": "n/a",
   "unit.min": "{n} min",
   "unit.h": "{n} h",
+  "unit.clock_hm": "{h}h {m}m",
+  "unit.clock_ms": "{m}m {s}s",
   "time.never": "never",
   "time.now": "just now",
   "time.today_at": "today {time}",
@@ -497,5 +501,5 @@
   "advanced.diag.export": "Export diagnostics",
   "advanced.diag.export.desc": "Saves a text file in Documents with Windows version, GPUs, displays, configuration and the end of the log. Attach it to your report on GitHub.",
   "advanced.diag.button": "Export",
-  "advanced.diag.privacy": "Read the file before sharing it: the configuration contains the names of the apps in your rules. Nothing is sent automatically."
+  "advanced.diag.privacy": "Read the file before sharing it: the configuration contains the names of the apps in your rules, and your Windows user name can appear in file paths and process names. Nothing is sent automatically."
 }

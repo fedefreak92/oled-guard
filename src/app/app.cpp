@@ -291,8 +291,10 @@ void App::ApplyLanguage() {
 }
 
 void App::ShowNotice(std::string_view title_key, std::string_view body_key, const I18nParams& params) {
-  const std::wstring title = T(title_key);
-  const std::wstring text = T(body_key, params);
+  ShowNoticeText(T(title_key), T(body_key, params));
+}
+
+void App::ShowNoticeText(const std::wstring& title, const std::wstring& text) {
   LogDebug("Notifica{}: {} - {}", tray_ready_ ? "" : " (in attesa della tray)", Narrow(title), Narrow(text));
   if (tray_ready_) {
     tray_.ShowBalloon(title, text);
@@ -317,7 +319,8 @@ void App::ReportConfigWarnings(const ConfigLoadResult& result, bool at_startup) 
   } else if (result.parse_failed) {
     ShowNotice("notice.config_invalid.title", "notice.config_bad_json.body");
   } else if (!result.warnings.empty()) {
-    ShowNotice("notice.config.title", "notice.config_warnings.body", {{"n", std::to_string(result.warnings.size())}});
+    ShowNoticeText(T("notice.config.title"),
+                   Widen(tr_.Plural("notice.config_warnings.body", static_cast<double>(result.warnings.size()))));
   }
 }
 

@@ -15,7 +15,8 @@
   "pause.reason.notification_state": "Gioco o app a schermo intero",
   "pause.reason.fullscreen_window": "Finestra a tutto schermo",
   "activity.config_invalid": "Configurazione non valida: dettagli nel log",
-  "activity.config_warnings": "Configurazione: {n} valori sostituiti con i predefiniti",
+  "activity.config_warnings_one": "Configurazione: {n} valore sostituito con il predefinito",
+  "activity.config_warnings_other": "Configurazione: {n} valori sostituiti con i predefiniti",
   "activity.monitor_protected": "Schermo protetto: {name}",
   "activity.alert": "Avviso: schermo fermo e non protetto da {min} min",
   "activity.paused": "In pausa: {reason}",
@@ -81,7 +82,8 @@
   "notice.config_unreadable.body": "Il file non si legge: uso i valori predefiniti finché non lo correggi. Dettagli nel log.",
   "notice.config_bad_json.body": "Il file non è un JSON valido: tengo i valori precedenti. Dettagli nel log.",
   "notice.config.title": "Configurazione",
-  "notice.config_warnings.body": "{n} avvisi: alcuni valori sono stati sostituiti con i predefiniti. Dettagli nel log.",
+  "notice.config_warnings.body_one": "{n} avviso: un valore è stato sostituito con il predefinito. Dettagli nel log.",
+  "notice.config_warnings.body_other": "{n} avvisi: alcuni valori sono stati sostituiti con i predefiniti. Dettagli nel log.",
   "notice.config_not_saved.title": "Configurazione non salvata",
   "notice.config_not_saved.body": "Il file contiene errori: la modifica vale fino alla chiusura. Correggi il file per salvarla.",
   "notice.config_save_failed.body": "Impossibile salvare il file.",
@@ -148,6 +150,8 @@
   "common.na": "n/d",
   "unit.min": "{n} min",
   "unit.h": "{n} h",
+  "unit.clock_hm": "{h}h {m}m",
+  "unit.clock_ms": "{m}m {s}s",
   "time.never": "mai",
   "time.now": "adesso",
   "time.today_at": "oggi {time}",
@@ -497,5 +501,5 @@
   "advanced.diag.export": "Esporta diagnostica",
   "advanced.diag.export.desc": "Salva in Documenti un file di testo con versione di Windows, schede video, schermi, configurazione e la fine del log. Allegalo alla segnalazione su GitHub.",
   "advanced.diag.button": "Esporta",
-  "advanced.diag.privacy": "Leggi il file prima di condividerlo: la configurazione contiene i nomi delle app nelle tue regole. Non viene inviato nulla in automatico."
+  "advanced.diag.privacy": "Leggi il file prima di condividerlo: la configurazione contiene i nomi delle app nelle tue regole, e il tuo nome utente di Windows può comparire nei percorsi dei file e nei nomi dei processi. Non viene inviato nulla in automatico."
 }

@@ -15,7 +15,8 @@
   "pause.reason.notification_state": "Juego o app a pantalla completa",
   "pause.reason.fullscreen_window": "Ventana a pantalla completa",
   "activity.config_invalid": "Configuración no válida: detalles en el registro",
-  "activity.config_warnings": "Configuración: {n} valores sustituidos por los predeterminados",
+  "activity.config_warnings_one": "Configuración: {n} valor sustituido por el predeterminado",
+  "activity.config_warnings_other": "Configuración: {n} valores sustituidos por los predeterminados",
   "activity.monitor_protected": "Pantalla protegida: {name}",
   "activity.alert": "Aviso: pantalla quieta y sin proteger desde hace {min} min",
   "activity.paused": "En pausa: {reason}",
@@ -81,7 +82,8 @@
   "notice.config_unreadable.body": "No se puede leer el archivo: uso los valores predeterminados hasta que lo corrijas. Detalles en el registro.",
   "notice.config_bad_json.body": "El archivo no es un JSON válido: mantengo los valores anteriores. Detalles en el registro.",
   "notice.config.title": "Configuración",
-  "notice.config_warnings.body": "{n} avisos: algunos valores se han sustituido por los predeterminados. Detalles en el registro.",
+  "notice.config_warnings.body_one": "{n} aviso: un valor se ha sustituido por el predeterminado. Detalles en el registro.",
+  "notice.config_warnings.body_other": "{n} avisos: algunos valores se han sustituido por los predeterminados. Detalles en el registro.",
   "notice.config_not_saved.title": "Configuración no guardada",
   "notice.config_not_saved.body": "El archivo tiene errores: el cambio dura hasta que cierres la app. Corrige el archivo para guardarlo.",
   "notice.config_save_failed.body": "No se ha podido guardar el archivo.",
@@ -148,6 +150,8 @@
   "common.na": "n/d",
   "unit.min": "{n} min",
   "unit.h": "{n} h",
+  "unit.clock_hm": "{h} h {m} min",
+  "unit.clock_ms": "{m} min {s} s",
   "time.never": "nunca",
   "time.now": "ahora",
   "time.today_at": "hoy {time}",
@@ -497,5 +501,5 @@
   "advanced.diag.export": "Exportar diagnóstico",
   "advanced.diag.export.desc": "Guarda en Documentos un archivo de texto con la versión de Windows, las tarjetas gráficas, las pantallas, la configuración y el final del registro. Adjúntalo a tu informe en GitHub.",
   "advanced.diag.button": "Exportar",
-  "advanced.diag.privacy": "Lee el archivo antes de compartirlo: la configuración contiene los nombres de las apps de tus reglas. No se envía nada automáticamente."
+  "advanced.diag.privacy": "Lee el archivo antes de compartirlo: la configuración contiene los nombres de las apps de tus reglas, y tu nombre de usuario de Windows puede aparecer en las rutas de archivo y en los nombres de procesos. No se envía nada automáticamente."
 }
