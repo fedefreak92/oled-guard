@@ -1,5 +1,6 @@
 // Riassunto dei segnali (oracolo dei test GPU) e misure per cella del modello.
 #include <string>
+#include <utility>
 
 #include "dim_model.h"
 #include "dim_params.h"
@@ -171,6 +172,20 @@ TEST(grid_for_size_bounds) {
     if (g.cols <= 0 || g.rows <= 0 || g.Count() < 500 || g.Count() > oled::kMaxZones) {
       ::oled::test::ReportFailure(__FILE__, __LINE__, "griglia fuori limiti per larghezza " + std::to_string(w));
       return;
+    }
+  }
+}
+
+// Rapporti d'aspetto assurdi (finestre o dimensioni sbagliate, mai schermi veri): la
+// griglia resta entro kMaxZones, altrimenti ZoneOf andrebbe oltre zone_light.
+TEST(grid_for_size_extreme_aspect) {
+  for (const auto& [w, h] : {std::pair{1, 100000}, std::pair{100000, 1}, std::pair{1, 5000}, std::pair{64, 30000},
+                             std::pair{30000, 64}, std::pair{1, 1}}) {
+    const auto g = oled::GridForSize(w, h);
+    if (g.cols <= 0 || g.rows <= 0 || g.Count() > oled::kMaxZones) {
+      ::oled::test::ReportFailure(__FILE__, __LINE__,
+                                  "griglia fuori limiti per " + std::to_string(w) + "x" + std::to_string(h) + ": " +
+                                      std::to_string(g.cols) + "x" + std::to_string(g.rows));
     }
   }
 }

@@ -11,7 +11,10 @@ ZoneGrid GridForSize(int width, int height) {
   ZoneGrid g;
   g.rows = std::max(1, static_cast<int>(std::lround(std::sqrt(576.0 / a))));
   g.cols = std::max(1, static_cast<int>(std::lround(g.rows * a)));
+  // Schermi molto larghi tolgono colonne, molto alti righe (rapporti assurdi: mai con
+  // schermi veri, ma ZoneOf non deve andare oltre kMaxZones).
   while (g.Count() > kMaxZones && g.cols > 1) --g.cols;
+  while (g.Count() > kMaxZones && g.rows > 1) --g.rows;
   return g;
 }
 
