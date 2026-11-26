@@ -7,16 +7,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Runtime C++ statico: l'exe parte anche dove manca il Visual C++ Redistributable.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-# Commit della build, mostrato nella diagnostica ("unknown" fuori da git).
-set(OLED_GUARD_COMMIT "unknown")
+# Git serve per il commit mostrato nella diagnostica (vedi oled-guard-commit).
 find_package(Git QUIET)
-if(GIT_FOUND)
-  execute_process(COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-                  OUTPUT_VARIABLE oled_commit OUTPUT_STRIP_TRAILING_WHITESPACE RESULT_VARIABLE oled_commit_rc ERROR_QUIET)
-  if(oled_commit_rc EQUAL 0 AND oled_commit)
-    set(OLED_GUARD_COMMIT "${oled_commit}")
-  endif()
-endif()
 
 if(MSVC)
   add_compile_options(/W4 /WX /permissive- /utf-8 /EHsc)
@@ -179,11 +171,30 @@ target_sources(oled-guard PRIVATE ${CMAKE_BINARY_DIR}/generated/version.rc)
 target_include_directories(oled-guard SYSTEM PRIVATE third_party/webview2/include)
 target_link_libraries(oled-guard PRIVATE ${CMAKE_SOURCE_DIR}/third_party/webview2/x64/WebView2LoaderStatic.lib shcore)
 # Versione mostrata nell'interfaccia (Informazioni, barra laterale).
-target_compile_definitions(oled-guard PRIVATE OLED_GUARD_VERSION="${PROJECT_VERSION}" OLED_GUARD_COMMIT="${OLED_GUARD_COMMIT}")
+target_compile_definitions(oled-guard PRIVATE OLED_GUARD_VERSION="${PROJECT_VERSION}")
 
-# Interfaccia HTML/CSS/JS copiata accanto all'eseguibile.
-add_custom_command(TARGET oled-guard POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/src/ui $<TARGET_FILE_DIR:oled-guard>/ui
+# Commit della build (diagnostica): generated/build_commit.h si aggiorna a ogni build, non
+# solo quando CMake configura, ma il file cambia (e app.cpp si ricompila) solo con un
+# commit nuovo.
+add_custom_target(oled-guard-commit
+  COMMAND ${CMAKE_COMMAND} -DSRC=${CMAKE_SOURCE_DIR} -DOUT=${SHADER_OUT}/build_commit.h
+          -DGIT_EXECUTABLE=${GIT_EXECUTABLE} -P ${CMAKE_SOURCE_DIR}/cmake/build_commit.cmake
+  BYPRODUCTS ${SHADER_OUT}/build_commit.h
   VERBATIM)
+add_dependencies(oled-guard oled-guard-commit)
+
+# Interfaccia HTML/CSS/JS copiata accanto all'eseguibile ogni volta che cambia un suo file
+# (anche senza ricompilare l'exe). CONFIGURE_DEPENDS: un file nuovo fa rileggere l'elenco.
+# I file tolti da src/ui restano in build/ui fino a una build pulita.
+file(GLOB_RECURSE UI_FILES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/ui/*)
+set(UI_STAMP ${CMAKE_BINARY_DIR}/generated/ui.stamp)
+add_custom_command(OUTPUT ${UI_STAMP}
+  COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/src/ui $<TARGET_FILE_DIR:oled-guard>/ui
+  COMMAND ${CMAKE_COMMAND} -E touch ${UI_STAMP}
+  DEPENDS ${UI_FILES}
+  COMMENT "Copia dell'interfaccia in ui"
+  VERBATIM)
+add_custom_target(oled-guard-ui ALL DEPENDS ${UI_STAMP})
+add_dependencies(oled-guard oled-guard-ui)
 target_link_libraries(oled-guard PRIVATE oled_core oled_gpu
   d3d11 dxgi dcomp dwmapi wtsapi32 shell32 user32 advapi32 shlwapi ole32 powrprof)

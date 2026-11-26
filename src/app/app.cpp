@@ -19,6 +19,7 @@
 #include "diagnostics_export.h"
 #include "identify_window.h"
 #include "autostart.h"
+#include "build_commit.h"
 #include "clock.h"
 #include "diagnostics.h"
 #include "logger.h"
