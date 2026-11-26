@@ -1,4 +1,5 @@
 #include <array>
+#include <string>
 
 #include "json.h"
 #include "test_framework.h"
@@ -126,4 +127,29 @@ TEST(wear_stats_from_garbage_is_empty) {
     CHECK_NEAR(t.TodayProtectedMs(), 0, 1e-9);
     CHECK_NEAR(t.CellMs({-3, -3}), 0, 1e-9);
   }
+}
+
+// stats.json della 1.1.0: una ragione di pausa in meno (ProtectedWindow non c'era). I
+// conteggi del giorno non devono andare persi all'aggiornamento.
+TEST(wear_stats_reads_shorter_pause_list_from_1_1_0) {
+  std::string pauses;
+  for (int i = 0; i < WearStats::kReasons - 1; ++i) pauses += (i ? "," : "") + std::to_string(i == 8 ? 3 : 0);
+  const auto parsed = oled::ParseJson(R"({"day":20261124,"pauses_today":[)" + pauses + "]}");
+  CHECK(parsed.value.has_value());
+  if (!parsed.value) return;
+  WearStats s = WearStats::FromJson(*parsed.value);
+  s.RollDay(20261124);
+  CHECK_EQ(s.TodayPauses(PauseReason::Denylisted), 3);
+  CHECK_EQ(s.TodayPauses(PauseReason::ProtectedWindow), 0);
+  CHECK_EQ(s.TodayPauses(), 3);
+}
+
+TEST(wear_stats_ignores_longer_pause_list) {
+  std::string pauses;
+  for (int i = 0; i < WearStats::kReasons + 1; ++i) pauses += (i ? "," : "") + std::string("1");
+  const auto parsed = oled::ParseJson(R"({"day":20261124,"pauses_today":[)" + pauses + "]}");
+  CHECK(parsed.value.has_value());
+  if (!parsed.value) return;
+  const WearStats s = WearStats::FromJson(*parsed.value);
+  CHECK_EQ(s.TodayPauses(), 0);  // di una versione piu' nuova: non si sa cosa contenga
 }

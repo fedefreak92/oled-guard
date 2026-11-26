@@ -109,9 +109,12 @@ WearStats WearStats::FromJson(const JsonValue& v) {
       if (auto c = NonNegative(&cells->AsArray()[i])) s.cells_[i] = *c;
     }
   }
+  // Le versioni vecchie hanno meno motivi (la 1.1.0 non aveva ProtectedWindow): i motivi
+  // si aggiungono solo in fondo, quindi un elenco piu' corto si legge per i primi. Uno piu'
+  // lungo viene da una versione piu' nuova e si ignora.
   if (const JsonValue* pauses = v.Find("pauses_today"); pauses && pauses->type() == JsonValue::Type::Array &&
-                                                        pauses->AsArray().size() == s.pauses_today_.size()) {
-    for (size_t i = 0; i < s.pauses_today_.size(); ++i) {
+                                                        pauses->AsArray().size() <= s.pauses_today_.size()) {
+    for (size_t i = 0; i < pauses->AsArray().size(); ++i) {
       if (auto p = NonNegative(&pauses->AsArray()[i])) s.pauses_today_[i] = static_cast<int>(*p);
     }
   }
