@@ -23,6 +23,23 @@ std::optional<size_t> SelectMonitor(std::span<const MonitorDesc> monitors, std::
   return std::nullopt;
 }
 
+std::optional<int> DisplayNumber(std::string_view setting) {
+  std::string_view s = TrimAscii(setting);
+  constexpr std::string_view kPrefix = R"(\\.\)";
+  if (s.substr(0, kPrefix.size()) == kPrefix) s.remove_prefix(kPrefix.size());
+  constexpr std::string_view kDisplay = "DISPLAY";
+  if (s.size() <= kDisplay.size() || !EqualsIgnoreCase(s.substr(0, kDisplay.size()), kDisplay)) return std::nullopt;
+  s.remove_prefix(kDisplay.size());
+  if (s.size() > 4) return std::nullopt;
+  int n = 0;
+  for (char c : s) {
+    if (c < '0' || c > '9') return std::nullopt;
+    n = n * 10 + (c - '0');
+  }
+  if (n == 0) return std::nullopt;
+  return n;
+}
+
 std::string MonitorSettingFor(std::span<const MonitorDesc> monitors, size_t index) {
   if (index >= monitors.size()) return "auto";
   const auto& chosen = monitors[index];

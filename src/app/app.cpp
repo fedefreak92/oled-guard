@@ -120,7 +120,13 @@ int App::Run(HINSTANCE instance) {
 
   if (!single_instance_.Acquire()) {
     // Avvisa l'istanza gia' attiva, che mostra un messaggio nella tray.
-    if (HWND other = FindWindowW(kMainClass, nullptr)) PostMessageW(other, WM_APP_SECOND_INSTANCE, 0, 0);
+    // Il permesso di andare in primo piano serve se l'altra istanza riapre la procedura.
+    if (HWND other = FindWindowW(kMainClass, nullptr)) {
+      DWORD other_pid = 0;
+      GetWindowThreadProcessId(other, &other_pid);
+      if (other_pid) AllowSetForegroundWindow(other_pid);
+      PostMessageW(other, WM_APP_SECOND_INSTANCE, 0, 0);
+    }
     LogInfo("Un'altra istanza e' gia' in esecuzione: chiusura");
     LogShutdown();
     return 0;
@@ -268,6 +274,12 @@ Config App::NormalizedConfig(Config config) {
 
 std::wstring App::T(std::string_view key, const I18nParams& params) const { return Widen(tr_.Format(key, params)); }
 
+std::string App::MonitorSettingLabel() const {
+  if (EqualsIgnoreCase(TrimAscii(config_.monitor), "auto")) return tr_.Get("monitor.auto");
+  if (const auto n = DisplayNumber(config_.monitor)) return tr_.Format("monitor.n", {{"n", std::to_string(*n)}});
+  return config_.monitor;  // nome amichevole, gia' leggibile
+}
+
 void App::ApplyLanguage() {
   const std::string lang = PickLanguage(config_.language, PreferredUiLanguages());
   tr_ = LoadTranslations(UiDirectory(), lang);
@@ -347,7 +359,7 @@ void App::ApplyConfig(const Config& next) {
   Tick();
   if (ui_.IsReady()) ui_.Post(ConfigMessage(config_));
   if (previous.monitor != config_.monitor) {
-    Record("monitor", "activity.monitor_protected", {{"name", monitor_ ? Narrow(monitor_->friendly_name) : config_.monitor}});
+    Record("monitor", "activity.monitor_protected", {{"name", monitor_ ? Narrow(monitor_->friendly_name) : MonitorSettingLabel()}});
     PushMonitorsToUi();
   }
 }
@@ -694,7 +706,7 @@ void App::Tick() {
   }
   if (missing_notifier_.Update(in.monitor_missing && !setup_pending_, now - app_start_ms_, now)) {
     LogWarn("Schermo scelto non trovato da {} s", MissingMonitorNotifier::kMissingMs / 1000);
-    ShowNotice("notice.monitor_missing.title", "notice.monitor_missing.body", {{"name", config_.monitor}});
+    ShowNotice("notice.monitor_missing.title", "notice.monitor_missing.body", {{"name", MonitorSettingLabel()}});
     balloon_page_ = "monitor";
   }
 
@@ -1027,7 +1039,9 @@ void App::OpenUi() {
           RegisterToggleHotkey();
         }
         SaveStatsNow();
-        if (setup_pending_) ShowNotice("notice.setup_unfinished.title", "notice.setup_unfinished.body");
+        if (WarnSetupUnfinished(setup_pending_, quitting_)) {
+          ShowNotice("notice.setup_unfinished.title", "notice.setup_unfinished.body");
+        }
       },
       debug_, ui_rect_);
   if (ok) {
@@ -1389,6 +1403,7 @@ void App::OpenLogFolder() {
 }
 
 void App::Quit() {
+  quitting_ = true;
   ui_.Close();
   StopOverlay();
   if (toggle_hotkey_registered_) UnregisterHotKey(main_, kToggleHotkeyId);
@@ -1470,8 +1485,13 @@ LRESULT App::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
       ui_.Close();
       return 0;
     case WM_APP_SECOND_INSTANCE:
-      LogInfo("Avvio di una seconda istanza ignorato");
-      tray_.ShowBalloon(L"OLED Guard", T("notice.already_running.body"));
+      if (OnSecondInstance(setup_pending_) == SecondInstanceAction::OpenSetup) {
+        LogInfo("Seconda istanza durante il primo avvio: riapro la procedura");
+        OpenUi();
+      } else {
+        LogInfo("Avvio di una seconda istanza ignorato");
+        tray_.ShowBalloon(L"OLED Guard", T("notice.already_running.body"));
+      }
       return 0;
     case WM_WTSSESSION_CHANGE:
       pause_monitor_.OnSessionChange(wp);

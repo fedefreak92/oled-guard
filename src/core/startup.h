@@ -18,6 +18,15 @@ StartupDecision DecideStartup(bool config_exists, bool ui_available);
 // non cambia nulla.
 StartupDecision AfterUiFailure(const StartupDecision& current);
 
+// Finestra chiusa durante la procedura: si ricorda che la configurazione non e' finita,
+// ma non quando si chiude perche' l'utente ha scelto Esci.
+bool WarnSetupUnfinished(bool setup_pending, bool quitting);
+
+// Secondo avvio dell'exe: durante la procedura si riapre la sua finestra (chi la chiude e
+// rilancia l'app la sta cercando), altrimenti il fumetto "gia' in esecuzione".
+enum class SecondInstanceAction { ShowRunningNotice, OpenSetup };
+SecondInstanceAction OnSecondInstance(bool setup_pending);
+
 // Avviso "lo schermo scelto non c'e'": una volta sola quando manca da almeno 30 s di
 // fila e l'app vive da almeno 60 s (all'avvio di Windows la TV puo' accendersi dopo).
 // Mai se lo schermo si e' visto in questa sessione: una TV spenta la sera col PC acceso

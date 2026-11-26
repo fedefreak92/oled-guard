@@ -67,6 +67,9 @@ class App {
   void ShowNotice(std::string_view title_key, std::string_view body_key, const I18nParams& params = {});
   // Testo tradotto nella lingua attiva.
   std::wstring T(std::string_view key, const I18nParams& params = {}) const;
+  // Impostazione "monitor" da mostrare all'utente: "Scelta automatica", "Schermo 2" per
+  // \\.\DISPLAY2, altrimenti il nome amichevole salvato.
+  std::string MonitorSettingLabel() const;
   // Sceglie la lingua (config + Windows), ricarica i testi e li manda alla pagina e alla tray.
   void ApplyLanguage();
   // Scrive la diagnostica in Documenti, la mostra in Esplora file e lo dice alla pagina.
@@ -142,6 +145,7 @@ class App {
   bool initial_config_failed_ = false;
   // Primo avvio: procedura nell'interfaccia, protezione ferma e config non salvata.
   bool setup_pending_ = false;
+  bool quitting_ = false;                // Quit() in corso: la finestra si chiude per uscire
   bool notify_auto_choice_ = false;      // schermo scelto in automatico senza procedura
   MissingMonitorNotifier missing_notifier_;
   std::string balloon_page_;             // pagina da aprire al clic sull'ultima notifica

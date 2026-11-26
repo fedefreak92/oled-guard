@@ -25,6 +25,10 @@ std::optional<size_t> SelectMonitor(std::span<const MonitorDesc> monitors, std::
 // e' unico, altrimenti il device name.
 std::string MonitorSettingFor(std::span<const MonitorDesc> monitors, size_t index);
 
+// Numero n di un device name "\\.\DISPLAYn" (anche senza prefisso, maiuscole ignorate),
+// per mostrarlo come "Schermo n"; nullopt per "auto", nomi amichevoli e valori strani.
+std::optional<int> DisplayNumber(std::string_view setting);
+
 // Come MonitorSettingFor, partendo dal device name scelto nella pagina Monitor.
 // "auto" e device sconosciuti restano invariati.
 std::string MonitorSettingForDevice(std::span<const MonitorDesc> monitors, std::string_view device);

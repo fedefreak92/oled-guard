@@ -1,3 +1,4 @@
+#include <optional>
 #include <vector>
 
 #include "monitor_select.h"
@@ -84,4 +85,17 @@ TEST(monitor_setting_for_device) {
   CHECK_EQ(oled::MonitorSettingForDevice(two, "DISPLAY9"), std::string("DISPLAY9"));  // sconosciuto: invariato
   const std::vector<oled::MonitorDesc> twins = {{"DISPLAY1", "LG TV SSCR2", true}, {"DISPLAY2", "LG TV SSCR2", false}};
   CHECK_EQ(oled::MonitorSettingForDevice(twins, "DISPLAY2"), std::string("DISPLAY2"));
+}
+
+// Avviso "schermo non trovato": \\.\DISPLAYn si mostra come "Schermo n".
+TEST(monitor_display_number) {
+  CHECK_EQ(oled::DisplayNumber(R"(\\.\DISPLAY2)"), std::optional<int>(2));
+  CHECK_EQ(oled::DisplayNumber(R"(\\.\display12)"), std::optional<int>(12));
+  CHECK_EQ(oled::DisplayNumber("DISPLAY3"), std::optional<int>(3));
+  CHECK(!oled::DisplayNumber("auto").has_value());
+  CHECK(!oled::DisplayNumber("LG TV SSCR2").has_value());
+  CHECK(!oled::DisplayNumber(R"(\\.\DISPLAY)").has_value());
+  CHECK(!oled::DisplayNumber(R"(\\.\DISPLAY2x)").has_value());
+  CHECK(!oled::DisplayNumber(R"(\\.\DISPLAY99999999999)").has_value());
+  CHECK(!oled::DisplayNumber(R"(\\.\DISPLAY0)").has_value());
 }

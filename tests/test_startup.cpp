@@ -63,3 +63,18 @@ TEST(missing_monitor_not_after_seen) {
   CHECK(!n.Update(true, up + 1000, 1000));      // la TV si spegne la sera
   CHECK(!n.Update(true, up + 90000, 90000));    // nessun avviso: era gia' stato visto
 }
+
+// Finestra chiusa durante la procedura: si ricorda che manca la scelta, ma non se la
+// finestra si chiude perche' l'utente ha scelto Esci.
+TEST(startup_setup_unfinished_notice) {
+  CHECK(oled::WarnSetupUnfinished(/*setup_pending=*/true, /*quitting=*/false));
+  CHECK(!oled::WarnSetupUnfinished(true, true));
+  CHECK(!oled::WarnSetupUnfinished(false, false));
+}
+
+// Secondo avvio: durante la procedura si riapre la sua finestra, altrimenti il fumetto
+// "gia' in esecuzione".
+TEST(startup_second_instance) {
+  CHECK(oled::OnSecondInstance(true) == oled::SecondInstanceAction::OpenSetup);
+  CHECK(oled::OnSecondInstance(false) == oled::SecondInstanceAction::ShowRunningNotice);
+}

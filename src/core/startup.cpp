@@ -20,6 +20,12 @@ StartupDecision AfterUiFailure(const StartupDecision& current) {
   return DecideStartup(/*config_exists=*/false, /*ui_available=*/false);
 }
 
+bool WarnSetupUnfinished(bool setup_pending, bool quitting) { return setup_pending && !quitting; }
+
+SecondInstanceAction OnSecondInstance(bool setup_pending) {
+  return setup_pending ? SecondInstanceAction::OpenSetup : SecondInstanceAction::ShowRunningNotice;
+}
+
 bool MissingMonitorNotifier::Update(bool missing, double uptime_ms, double now_ms) {
   if (!missing) {
     missing_ = false;
