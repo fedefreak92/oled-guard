@@ -69,9 +69,21 @@ und Nutzungsstatistiken.
    installiert werden: Die C++-Laufzeit ist enthalten, und die WebView2-Runtime für
    das Fenster ist in Windows 11 schon vorhanden (unter Windows 10 sagt dir die App, wo
    du sie bekommst; der Schutz funktioniert auch ohne sie über den Infobereich).
-3. Das Release ist nicht signiert, daher zeigt Windows SmartScreen beim ersten Start
+3. Das Release ist noch nicht signiert (siehe [Code signing policy](CODE_SIGNING_POLICY.md)), daher zeigt Windows SmartScreen beim ersten Start
    eine Warnung: *Weitere Informationen → Trotzdem ausführen*.
 4. Folge den drei Schritten: Sprache, OLED-Bildschirm, kurze Zusammenfassung.
+
+## Deinstallation
+
+OLED Guard hat kein Installationsprogramm, das Entfernen dauert eine Minute:
+
+1. Wenn du Einstellungen auf der Seite *Windows für OLED* übernommen hast, drücke
+   *Wie vorher wiederherstellen*.
+2. Schalte *Mit Windows starten* im Menü des Infobereichs aus und wähle dann
+   *Beenden*.
+3. Lösche den Ordner, in den du es entpackt hast.
+4. Um auch Einstellungen und Statistik zu entfernen, lösche `%APPDATA%\oled-guard`
+   und `%LOCALAPPDATA%\oled-guard`.
 
 ## Geschützte Fenster und Videos
 

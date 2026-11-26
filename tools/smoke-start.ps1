@@ -25,4 +25,13 @@ if ($code -notin 0, 2, 3) {
   Write-Host "ERRORE: l'exe non e' partito correttamente" -ForegroundColor Red
   exit 1
 }
+# Nome e versione del prodotto nell'exe: servono a Windows (Proprieta', SmartScreen) e
+# a SignPath, che li controlla su ogni file da firmare.
+$expected = ([regex]::Match((Get-Content (Join-Path $root 'CMakeLists.txt') -Raw), 'project\(oled_guard VERSION ([0-9.]+)')).Groups[1].Value
+$vi = (Get-Item $exe).VersionInfo
+Write-Host "ProductName: '$($vi.ProductName)'  ProductVersion: '$($vi.ProductVersion)'  attesa: '$expected'"
+if ($vi.ProductName -ne 'OLED Guard' -or $vi.ProductVersion -ne $expected) {
+  Write-Host "ERRORE: nome o versione del prodotto mancanti o sbagliati nell'exe" -ForegroundColor Red
+  exit 1
+}
 Write-Host "Avvio riuscito." -ForegroundColor Green

@@ -169,6 +169,9 @@ add_executable(oled-guard WIN32
   src/app/window_zones.cpp
   src/app/oled-guard.manifest
 )
+# Nome e versione del prodotto nell'exe (controllati da tools/smoke-start.ps1).
+configure_file(src/app/version.rc.in ${CMAKE_BINARY_DIR}/generated/version.rc @ONLY)
+target_sources(oled-guard PRIVATE ${CMAKE_BINARY_DIR}/generated/version.rc)
 
 
 # WebView2 SDK (unica dipendenza esterna, scelta dall'utente): header di sistema
