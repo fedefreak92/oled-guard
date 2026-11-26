@@ -443,7 +443,7 @@
   "windows.hint": "Cada cambio solo ocurre cuando haces clic. El valor original se guarda y «Restaurar como antes» lo vuelve a poner.",
   "windows.managed": "Gestionado por el sistema",
   "windows.done": "Hecho",
-  "windows.apply_one": "Aplicar el valor recomendado",
+  "windows.apply_suggested": "Aplicar el valor recomendado",
   "windows.now": "Ahora: {value}",
   "advanced.dim_bright_threshold_pct": "Umbral de brillo",
   "advanced.dim_bright_threshold_pct.desc": "A partir de qué brillo se atenúa un elemento quieto (% del blanco).",

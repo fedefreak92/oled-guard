@@ -81,18 +81,36 @@ const std::string* Translations::Find(std::string_view key) const {
 }
 
 std::string Translations::Get(std::string_view key) const {
-  const std::string* v = Find(key);
-  return v ? *v : std::string(key);
+  if (const std::string* v = Find(key)) return *v;
+  if (on_missing_ && reported_.find(key) == reported_.end()) {
+    reported_.emplace(key);
+    on_missing_(std::string(key));
+  }
+  return std::string(key);
 }
 
 std::string Translations::Format(std::string_view key, const I18nParams& params) const {
-  std::string text = Get(key);
-  for (const auto& [name, value] : params) {
-    const std::string token = "{" + name + "}";
-    for (size_t pos = text.find(token); pos != std::string::npos; pos = text.find(token, pos + value.size()))
-      text.replace(pos, token.size(), value);
+  const std::string text = Get(key);
+  std::string out;
+  out.reserve(text.size());
+  size_t pos = 0;
+  while (pos < text.size()) {
+    const size_t open = text.find('{', pos);
+    const size_t close = open == std::string::npos ? std::string::npos : text.find('}', open + 1);
+    if (close == std::string::npos) break;
+    out.append(text, pos, open - pos);
+    const std::string_view name(text.data() + open + 1, close - open - 1);
+    const auto it = std::find_if(params.begin(), params.end(), [&](const auto& p) { return p.first == name; });
+    if (it != params.end()) {
+      out += it->second;
+      pos = close + 1;
+    } else {
+      out += '{';  // non e' un segnaposto con valore: si va avanti di un carattere
+      pos = open + 1;
+    }
   }
-  return text;
+  out.append(text, pos, std::string::npos);
+  return out;
 }
 
 std::string Translations::Plural(std::string_view key, double n, I18nParams params) const {

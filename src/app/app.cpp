@@ -271,6 +271,7 @@ std::wstring App::T(std::string_view key, const I18nParams& params) const { retu
 void App::ApplyLanguage() {
   const std::string lang = PickLanguage(config_.language, PreferredUiLanguages());
   tr_ = LoadTranslations(UiDirectory(), lang);
+  tr_.SetMissingHandler([](const std::string& key) { LogWarn("Traduzioni: testo {} mancante anche in inglese", key); });
   const size_t missing = tr_.MissingKeys().size();
   LogInfo("Lingua: {} (impostazione {}, {} testi mancanti)", lang, config_.language, missing);
   if (ui_.IsReady()) ui_.Post(StringsMessage(tr_));

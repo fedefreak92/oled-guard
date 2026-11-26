@@ -1113,7 +1113,7 @@ PAGES.windows = {
           let action;
           if (it.managed) action = pill(t('windows.managed'));
           else if (it.ok) action = pill(t('windows.done'), 'accent');
-          else action = h('button.btn.small', { type: 'button', title: t('windows.apply_one'), on: { click: () => send({ cmd: 'windowsApply', id: it.id }) } }, t(it.recommended_key, it.recommended_params));
+          else action = h('button.btn.small', { type: 'button', title: t('windows.apply_suggested'), on: { click: () => send({ cmd: 'windowsApply', id: it.id }) } }, t(it.recommended_key, it.recommended_params));
           list.body.append(h('div.row', null,
             h('span.check', { cls: it.ok ? 'ok' : null }, it.ok ? icon('check') : null),
             h('div.label', null, h('b', { text: t(`windows.${it.id}.label`) }), h('p', { text: t('windows.now', { value: t(it.current_key, it.current_params) }) })),

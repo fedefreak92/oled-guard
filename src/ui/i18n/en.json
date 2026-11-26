@@ -443,7 +443,7 @@
   "windows.hint": "Every change only happens when you click. The original value is saved and \"Restore as before\" puts it back.",
   "windows.managed": "Managed by the system",
   "windows.done": "Done",
-  "windows.apply_one": "Apply the suggested value",
+  "windows.apply_suggested": "Apply the suggested value",
   "windows.now": "Now: {value}",
   "advanced.dim_bright_threshold_pct": "Brightness threshold",
   "advanced.dim_bright_threshold_pct.desc": "From what brightness a still element gets dimmed (% of white).",

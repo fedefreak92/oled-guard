@@ -75,6 +75,31 @@ TEST(i18n_format_params) {
   CHECK_EQ(t.Format("y", {}), std::string("{missing} stays"));
 }
 
+// Un solo passaggio: un valore che contiene {nome} non viene sostituito a sua volta.
+TEST(i18n_format_single_pass) {
+  const JsonValue en = Dict({{"x", "{a} and {b}"}, {"y", "{n} of {n}"}});
+  const Translations t = Translations::FromJson("en", en, en);
+  CHECK_EQ(t.Format("x", I18nParams{{"a", "{b}"}, {"b", "B"}}), std::string("{b} and B"));
+  CHECK_EQ(t.Format("x", I18nParams{{"b", "{a}"}, {"a", "A"}}), std::string("A and {a}"));
+  CHECK_EQ(t.Format("y", I18nParams{{"n", "2"}}), std::string("2 of 2"));
+  CHECK_EQ(t.Format("y", I18nParams{{"n", "1"}, {"n", "9"}}), std::string("1 of 1"));  // vale il primo
+  CHECK_EQ(t.Format("x", I18nParams{{"a", "}{"}}), std::string("}{ and {b}"));
+}
+
+// Chiavi che mancano anche in inglese: il gestore le riceve una volta sola ciascuna.
+TEST(i18n_reports_keys_missing_everywhere) {
+  const JsonValue en = Dict({{"a", "A"}, {"p_one", "{n} x"}, {"p_other", "{n} xs"}});
+  Translations t = Translations::FromJson("it", Dict({}), en);
+  std::vector<std::string> seen;
+  t.SetMissingHandler([&](const std::string& key) { seen.push_back(key); });
+  CHECK_EQ(t.Get("a"), std::string("A"));
+  CHECK_EQ(t.Get("nope"), std::string("nope"));
+  CHECK_EQ(t.Format("nope", {}), std::string("nope"));
+  CHECK_EQ(t.Plural("p", 2), std::string("2 xs"));
+  CHECK_EQ(t.Plural("q", 2), std::string("q_other"));
+  CHECK_EQ(seen, (std::vector<std::string>{"nope", "q_other"}));
+}
+
 TEST(i18n_plural_picks_form) {
   const JsonValue en = Dict({{"d_one", "{n} day"}, {"d_other", "{n} days"}});
   const JsonValue fr = Dict({{"d_one", "{n} jour"}, {"d_other", "{n} jours"}});
@@ -185,4 +210,22 @@ TEST(i18n_ui_keys_exist) {
     }
   }
   CHECK(checked > 100);
+}
+
+// Ogni chiave _one ha la sua _other e viceversa: tp() le vuole entrambe, e una chiave che
+// finisce in _one senza essere un plurale confonde chi traduce.
+TEST(i18n_plural_pairs_complete) {
+  const std::filesystem::path dir = std::filesystem::path(OLED_SOURCE_DIR) / "src" / "ui" / "i18n";
+  const auto en = oled::ParseJson(ReadFile(dir / "en.json"));
+  CHECK(en.value.has_value());
+  if (!en.value) return;
+  const auto ends = [](const std::string& s, const std::string& suffix) {
+    return s.size() > suffix.size() && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
+  };
+  for (const auto& [key, value] : en.value->AsObject()) {
+    if (ends(key, "_one") && !en.value->Find(key.substr(0, key.size() - 4) + "_other"))
+      ::oled::test::ReportFailure(__FILE__, __LINE__, "plurale senza _other: " + key);
+    if (ends(key, "_other") && !en.value->Find(key.substr(0, key.size() - 6) + "_one"))
+      ::oled::test::ReportFailure(__FILE__, __LINE__, "plurale senza _one: " + key);
+  }
 }

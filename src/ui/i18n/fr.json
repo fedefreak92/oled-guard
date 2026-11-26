@@ -443,7 +443,7 @@
   "windows.hint": "Chaque modification ne se fait que sur ton clic. La valeur d'origine est enregistrée et « Restaurer comme avant » la remet.",
   "windows.managed": "Géré par le système",
   "windows.done": "Fait",
-  "windows.apply_one": "Appliquer la valeur recommandée",
+  "windows.apply_suggested": "Appliquer la valeur recommandée",
   "windows.now": "Actuel : {value}",
   "advanced.dim_bright_threshold_pct": "Seuil de luminosité",
   "advanced.dim_bright_threshold_pct.desc": "À partir de quelle luminosité un élément immobile est assombri (% du blanc).",

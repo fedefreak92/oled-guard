@@ -443,7 +443,7 @@
   "windows.hint": "Ogni modifica parte solo da un tuo clic. Il valore originale viene salvato e \"Ripristina come prima\" lo rimette.",
   "windows.managed": "Gestito dal sistema",
   "windows.done": "Fatto",
-  "windows.apply_one": "Applica il valore consigliato",
+  "windows.apply_suggested": "Applica il valore consigliato",
   "windows.now": "Ora: {value}",
   "advanced.dim_bright_threshold_pct": "Soglia di luminosità",
   "advanced.dim_bright_threshold_pct.desc": "Da quale luminosità un elemento fermo viene scurito (% del bianco).",

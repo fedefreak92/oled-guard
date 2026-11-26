@@ -443,7 +443,7 @@
   "windows.hint": "Jede Änderung erfolgt nur nach deinem Klick. Der ursprüngliche Wert wird gespeichert und „Wie vorher wiederherstellen“ setzt ihn zurück.",
   "windows.managed": "Vom System verwaltet",
   "windows.done": "Erledigt",
-  "windows.apply_one": "Empfohlenen Wert übernehmen",
+  "windows.apply_suggested": "Empfohlenen Wert übernehmen",
   "windows.now": "Jetzt: {value}",
   "advanced.dim_bright_threshold_pct": "Helligkeitsschwelle",
   "advanced.dim_bright_threshold_pct.desc": "Ab welcher Helligkeit ein unbewegtes Element abgedunkelt wird (% von Weiß).",

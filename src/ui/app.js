@@ -34,7 +34,8 @@ function send(cmd) {
 
 // Il dizionario arriva dall'app (messaggio "strings"): inglese gia' sovrascritto dalla
 // lingua attiva. I segnaposto {nome} prendono i valori di `params`; un parametro che
-// finisce in "_key" e' a sua volta una chiave e riempie {nome-senza-_key}.
+// finisce in "_key" e' a sua volta una chiave e riempie {nome-senza-_key}. Un solo
+// passaggio, come Translations::Format: un valore che contiene {altro} resta com'e'.
 const missingWarned = new Set();
 function t(key, params) {
   if (!key) return '';
@@ -43,14 +44,14 @@ function t(key, params) {
     if (!missingWarned.has(key) && Object.keys(store.strings).length) { missingWarned.add(key); console.warn('testo mancante:', key); }
     text = key;
   }
-  if (params) {
-    for (const [name, value] of Object.entries(params)) {
-      const isKey = name.endsWith('_key');
-      const slot = isKey ? name.slice(0, -4) : name;
-      text = text.split(`{${slot}}`).join(isKey ? t(value) : String(value));
-    }
+  if (!params) return text;
+  const values = new Map();
+  for (const [name, value] of Object.entries(params)) {
+    const isKey = name.endsWith('_key');
+    const slot = isKey ? name.slice(0, -4) : name;
+    if (!values.has(slot)) values.set(slot, isKey ? t(value) : String(value));
   }
-  return text;
+  return text.replace(/\{([^{}]*)\}/g, (token, slot) => (values.has(slot) ? values.get(slot) : token));
 }
 function tp(key, n, params) {
   const form = new Intl.PluralRules(store.lang).select(n) === 'one' ? '_one' : '_other';
