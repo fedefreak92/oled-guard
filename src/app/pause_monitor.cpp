@@ -71,11 +71,12 @@ bool IsCloaked(HWND hwnd) {
 
 }  // namespace
 
-std::string WindowProcessName(HWND hwnd) {
+std::string WindowProcessName(HWND hwnd, std::string* host) {
+  if (host) host->clear();
   DWORD pid = 0;
   GetWindowThreadProcessId(hwnd, &pid);
   std::string name = ProcessName(pid);
-  if (name != "applicationframehost.exe") return name;
+  if (name != kStoreAppHost) return name;
   struct Search {
     DWORD host_pid;
     DWORD app_pid = 0;
@@ -97,7 +98,9 @@ std::string WindowProcessName(HWND hwnd) {
       reinterpret_cast<LPARAM>(&search));
   if (search.app_pid == 0) return name;
   std::string app = ProcessName(search.app_pid);
-  return app.empty() ? name : app;
+  if (app.empty()) return name;
+  if (host) *host = name;
+  return app;
 }
 
 // Finestra che copre di sicuro cio' che sta sotto: niente trasparenze, niente finestre che
@@ -215,7 +218,7 @@ PauseInputs PauseMonitor::Collect(const MonitorInfo* monitor) const {
   DWORD pid = 0;
   if (fg) GetWindowThreadProcessId(fg, &pid);
   if (fg && pid != GetCurrentProcessId() && !IsShellWindow(fg)) {
-    in.foreground_process = WindowProcessName(fg);
+    in.foreground_process = WindowProcessName(fg, &in.foreground_host);
     RECT bounds{};
     if (monitor && SUCCEEDED(DwmGetWindowAttribute(fg, DWMWA_EXTENDED_FRAME_BOUNDS, &bounds, sizeof(bounds)))) {
       const RECT& m = monitor->rect;

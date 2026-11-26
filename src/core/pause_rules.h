@@ -7,6 +7,11 @@
 
 namespace oled {
 
+// Processo ospite delle finestre delle app dello Store. Fino alla 1.1.0 era il nome di
+// tutte queste app; dalla 1.2.0 si risolve l'app vera, ma le regole scritte con questo
+// nome valgono ancora (per tutte le app dello Store).
+inline constexpr std::string_view kStoreAppHost = "applicationframehost.exe";
+
 // Rispecchia QUERY_USER_NOTIFICATION_STATE senza dipendere dagli header di Windows.
 enum class NotificationState {
   AcceptsNotifications,
@@ -29,6 +34,9 @@ struct PauseInputs {
   NotificationState notification_state = NotificationState::AcceptsNotifications;
   bool foreground_covers_monitor = false;
   std::string foreground_process;  // nome .exe, UTF-8
+  // kStoreAppHost se foreground_process e' un'app dello Store trovata dentro il processo
+  // ospite, altrimenti vuoto.
+  std::string foreground_host;
   // Una finestra esclusa dalla cattura (DRM, gestori di password...) e' visibile sullo
   // schermo protetto: l'overlay ci disegnerebbe sopra e l'utente non la vedrebbe.
   bool protected_window = false;
@@ -60,7 +68,12 @@ struct PauseRulesConfig {
   std::vector<std::string> allowlist;
 };
 
+// Regole per app: prima quelle sul nome preciso (allowlist, poi denylist), poi quelle sul
+// processo ospite delle app dello Store.
 PauseReason EvaluatePause(const PauseInputs& inputs, const PauseRulesConfig& config);
+
+// L'app (o il suo processo ospite, se non vuoto) e' nell'elenco? Maiuscole ignorate.
+bool AppInList(const std::vector<std::string>& list, std::string_view process, std::string_view host);
 
 struct ScreenRect {
   long left = 0;

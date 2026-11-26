@@ -184,6 +184,7 @@ class App {
   double latency_ms_ = 0;
   double testing_shift_until_ms_ = 0;
   std::string last_foreground_;
+  std::string last_foreground_host_;  // kStoreAppHost per le app dello Store, altrimenti vuoto
   // Stato dello shift: appartiene all'App e sopravvive alle pause dell'overlay.
   std::unique_ptr<SharedShift> shift_;
   // Luminosita', bordi scuriti e modalita' assente.

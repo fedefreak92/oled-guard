@@ -29,6 +29,10 @@ bool NotificationStatePauses(NotificationState state) {
 
 }  // namespace
 
+bool AppInList(const std::vector<std::string>& list, std::string_view process, std::string_view host) {
+  return InList(list, process) || InList(list, host);
+}
+
 PauseReason EvaluatePause(const PauseInputs& in, const PauseRulesConfig& config) {
   // L'ordine conta: le prime regole non possono essere scavalcate dall'allowlist.
   if (in.manual) return PauseReason::Manual;
@@ -43,6 +47,8 @@ PauseReason EvaluatePause(const PauseInputs& in, const PauseRulesConfig& config)
 
   if (InList(config.allowlist, in.foreground_process)) return PauseReason::None;
   if (InList(config.denylist, in.foreground_process)) return PauseReason::Denylisted;
+  if (InList(config.allowlist, in.foreground_host)) return PauseReason::None;
+  if (InList(config.denylist, in.foreground_host)) return PauseReason::Denylisted;
   if (config.pause_on_notification_state && NotificationStatePauses(in.notification_state)) {
     return PauseReason::NotificationState;
   }

@@ -646,6 +646,7 @@ void App::Tick() {
   const PauseReason reason = hysteresis_.Reason();
 
   last_foreground_ = in.foreground_process;
+  last_foreground_host_ = in.foreground_host;
   if (monitor_ && now - sdr_white_checked_ms_ >= 5000) RefreshSdrWhite(now);
   PushDimInputs();
   if (overlay_running_) {
@@ -795,9 +796,8 @@ void App::RefreshSdrWhite(double now) {
 }
 
 bool App::DimSuspended() const {
-  return !last_foreground_.empty() &&
-         std::find(config_.dim_exclude.begin(), config_.dim_exclude.end(), last_foreground_) !=
-             config_.dim_exclude.end();
+  // Come le regole di pausa: vale anche il vecchio nome delle app dello Store (1.1.0).
+  return !last_foreground_.empty() && AppInList(config_.dim_exclude, last_foreground_, last_foreground_host_);
 }
 
 void App::RefreshDimZones(double now) {

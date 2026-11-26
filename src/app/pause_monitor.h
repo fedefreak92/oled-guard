@@ -27,8 +27,9 @@ class PauseMonitor {
 };
 
 // Nome .exe (minuscolo, UTF-8) del processo di una finestra. Per le app UWP, che risultano
-// tutte ApplicationFrameHost.exe, quello della finestra figlia Windows.UI.Core.CoreWindow.
-std::string WindowProcessName(HWND hwnd);
+// tutte ApplicationFrameHost.exe, quello della finestra figlia Windows.UI.Core.CoreWindow;
+// in quel caso `host` (se non nullo) riceve il nome del processo ospite, altrimenti vuoto.
+std::string WindowProcessName(HWND hwnd, std::string* host = nullptr);
 
 // Prima finestra visibile, non ridotta a icona, non "cloaked", non di questo processo, che
 // copre almeno 64x64 px dello schermo e si esclude dalla cattura (GetWindowDisplayAffinity

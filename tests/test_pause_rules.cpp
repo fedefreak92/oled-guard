@@ -305,3 +305,46 @@ TEST(protected_window_visible_part_across_cut) {
   // Scoperto solo un quadrato 100x100 a cavallo del bordo superiore della finestra in basso.
   CHECK(VisibleEnough(win, monitor, {{100, 250, 600, 600}, {0, 0, 600, 200}, {0, 300, 100, 600}}));
 }
+
+// Regole della 1.1.0 per le app dello Store: allora il nome era sempre quello del processo
+// ospite (applicationframehost.exe); dalla 1.2.0 si vede l'app vera. Il vecchio nome vale
+// ancora per tutte le app dello Store, ma una regola sull'app precisa vince.
+TEST(store_host_rule_still_applies) {
+  PauseInputs in;
+  in.foreground_process = "netflix.exe";
+  in.foreground_host = std::string(oled::kStoreAppHost);
+  PauseRulesConfig c;
+  c.denylist = {"ApplicationFrameHost.exe"};
+  CHECK(EvaluatePause(in, c) == PauseReason::Denylisted);
+  in.foreground_covers_monitor = true;
+  PauseRulesConfig never;
+  never.allowlist = {"applicationframehost.exe"};
+  CHECK(EvaluatePause(in, never) == PauseReason::None);
+}
+
+TEST(store_precise_rule_wins_over_host_rule) {
+  PauseInputs in;
+  in.foreground_process = "netflix.exe";
+  in.foreground_host = std::string(oled::kStoreAppHost);
+  PauseRulesConfig deny_app;
+  deny_app.allowlist = {"applicationframehost.exe"};
+  deny_app.denylist = {"netflix.exe"};
+  CHECK(EvaluatePause(in, deny_app) == PauseReason::Denylisted);
+  PauseRulesConfig allow_app;
+  allow_app.allowlist = {"netflix.exe"};
+  allow_app.denylist = {"applicationframehost.exe"};
+  CHECK(EvaluatePause(in, allow_app) == PauseReason::None);
+}
+
+TEST(store_host_rule_ignores_normal_apps) {
+  PauseInputs in;
+  in.foreground_process = "chrome.exe";
+  PauseRulesConfig c;
+  c.denylist = {"applicationframehost.exe"};
+  CHECK(EvaluatePause(in, c) == PauseReason::None);
+  const std::vector<std::string> list = {"applicationframehost.exe"};
+  CHECK(oled::AppInList(list, "netflix.exe", "applicationframehost.exe"));
+  CHECK(!oled::AppInList(list, "chrome.exe", ""));
+  CHECK(oled::AppInList({"chrome.exe"}, "Chrome.exe", ""));
+  CHECK(!oled::AppInList({}, "", ""));
+}

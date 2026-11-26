@@ -782,6 +782,9 @@ PAGES.statistiche = {
 // Regole per app: [titolo, descrizione, etichetta breve, tono]; testi nella lingua attiva.
 const RULE_TONES = { always: 'warn', auto: 'accent', never: 'info' };
 const RULES = ['always', 'auto', 'never'];
+// Processo ospite delle app dello Store (kStoreAppHost in pause_rules.h): una regola con
+// questo nome, della 1.1.0, vale per tutte le app dello Store.
+const STORE_HOST = 'applicationframehost.exe';
 function ruleInfo(rule) {
   const r = RULES.includes(rule) ? rule : 'auto';
   return [t(`rule.${r}.title`), t(`rule.${r}.desc`), t(`rule.${r}.short`), RULE_TONES[r]];
@@ -839,11 +842,13 @@ PAGES.profili = {
     editPanel.body.classList.add('pad');
     const editName = h('div.edit-name');
     const editInfo = h('p.hint');
+    // Regola della 1.1.0 sul processo ospite delle app dello Store (vale per tutte).
+    const storeNote = h('p.hint.box', { text: t('apps.edit.store_host') });
     const rules = choiceCards(RULES.map((r) => { const v = ruleInfo(r); return [r, v[0], v[1]]; }), (rule) => selected && send({ cmd: 'setAppRule', exe: selected, rule }));
     const explain = h('p.hint.box');
     const dimEx = toggle((v) => selected && send({ cmd: 'setDimExclude', exe: selected, on: v }));
     const editBody = h('div', null,
-      h('div.edit-title', { text: t('apps.edit.app') }), editName, editInfo,
+      h('div.edit-title', { text: t('apps.edit.app') }), editName, editInfo, storeNote,
       h('div.edit-title', { text: t('apps.edit.when') }), rules.el, explain,
       h('div.edit-title', { text: t('overview.qa.dim') }),
       settingRow(t('apps.edit.no_dim'), t('apps.edit.no_dim.desc'), dimEx.el));
@@ -866,7 +871,7 @@ PAGES.profili = {
         const row = h('button.app', { type: 'button', cls: a.exe === selected ? 'on' : null, on: { click: () => { selected = a.exe; renderList(); renderEdit(); } } },
           avatar(a.exe),
           h('span.name', null, h('b', { text: a.exe }), h('small', { text: a.last_seen_s ? t('apps.list.last_pause', { when: fmtWhen(a.last_seen_s * 1000), times: tp('apps.list.times', a.count) }) : t('apps.list.manual') })),
-          h('span.tags', null, pill(info[2], info[3]), a.dim_exclude ? pill(t('apps.list.no_dim')) : null),
+          h('span.tags', null, a.exe === STORE_HOST ? pill(t('apps.list.store_all')) : null, pill(info[2], info[3]), a.dim_exclude ? pill(t('apps.list.no_dim')) : null),
           trash);
         list.append(row);
       }
@@ -883,6 +888,7 @@ PAGES.profili = {
       rules.set(a.rule);
       setText(explain, ruleExplain(a.rule));
       dimEx.set(a.dim_exclude);
+      storeNote.hidden = a.exe !== STORE_HOST;
     }
 
     const offProcesses = on('processes', (msg) => {
