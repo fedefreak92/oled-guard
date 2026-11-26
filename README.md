@@ -24,6 +24,26 @@ and shows live signals and usage statistics.
 
 *Screenshots of the interface in preview mode, with demo data.*
 
+## Highlights
+
+- **The whole image pipeline runs on the GPU.** The capture (Desktop Duplication)
+  feeds HLSL compute shaders and a DirectComposition overlay that lets clicks through
+  and is excluded from screen capture. The CPU never reads a desktop pixel: only a
+  tiny summary comes back, asynchronously.
+- **Safe by design.** A watchdog and an emergency hotkey on their own thread remove
+  the overlay if anything stops responding, so the screen is never left black or
+  frozen.
+- **339 automated tests.** 306 unit tests cover the logic, which is kept free of
+  Windows headers. 33 GPU tests run the real shaders on WARP and compare them with
+  C++ reference models. CI builds, tests and starts the app on two Windows
+  generations.
+- **A compiler bug caught before release.** CI found that MSVC 14.52 miscompiles a
+  loop over the position map. It was traced in the generated assembly and fixed with
+  regression tests ([the story](docs/DEVELOPMENT.md#what-the-real-problems-taught-me),
+  [the fix](https://github.com/fedefreak92/oled-guard/commit/f1cd25a)).
+- **Built in four days with Claude Code**, spec first and test first, with every
+  milestone accepted on real hardware ([how it was built](docs/DEVELOPMENT.md)).
+
 ## Features
 
 - **Pixel shift**: the whole desktop moves by 1-3 px every 20-60 s, spread over

@@ -24,6 +24,27 @@ da molto tempo (barra, icone, loghi) e mostra segnali dal vivo e statistiche d'u
 
 *Schermate dell'interfaccia in modalità anteprima, con dati dimostrativi (in inglese).*
 
+## Punti forti
+
+- **Tutta l'elaborazione dell'immagine avviene sulla GPU.** La cattura (Desktop
+  Duplication) passa a compute shader HLSL e a un overlay DirectComposition che lascia
+  passare i clic ed è escluso dalla cattura dello schermo. La CPU non legge mai un
+  pixel del desktop: torna indietro solo un piccolo riepilogo, in modo asincrono.
+- **Sicura per progetto.** Un watchdog e una scorciatoia di emergenza su un thread
+  proprio tolgono l'overlay se qualcosa smette di rispondere, così lo schermo non resta
+  mai nero o bloccato.
+- **339 test automatici.** 306 test unitari coprono la logica, tenuta separata dagli
+  header di Windows. 33 test sulla GPU eseguono gli shader veri su WARP e li
+  confrontano con modelli di riferimento in C++. La CI compila, prova e avvia l'app su
+  due generazioni di Windows.
+- **Un errore del compilatore trovato prima del rilascio.** La CI ha scoperto che MSVC
+  14.52 compila male un ciclo sulla mappa delle posizioni. La causa è stata trovata
+  nell'assembly generato e corretta con test di regressione
+  ([la storia](docs/DEVELOPMENT.it.md#cosa-mi-hanno-insegnato-i-problemi-veri),
+  [la correzione](https://github.com/fedefreak92/oled-guard/commit/f1cd25a)).
+- **Costruita in quattro giorni con Claude Code**, partendo da spec e test, con ogni
+  tappa accettata su hardware vero ([come è stata sviluppata](docs/DEVELOPMENT.it.md)).
+
 ## Funzioni
 
 - **Spostamento dell'immagine**: tutto il desktop si sposta di 1-3 px ogni 20-60 s,
